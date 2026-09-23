@@ -1,57 +1,20 @@
-import { tierForRating, type Mode, type TierId } from "@rushsite/shared"
+import { tierForRating, type MatchDetail, type MatchRound, type MatchStatus, type ServerDriverName } from "@rushsite/shared"
 import { asc, eq } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { matchPlayers, matchRounds, matches, tournaments } from "../../db/schema.js"
 import type { UsersService } from "../auth/users.js"
 import type { RatingService } from "../rating/service.js"
 
-// Local copies of the match page shapes in CONTRACTS.md until shared exports them
+export type { MatchRound as MatchRoundView, MatchUpdatePayload } from "@rushsite/shared"
 
-export type MatchRoundView = {
-  round: number
-  winnerTeam: string
-  score: Record<string, number>
-  arena?: string
-  endedAt: string
-}
-
-export type MatchUpdatePayload = {
-  matchId: string
-  status: string
-  teams: { name: string; score: number }[]
-  lastRound?: MatchRoundView
-}
-
-export type MatchPagePlayer = {
-  steamId: string
-  displayName: string
-  avatarUrl: string | null
-  tier: TierId
-  rating: number
-  kills: number | null
-  deaths: number | null
-  headshots: number | null
-  damage: number | null
-}
-
-export type MatchPage = {
-  id: string
-  mode: Mode
-  mapId: string | null
-  status: string
-  driver: string | null
-  startedAt: string | null
-  endedAt: string | null
-  teams: { name: string; score: number; players: MatchPagePlayer[] }[]
-  rounds: MatchRoundView[]
-  tournament?: { id: string; name: string; bracketMatchId: string; bestOf: number; gameNumber: number }
-  // Participants only, once a server is assigned
+// Connect info is added for participants only and is not part of the public schema
+export type MatchPage = MatchDetail & {
   connect?: { ip: string; port: number; password: string; connect: string }
 }
 
 type RoundRow = typeof matchRounds.$inferSelect
 
-export function roundView(r: RoundRow): MatchRoundView {
+export function roundView(r: RoundRow): MatchRound {
   return {
     round: r.round,
     winnerTeam: r.winnerTeam,
@@ -86,8 +49,8 @@ export async function buildMatchPage(
     id: m.id,
     mode: m.mode,
     mapId: m.mapId,
-    status: m.status,
-    driver: m.driver,
+    status: m.status as MatchStatus,
+    driver: (m.driver as ServerDriverName | null) ?? null,
     startedAt: m.startedAt?.toISOString() ?? null,
     endedAt: m.endedAt?.toISOString() ?? null,
     teams: m.teams.map((t, idx) => ({
@@ -103,10 +66,10 @@ export async function buildMatchPage(
             avatarUrl: cards.get(p.steamId)?.avatarUrl ?? null,
             tier: tierForRating(r).id,
             rating: Math.round(r),
-            kills: p.kills,
-            deaths: p.deaths,
-            headshots: p.headshots,
-            damage: p.damage,
+            kills: p.kills ?? 0,
+            deaths: p.deaths ?? 0,
+            headshots: p.headshots ?? 0,
+            damage: p.damage ?? 0,
           }
         }),
     })),

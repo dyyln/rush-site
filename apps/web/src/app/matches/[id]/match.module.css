@@ -41,11 +41,11 @@
     font-size: 5rem;
   }
 }
-.team[data-side="a"] .score {
-  color: var(--team-a);
+.team[data-side="own"] .score {
+  color: var(--team-own);
 }
-.team[data-side="b"] .score {
-  color: var(--team-b);
+.team[data-side="enemy"] .score {
+  color: var(--team-enemy);
 }
 .dash {
   font-family: var(--font-display);
@@ -54,6 +54,9 @@
   padding-top: var(--space-2);
 }
 .teamName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-family: var(--font-display);
   font-weight: 600;
   max-width: 100%;
@@ -68,6 +71,7 @@
   gap: var(--space-1);
 }
 .avatarLink {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -94,11 +98,16 @@
   height: 20px;
   border-radius: 2px;
 }
-.seg[data-side="a"] {
-  background: var(--team-a);
+.seg[data-side="own"] {
+  background: var(--team-own);
 }
-.seg[data-side="b"] {
-  background: var(--team-b);
+.seg[data-side="enemy"] {
+  width: 100%;
+  color: var(--team-enemy);
+}
+.defs {
+  position: absolute;
+  color: var(--team-enemy);
 }
 .tick {
   position: absolute;
@@ -123,17 +132,6 @@
   gap: var(--space-2);
   font-size: var(--text-lg);
 }
-.swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-.swatch[data-side="a"] {
-  background: var(--team-a);
-}
-.swatch[data-side="b"] {
-  background: var(--team-b);
-}
 .player {
   display: flex;
   flex-direction: column;
@@ -143,7 +141,27 @@
 .playerName {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
+  gap: var(--space-2);
+  min-height: var(--target-min);
   color: var(--color-text);
   font-weight: 500;
+}
+.connect {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.connect:hover {
+  background: var(--color-accent-hover);
+  color: var(--color-text-on-accent);
 }

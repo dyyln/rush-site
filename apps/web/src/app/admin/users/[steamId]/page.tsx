@@ -246,7 +246,7 @@ export default function AdminUserPage() {
 
 const ratingColumns: Column<UserDetailView["ratings"][number]>[] = [
   { key: "mode", header: "Mode", cell: (r) => MODE_COPY[r.mode].label },
-  { key: "rating", header: "Rating", cell: (r) => <TierChip rating={r.rating} showRating size="sm" /> },
+  { key: "rating", header: "Rating", cell: (r) => <TierChip rating={r.rating} size="sm" /> },
   { key: "rd", header: "RD", numeric: true, hideOnMobile: true, cell: (r) => Math.round(r.rd) },
   { key: "played", header: "Matches", numeric: true, cell: (r) => r.matchesPlayed },
   { key: "wl", header: "W / L", numeric: true, hideOnMobile: true, cell: (r) => `${r.wins} / ${r.losses}` },

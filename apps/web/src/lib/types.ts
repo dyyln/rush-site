@@ -2,6 +2,12 @@
 // WS payloads and config come from @rushsite/shared. These cover the HTTP side.
 import type {
   BracketMatchView,
+  MatchDetail as SharedMatchDetail,
+  MatchDetailPlayer,
+  MatchDetailTeam,
+  MatchRound as SharedMatchRound,
+  MatchStatus as SharedMatchStatus,
+  MatchUpdatePayload,
   BracketView,
   Mode,
   TierId,
@@ -121,48 +127,10 @@ export type TournamentDetail = TournamentSummary & {
   myEntryId: string | null;
 };
 
-// Match page, from docs/CONTRACTS.md "Match pages". Swap to shared MatchDetailSchema once it ships
-
-export type MatchStatus = "pending" | "live" | "completed" | "abandoned" | "cancelled";
-
-export type MatchPlayer = {
-  steamId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  tier: TierId;
-  rating: number;
-  kills: number;
-  deaths: number;
-  headshots: number;
-  damage: number;
-};
-
-export type MatchTeam = { name: string; score: number; players: MatchPlayer[] };
-
-export type MatchRound = {
-  round: number;
-  winnerTeam: string;
-  score: Record<string, number>;
-  arena?: string;
-  endedAt: string;
-};
-
-export type MatchDetail = {
-  id: string;
-  mode: Mode;
-  mapId: string;
-  status: MatchStatus;
-  driver?: string;
-  startedAt: string | null;
-  endedAt: string | null;
-  teams: MatchTeam[];
-  rounds: MatchRound[];
-  tournament?: { id: string; name: string; bracketMatchId: string; bestOf: number; gameNumber: number };
-};
-
-export type MatchUpdate = {
-  matchId: string;
-  status: MatchStatus;
-  teams: { name: string; score: number }[];
-  lastRound?: MatchRound;
-};
+// Match page types come from @rushsite/shared
+export type MatchStatus = SharedMatchStatus;
+export type MatchPlayer = MatchDetailPlayer;
+export type MatchTeam = MatchDetailTeam;
+export type MatchRound = SharedMatchRound;
+export type MatchDetail = SharedMatchDetail;
+export type MatchUpdate = MatchUpdatePayload;

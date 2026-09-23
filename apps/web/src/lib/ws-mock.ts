@@ -65,29 +65,26 @@ export class MockRealtime extends Emitter implements Realtime {
 
   private matchSubs = new Map<string, ReturnType<typeof setInterval>>();
 
-  sendRaw(type: string, payload: unknown): boolean {
-    const matchId = (payload as { matchId?: string } | null)?.matchId;
-    if (!matchId) return false;
-    if (type === "subscribe_match" && !this.matchSubs.has(matchId)) {
-      let seen = mockMatchDetail(matchId).rounds.length;
-      const t = setInterval(() => {
-        const m = mockMatchDetail(matchId);
-        if (m.rounds.length === seen) return;
-        seen = m.rounds.length;
-        this.dispatchRaw("match_update", {
-          matchId,
-          status: m.status,
-          teams: m.teams.map((x) => ({ name: x.name, score: x.score })),
-          lastRound: m.rounds.at(-1),
-        });
-      }, 1000);
-      this.matchSubs.set(matchId, t);
-    }
-    if (type === "unsubscribe_match") {
-      clearInterval(this.matchSubs.get(matchId));
-      this.matchSubs.delete(matchId);
-    }
-    return true;
+  private subscribe(matchId: string) {
+    if (this.matchSubs.has(matchId)) return;
+    let seen = mockMatchDetail(matchId).rounds.length;
+    const t = setInterval(() => {
+      const m = mockMatchDetail(matchId);
+      if (m.rounds.length === seen) return;
+      seen = m.rounds.length;
+      this.emit("match_update", {
+        matchId,
+        status: m.status,
+        teams: m.teams.map((x) => ({ name: x.name, score: x.score })),
+        lastRound: m.rounds.at(-1),
+      });
+    }, 1000);
+    this.matchSubs.set(matchId, t);
+  }
+
+  private unsubscribe(matchId: string) {
+    clearInterval(this.matchSubs.get(matchId));
+    this.matchSubs.delete(matchId);
   }
 
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean {
@@ -104,6 +101,12 @@ export class MockRealtime extends Emitter implements Realtime {
         break;
       case "veto_vote":
         this.vote(MOCK_ME.steamId, msg.payload.mapId);
+        break;
+      case "subscribe_match":
+        this.subscribe(msg.payload.matchId);
+        break;
+      case "unsubscribe_match":
+        this.unsubscribe(msg.payload.matchId);
         break;
     }
     return true;
@@ -164,7 +167,7 @@ export class MockRealtime extends Emitter implements Realtime {
       this.later(6000, () => {
         this.clear();
         this.mode = null;
-        this.dispatchRaw("match_cancelled", { matchId: MATCH_ID, reason: "An opponent did not accept" });
+        this.emit("match_cancelled", { matchId: MATCH_ID, reason: "An opponent did not accept" });
         this.idle();
       });
       return;

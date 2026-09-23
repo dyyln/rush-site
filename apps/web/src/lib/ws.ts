@@ -47,10 +47,6 @@ export class RealtimeClient extends Emitter implements Realtime {
   }
 
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean {
-    return this.sendRaw(type, payload);
-  }
-
-  sendRaw(type: string, payload: unknown): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
     this.ws.send(JSON.stringify({ type, payload, ts: Date.now() }));
     return true;

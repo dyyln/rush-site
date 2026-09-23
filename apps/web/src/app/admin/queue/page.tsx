@@ -26,7 +26,7 @@ export default function AdminQueuePage() {
     {
       key: "rating",
       header: "Rating",
-      cell: (t) => (t.rating === null ? "--" : <TierChip rating={t.rating} showRating size="sm" />),
+      cell: (t) => (t.rating === null ? "--" : <TierChip rating={t.rating} size="sm" />),
       numeric: true,
     },
     {

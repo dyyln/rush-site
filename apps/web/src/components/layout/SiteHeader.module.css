@@ -25,8 +25,16 @@
   min-height: var(--target-min);
   display: inline-flex;
   align-items: center;
+  gap: var(--space-2);
 }
 .brand:hover {
+  color: var(--color-accent-hover);
+}
+.mark {
+  flex: none;
+  color: var(--color-accent);
+}
+.brand:hover .mark {
   color: var(--color-accent-hover);
 }
 

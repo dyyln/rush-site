@@ -92,7 +92,7 @@ describe("match pages", () => {
       ["B", 1],
     ])
     const player = match.teams.flatMap((t: { players: unknown[] }) => t.players).find((p: { steamId: string }) => p.steamId === a)
-    expect(player).toMatchObject({ rating: 1500, tier: "silver", kills: null })
+    expect(player).toMatchObject({ rating: 1500, tier: "silver", kills: 0 })
     expect(match.rounds).toHaveLength(2)
     expect(match.rounds[0]).toMatchObject({ round: 1, winnerTeam: "A", score: { A: 1, B: 0 }, arena: "arena_01" })
     expect(match.tournament).toBeUndefined()
@@ -143,9 +143,9 @@ describe("match pages", () => {
     const watcher = spectator()
     const bystander = spectator()
     const leaver = spectator()
-    watcher.message({ type: "subscribe_match", payload: { matchId } })
-    leaver.message({ type: "subscribe_match", payload: { matchId } })
-    leaver.message({ type: "unsubscribe_match", payload: { matchId } })
+    watcher.message({ type: "subscribe_match", payload: { matchId }, ts: Date.now() })
+    leaver.message({ type: "subscribe_match", payload: { matchId }, ts: Date.now() })
+    leaver.message({ type: "unsubscribe_match", payload: { matchId }, ts: Date.now() })
 
     await post(matchId, { type: "server_ready" })
     await post(matchId, { type: "match_started" })
@@ -173,7 +173,7 @@ describe("match pages", () => {
   it("sends match_update on cancel", async () => {
     const { matchId } = await startDuel(h)
     const watcher = spectator()
-    watcher.message({ type: "subscribe_match", payload: { matchId } })
+    watcher.message({ type: "subscribe_match", payload: { matchId }, ts: Date.now() })
     await post(matchId, { type: "match_abandoned", reason: "server_crashed", missingSteamIds: [] })
     expect(watcher.of("match_update").map((u) => u.payload.status)).toEqual(["cancelled"])
   })
@@ -181,7 +181,7 @@ describe("match pages", () => {
   it("caps subscriptions per socket and keeps spectators read only", async () => {
     const s = spectator()
     for (let i = 0; i < MAX_MATCH_SUBSCRIPTIONS + 1; i++) {
-      s.message({ type: "subscribe_match", payload: { matchId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}` } })
+      s.message({ type: "subscribe_match", payload: { matchId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}` }, ts: Date.now() })
     }
     expect(s.of("error").map((e) => e.payload.code)).toEqual(["too_many_subscriptions"])
     s.message({ type: "queue_join", payload: { modes: ["aim1v1"] }, ts: Date.now() })

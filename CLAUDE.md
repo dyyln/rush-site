@@ -107,7 +107,7 @@ Mockups exist for Play (mode picker, party, queue), Tournaments, Leaderboard, Pr
 - **Colours**:
   - background `#0F0E13`, surfaces `#17151F` / `#1F1C2A`, border `#2C2838`
   - text `#ECEDEF`, muted text `#9AA0AB`
-  - accent `#9B8AC4`, accent hover `#B3A4D6`, credits `#E0C36A`
+  - accent `#9B8AC4`, accent hover `#B3A4D6`, credits `#E0C36A`. Team colours on match pages are purple (A) vs amber (B), safe for colour blindness, never green vs red
   - win `#3DD68C`, loss `#FF7A7A`, trust/info `#7FD1E0`
 - **Fonts**: Chakra Petch (display), IBM Plex Sans (body), IBM Plex Mono (numbers and map names).
 - **Accessibility**: real buttons and links, text contrast of at least 4.5:1, touch targets of at least 44 px.

@@ -3,14 +3,7 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from "fastify
 import type { WebSocket } from "ws"
 import type { AppContext } from "../../context.js"
 import { ApiError } from "../../lib/errors.js"
-import { z } from "zod"
 import { MAX_MATCH_SUBSCRIPTIONS, type LocalHub } from "./hub.js"
-
-// Local until shared adds these to ClientMessageSchema
-const SubscriptionMessage = z.object({
-  type: z.enum(["subscribe_match", "unsubscribe_match"]),
-  payload: z.object({ matchId: z.uuid() }),
-})
 
 type AuthedRequest = FastifyRequest & { wsSteamId?: string }
 
@@ -30,6 +23,10 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
       return
     case "queue_leave":
       await ctx.queue.leave(steamId, msg.payload.modes)
+      return
+    // Subscriptions are handled on the socket itself
+    case "subscribe_match":
+    case "unsubscribe_match":
       return
   }
 }
@@ -75,25 +72,24 @@ export function attachSocket(
     let parsed: ClientMessage
     try {
       const raw: unknown = JSON.parse(data.toString())
-      const sub = SubscriptionMessage.safeParse(raw)
-      if (sub.success) {
-        const { matchId } = sub.data.payload
-        if (sub.data.type === "unsubscribe_match") hub.unsubscribeMatch(socket, matchId)
-        else if (!hub.subscribeMatch(socket, matchId)) {
-          send("error", {
-            code: "too_many_subscriptions",
-            message: `at most ${MAX_MATCH_SUBSCRIPTIONS} matches per connection`,
-            for: sub.data.type,
-          })
-        }
-        return
-      }
       const r = ClientMessageSchema.safeParse(raw)
       if (!r.success) {
         send("error", { code: "invalid_message", message: r.error.issues[0]?.message ?? "invalid" })
         return
       }
       parsed = r.data
+      if (parsed.type === "subscribe_match" || parsed.type === "unsubscribe_match") {
+        const { matchId } = parsed.payload
+        if (parsed.type === "unsubscribe_match") hub.unsubscribeMatch(socket, matchId)
+        else if (!hub.subscribeMatch(socket, matchId)) {
+          send("error", {
+            code: "too_many_subscriptions",
+            message: `at most ${MAX_MATCH_SUBSCRIPTIONS} matches per connection`,
+            for: parsed.type,
+          })
+        }
+        return
+      }
     } catch {
       send("error", { code: "invalid_json", message: "message is not valid JSON" })
       return

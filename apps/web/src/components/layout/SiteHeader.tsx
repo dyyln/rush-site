@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BRAND_NAME } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
+import { Logo } from "@/components/ui/Logo";
 import { useSession } from "@/lib/session";
 import styles from "./SiteHeader.module.css";
 
@@ -24,6 +25,7 @@ export function SiteHeader() {
     <header className={styles.header}>
       <div className={`container ${styles.inner}`}>
         <Link href="/" className={styles.brand}>
+          <Logo size={28} className={styles.mark} />
           {BRAND_NAME}
         </Link>
         <button

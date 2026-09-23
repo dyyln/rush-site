@@ -35,9 +35,10 @@
   --color-warn: #e0c36a;
   --color-warn-subtle: #2a2414;
 
-  /* Neutral team colours for spectator views */
-  --team-a: var(--color-accent);
-  --team-b: #c9ccd4;
+  /* Team colours. Own team purple, enemy amber. For a neutral viewer the first team is own.
+     They stay apart under common colour blindness and pass 4.5:1 on surfaces. Never use win or loss colours */
+  --team-own: #9b8ac4;
+  --team-enemy: #e0c36a;
 
   /* Tiers. Each passes 4.5:1 on surface-1 */
   --tier-iron: #a7a9b0;

@@ -11,6 +11,9 @@ import {
   unresolvedConfig,
   vote as castVetoVote,
   type MatchCancelledPayload,
+  type MatchRound as MatchRoundView,
+  type MatchStatus,
+  type MatchUpdatePayload,
   type MatchEvent,
   type MatchFoundPayload,
   type MatchResultPayload,
@@ -38,7 +41,7 @@ import type { TrustService } from "../trust/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
 import { resolveAbandon, resolveAccept, type AcceptOutcome } from "./accept.js"
 import type { Allocator } from "./allocator.js"
-import { roundView, teamScores, type MatchRoundView, type MatchUpdatePayload } from "./match-page.js"
+import { roundView, teamScores } from "./match-page.js"
 import { demoKey } from "./storage.js"
 
 type MatchRow = typeof matches.$inferSelect
@@ -560,7 +563,7 @@ export class MatchFlow {
     if (!m) return
     const payload: MatchUpdatePayload = {
       matchId,
-      status: m.status,
+      status: m.status as MatchStatus,
       teams: teamScores(m.teams, m.score),
       ...(lastRound ? { lastRound } : {}),
     }

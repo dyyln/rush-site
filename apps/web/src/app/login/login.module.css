@@ -36,3 +36,8 @@
 .error {
   color: var(--color-loss);
 }
+.mark {
+  align-self: center;
+  color: var(--color-accent);
+  margin-top: var(--space-2);
+}

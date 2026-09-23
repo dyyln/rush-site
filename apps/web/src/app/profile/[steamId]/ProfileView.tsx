@@ -43,7 +43,16 @@ const matchColumns: Column<MatchSummary>[] = [
   },
   { key: "mode", header: "Mode", cell: (m) => MODE_COPY[m.mode].short },
   { key: "map", header: "Map", cell: (m) => <span className="mono">{mapName(m.mode, m.mapId)}</span>, hideOnMobile: true },
-  { key: "score", header: "Score", cell: (m) => (m.result === "abandoned" ? "--" : `${m.scoreFor}:${m.scoreAgainst}`), numeric: true },
+  {
+    key: "score",
+    header: "Score",
+    cell: (m) => (
+      <Link href={`/matches/${m.matchId}`} className={styles.scoreLink} aria-label={`Match details, ${m.result === "abandoned" ? "forfeit" : `${m.scoreFor} to ${m.scoreAgainst}`}`}>
+        {m.result === "abandoned" ? "--" : `${m.scoreFor}:${m.scoreAgainst}`}
+      </Link>
+    ),
+    numeric: true,
+  },
   { key: "kd", header: "K/D", cell: (m) => `${m.kills}/${m.deaths}`, numeric: true, hideOnMobile: true },
   {
     key: "delta",

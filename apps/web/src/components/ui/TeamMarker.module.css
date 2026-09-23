@@ -1,0 +1,10 @@
+.marker {
+  flex: none;
+  display: inline-block;
+}
+.marker[data-side="own"] {
+  color: var(--team-own);
+}
+.marker[data-side="enemy"] {
+  color: var(--team-enemy);
+}

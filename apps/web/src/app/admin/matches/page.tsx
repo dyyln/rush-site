@@ -29,9 +29,14 @@ export default function AdminMatchesPage() {
     key: "id",
     header: "Match",
     cell: (m) => (
-      <Link href={`/admin/matches/${m.id}`} className="mono">
-        {shortId(m.id)}
-      </Link>
+      <span className="stack" style={{ gap: 0 }}>
+        <Link href={`/admin/matches/${m.id}`} className="mono">
+          {shortId(m.id)}
+        </Link>
+        <Link href={`/matches/${m.id}`} className={styles.muted}>
+          Public page
+        </Link>
+      </span>
     ),
   };
   const modeCol: Column<MatchSummaryView> = {

@@ -54,11 +54,11 @@ function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[
   return { winners, arenas };
 }
 
-function players(mode: Mode, seed: number, offset: number, rounds: number): MatchPlayer[] {
+function players(mode: Mode, seed: number, offset: number, rounds: number, meFirst = false): MatchPlayer[] {
   const r = rng(seed + offset);
   const size = mode === "aim1v1" ? 1 : mode === "aim2v2" ? 2 : 3;
   return Array.from({ length: size }, (_, i) => {
-    const u = mockUser(offset + i + 1);
+    const u = meFirst && i === 0 ? mockUser(0) : mockUser(offset + i + 1);
     const rating = Math.round(1400 + r() * 700);
     const kills = Math.round(rounds * (0.5 + r() * 0.6) / Math.max(1, size - 1 || 1));
     return {
@@ -75,10 +75,11 @@ function players(mode: Mode, seed: number, offset: number, rounds: number): Matc
   });
 }
 
-function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number): MatchDetail {
+// meOnB puts the mock viewer on the second team to show own and enemy colours
+function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number, meOnB = false): MatchDetail {
   const plan = playOut(mode, seed);
   const n = roundsPlayed === null ? plan.winners.length : Math.min(roundsPlayed, plan.winners.length);
-  const names = mode === "aim1v1" ? [mockUser(1).displayName, mockUser(11).displayName] : ["Team A", "Team B"];
+  const names = mode === "aim1v1" ? [mockUser(1).displayName, mockUser(meOnB ? 0 : 11).displayName] : ["Team A", "Team B"];
   const score: Record<string, number> = { [names[0]!]: 0, [names[1]!]: 0 };
   const rounds: MatchRound[] = [];
   for (let i = 0; i < n; i++) {
@@ -96,14 +97,14 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
   const teams: MatchTeam[] = names.map((name, i) => ({
     name,
     score: score[name]!,
-    players: players(mode, seed, i * 10, n),
+    players: players(mode, seed, i * 10, n, meOnB && i === 1),
   }));
   return {
     id,
     mode,
     mapId,
-    status: done ? "completed" : "live",
-    driver: "ladder",
+    status: done ? "finished" : "live",
+    driver: "hetzner",
     startedAt: new Date(startedAt).toISOString(),
     endedAt: done ? new Date(startedAt + (n + 1) * 60_000).toISOString() : null,
     teams,
@@ -118,8 +119,7 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
     const cycle = total - LIVE_START_ROUNDS + 4;
     const played = LIVE_START_ROUNDS + (Math.floor((now - LIVE_START) / MOCK_ROUND_MS) % cycle);
     return {
-      ...build(id, "aim1v1", "aim_redline", 42, played, LIVE_START - 10 * 60_000),
-      driver: "tournament",
+      ...build(id, "aim1v1", "aim_redline", 42, played, LIVE_START - 10 * 60_000, true),
       tournament: { id: MOCK_TOURNAMENT_IDS[1]!, name: "Daily Aim Cup", bracketMatchId: "r4m0", bestOf: 3, gameNumber: 2 },
     };
   }

@@ -65,9 +65,19 @@ export const MatchDetailSchema = z.object({
     .object({
       id: UuidSchema,
       name: z.string(),
-      bracketMatchId: UuidSchema,
+      // Bracket key such as r1m0
+      bracketMatchId: z.string().min(1),
       bestOf: z.number().int().positive(),
       gameNumber: z.number().int().positive(),
+    })
+    .optional(),
+  // Only included for participants
+  connect: z
+    .object({
+      ip: z.string(),
+      port: z.number().int().min(1).max(65535),
+      password: z.string(),
+      connect: z.string(),
     })
     .optional(),
 })

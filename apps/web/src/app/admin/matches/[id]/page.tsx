@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -63,11 +64,14 @@ export default function AdminMatchPage() {
         refreshing={live.refreshing}
         onRefresh={live.reload}
         actions={
-          m && ACTIVE.includes(m.status) ? (
-            <Button variant="danger" onClick={() => setCancelling(true)}>
-              Cancel match
-            </Button>
-          ) : null
+          <>
+            <Link href={`/matches/${id}`}>Public page</Link>
+            {m && ACTIVE.includes(m.status) && (
+              <Button variant="danger" onClick={() => setCancelling(true)}>
+                Cancel match
+              </Button>
+            )}
+          </>
         }
       />
       <div className={styles.split}>

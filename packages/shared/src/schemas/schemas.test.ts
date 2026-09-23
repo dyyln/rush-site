@@ -198,11 +198,17 @@ describe("schemas", () => {
           { name: "b", score: 0, players: [] },
         ],
         rounds: [round],
-        tournament: { id: MID, name: "Daily", bracketMatchId: MID, bestOf: 3, gameNumber: 1 },
+        tournament: { id: MID, name: "Daily", bracketMatchId: "r1m0", bestOf: 3, gameNumber: 1 },
+        connect: { ip: "203.0.113.5", port: 27015, password: "pw", connect: "connect 203.0.113.5:27015; password pw" },
       },
     }
     expect(MatchDetailResponseSchema.parse(detail)).toEqual(detail)
     expect(() => MatchDetailSchema.parse({ ...detail.match, status: "weird" })).toThrow()
+    const { connect: _connect, ...publicView } = detail.match
+    expect(MatchDetailSchema.parse(publicView)).toEqual(publicView)
+    expect(() =>
+      MatchDetailSchema.parse({ ...detail.match, tournament: { ...detail.match.tournament, bracketMatchId: "" } }),
+    ).toThrow()
     expect(MatchRoundSchema.parse({ ...round, winnerTeam: "draw" }).winnerTeam).toBe("draw")
 
     const update = serverMessage("match_update", {

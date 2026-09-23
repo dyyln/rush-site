@@ -5,11 +5,6 @@ import { api } from "./api";
 import type { MatchDetail, MatchUpdate } from "./types";
 import { getRealtime } from "./ws";
 
-function isUpdate(v: unknown): v is MatchUpdate {
-  const o = v as MatchUpdate | null;
-  return !!o && typeof o.matchId === "string" && Array.isArray(o.teams);
-}
-
 function apply(m: MatchDetail, u: MatchUpdate): MatchDetail {
   const rounds =
     u.lastRound && !m.rounds.some((r) => r.round === u.lastRound!.round) ? [...m.rounds, u.lastRound] : m.rounds;
@@ -36,18 +31,18 @@ export function useMatch(id: string) {
     );
     const rt = getRealtime();
     rt.connect();
-    const subscribe = () => rt.sendRaw("subscribe_match", { matchId: id });
+    const subscribe = () => rt.send("subscribe_match", { matchId: id });
     subscribe();
     const offs = [
       rt.onState((s) => s === "open" && subscribe()),
-      rt.onRaw("match_update", (p) => {
-        if (isUpdate(p) && p.matchId === id) setMatch((m) => (m ? apply(m, p) : m));
+      rt.on("match_update", (p) => {
+        if (p.matchId === id) setMatch((m) => (m ? apply(m, p) : m));
       }),
     ];
     return () => {
       live = false;
       offs.forEach((off) => off());
-      rt.sendRaw("unsubscribe_match", { matchId: id });
+      rt.send("unsubscribe_match", { matchId: id });
     };
   }, [id]);
 

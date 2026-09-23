@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  ErrorPayload,
+  MatchCancelledPayload,
   MatchFoundPayload,
   MatchResultPayload,
   ModeStatsPayload,
@@ -14,18 +16,8 @@ import type {
 import { api } from "./api";
 import { getRealtime, type ConnectionState } from "./ws";
 
-export type MatchCancelled = { matchId: string; reason: string };
-export type WsError = { code: string; message: string };
-
-function isCancel(v: unknown): v is MatchCancelled {
-  const o = v as MatchCancelled | null;
-  return !!o && typeof o.matchId === "string" && typeof o.reason === "string";
-}
-
-function isWsError(v: unknown): v is WsError {
-  const o = v as WsError | null;
-  return !!o && typeof o.code === "string" && typeof o.message === "string";
-}
+export type MatchCancelled = MatchCancelledPayload;
+export type WsError = ErrorPayload;
 
 type Notices = { onCancelled?: (c: MatchCancelled) => void; onError?: (e: WsError) => void };
 
@@ -65,15 +57,11 @@ export function usePlay(notices: Notices = {}) {
         setMatch((m) => ({ phase: "ready", server, veto: m.phase === "veto" ? m.veto : null })),
       ),
       rt.on("match_result", (result) => setMatch({ phase: "result", result })),
-      // Read raw so this works before and after shared adds the schemas
-      rt.onRaw("match_cancelled", (p) => {
-        if (!isCancel(p)) return;
+      rt.on("match_cancelled", (p) => {
         setMatch({ phase: "none" });
         noticesRef.current.onCancelled?.(p);
       }),
-      rt.onRaw("error", (p) => {
-        if (isWsError(p)) noticesRef.current.onError?.(p);
-      }),
+      rt.on("error", (p) => noticesRef.current.onError?.(p)),
     ];
     setConnection(rt.state);
     let live = true;

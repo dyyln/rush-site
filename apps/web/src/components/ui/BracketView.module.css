@@ -58,7 +58,7 @@
 }
 .side {
   display: grid;
-  grid-template-columns: 24px 1fr 28px;
+  grid-template-columns: 36px 1fr 28px;
   align-items: center;
   gap: var(--space-2);
   min-height: 36px;
@@ -84,8 +84,8 @@
 }
 .won .entry,
 .won .score {
-  color: var(--color-win);
-  font-weight: 600;
+  color: var(--color-text);
+  font-weight: 700;
 }
 .lost .entry {
   color: var(--color-text-muted);
@@ -107,4 +107,18 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-top: 1px solid var(--color-border);
+}
+.linked {
+  display: block;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.linked:hover {
+  border-color: var(--color-accent);
+}
+.lead {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
 }

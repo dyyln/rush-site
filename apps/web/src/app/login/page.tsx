@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BRAND_NAME } from "@rushsite/shared";
+import { Logo } from "@/components/ui/Logo";
 import { steamLoginUrl } from "@/lib/api";
 import styles from "./login.module.css";
 
@@ -27,6 +28,7 @@ export default async function LoginPage({ searchParams }: Props) {
             Steam sign in did not complete. Try again.
           </p>
         )}
+        <Logo size={56} className={styles.mark} />
         <a href={href} className={styles.steam}>
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />

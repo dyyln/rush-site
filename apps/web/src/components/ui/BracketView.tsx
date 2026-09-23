@@ -1,5 +1,7 @@
+import Link from "next/link";
 import type { Bracket, BracketMatch, EntryView } from "@/lib/types";
 import { Badge } from "./Badge";
+import { TeamMarker, type TeamSide } from "./TeamMarker";
 import { cx } from "./cx";
 import styles from "./BracketView.module.css";
 
@@ -52,15 +54,25 @@ export function BracketView({ bracket, entries, highlightEntryId }: BracketViewP
   );
 }
 
+function matchLink(m: BracketMatch): string | null {
+  const id = m.liveMatchId ?? m.games.at(-1)?.matchId;
+  return id ? `/matches/${id}` : null;
+}
+
 function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<string, EntryView>; highlight?: string | null }) {
   const aWins = match.games.filter((g) => g.winner === "a").length;
   const bWins = match.games.filter((g) => g.winner === "b").length;
+  // The viewer's entry is own. Otherwise the top slot is own
+  const ownIndex = highlight && match.b === highlight ? 1 : 0;
+  const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
   const sides = [
     { id: match.a, seed: match.aSeed, score: aWins, resolved: match.aResolved },
     { id: match.b, seed: match.bSeed, score: bWins, resolved: match.bResolved },
   ];
+  const href = matchLink(match);
+  const Box = href ? Link : "div";
   return (
-    <div className={cx(styles.match, match.status === "live" && styles.live)}>
+    <Box href={href ?? ""} className={cx(styles.match, match.status === "live" && styles.live, href && styles.linked)}>
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;
         const lost = match.status === "done" && !!match.winner && !won;
@@ -70,7 +82,10 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
             key={i}
             className={cx(styles.side, won && styles.won, lost && styles.lost, s.id && s.id === highlight && styles.me)}
           >
-            <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
+            <span className={styles.lead}>
+              <TeamMarker side={sideOf(i)} />
+              <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
+            </span>
             <span className={styles.entry}>{label}</span>
             <span className={cx(styles.score, "mono")}>
               {match.status === "done" && match.resolution === "played" ? s.score : ""}
@@ -87,6 +102,6 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
       {match.resolution && match.resolution !== "played" && (
         <span className={styles.resolution}>{match.resolution.replace("_", " ")}</span>
       )}
-    </div>
+    </Box>
   );
 }

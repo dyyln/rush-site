@@ -18,8 +18,6 @@ export interface Realtime {
   connect(): void;
   close(): void;
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean;
-  // Message types outside the shared schema
-  sendRaw(type: string, payload: unknown): boolean;
   on<T extends ServerMessageType>(type: T, handler: Handler<T>): () => void;
   onAny(handler: AnyHandler): () => void;
   onAdmin(handler: (e: AdminEvent) => void): () => void;
