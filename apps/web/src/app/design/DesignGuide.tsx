@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { MapCard } from "@/components/ui/MapCard";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
+import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
 import { RatingSparkline } from "@/components/ui/RatingSparkline";
 import { Select } from "@/components/ui/Select";
@@ -49,6 +50,7 @@ const SECTIONS = [
   "Badge",
   "Tier chip",
   "Avatar",
+  "Party size",
   "Card",
   "Stat tile",
   "Input",
@@ -244,6 +246,18 @@ export function DesignGuide() {
             <Avatar name="mirren" status="ready" />
             <Avatar name="ashgrove" status="away" />
             <Avatar name="tessler" size="lg" />
+          </Specimen>
+        </Section>
+
+        <Section title="Party size">
+          <Specimen label="Team sizes">
+            <PartySize count={1} label="1 vs 1" />
+            <PartySize count={2} label="2 vs 2" />
+            <PartySize count={3} label="3 vs 3" />
+          </Specimen>
+          <Specimen label="Party of 2 out of 3, and party of 2 on a 1v1 card">
+            <PartySize count={2} capacity={3} label="2 of 3 players" />
+            <PartySize count={1} overflow={1} label="1 vs 1. Party of 2 is too big" />
           </Specimen>
         </Section>
 

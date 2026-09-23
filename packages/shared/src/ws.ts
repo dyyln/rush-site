@@ -241,6 +241,20 @@ export const AdminEventPayloadSchema = z.object({
 })
 export type AdminEventPayload = z.infer<typeof AdminEventPayloadSchema>
 
+export const MatchCancelledPayloadSchema = z.object({
+  matchId: UuidSchema,
+  reason: z.string(),
+})
+export type MatchCancelledPayload = z.infer<typeof MatchCancelledPayloadSchema>
+
+export const ErrorPayloadSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  // Id of the request or entity the error refers to
+  ref: z.string().optional(),
+})
+export type ErrorPayload = z.infer<typeof ErrorPayloadSchema>
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("queue_status", QueueStatusPayloadSchema),
   msg("match_found", MatchFoundPayloadSchema),
@@ -251,6 +265,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("tournament_update", TournamentUpdatePayloadSchema),
   msg("mode_stats", ModeStatsPayloadSchema),
   msg("admin_event", AdminEventPayloadSchema),
+  msg("match_cancelled", MatchCancelledPayloadSchema),
+  msg("error", ErrorPayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]

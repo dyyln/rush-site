@@ -32,6 +32,11 @@ describe("evaluateTrust", () => {
     expect(evaluateTrust(base({ faceit: "unknown" }), cfg, NOW).level).toBe("verified")
   })
 
+  it("blocks Verified on an unchecked Steam status only when the check is required", () => {
+    expect(evaluateTrust(base({ steamBans: "unknown" }), cfg, NOW).level).toBe("verified")
+    expect(evaluateTrust(base({ steamBans: "unknown" }), { ...cfg, requireSteamCheck: true }, NOW).level).toBe("new")
+  })
+
   it("keeps a FACEIT or recent Steam ban at New", () => {
     const faceit = { faceitId: "x", nickname: "x", banned: true, pastBans: 1, fetchedAt: "" }
     expect(evaluateTrust(base({ faceit }), cfg, NOW).level).toBe("new")

@@ -6,6 +6,7 @@ import { Avatar } from "./Avatar";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
+import { PartySize } from "./PartySize";
 import styles from "./PartyPanel.module.css";
 
 type PartyPanelProps = {
@@ -43,7 +44,13 @@ export function PartyPanel({ party, mySteamId, maxSize = 3, inviteUrl, onCreate,
   return (
     <Card
       title="Party"
-      eyebrow={`${Math.max(members.length, 1)} of ${maxSize}`}
+      eyebrow={
+        <PartySize
+          count={Math.max(members.length, 1)}
+          capacity={maxSize}
+          label={`${Math.max(members.length, 1)} of ${maxSize} players`}
+        />
+      }
       actions={
         party?.partyId && onLeave ? (
           <Button variant="ghost" onClick={onLeave} disabled={locked}>

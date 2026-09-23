@@ -25,6 +25,8 @@ export type TrustConfig = {
   trustedMinAccountDays: number
   // A Steam ban older than this no longer blocks Verified
   banGraceDays: number
+  // When set, an unchecked Steam ban status keeps the player at New. On in production
+  requireSteamCheck?: boolean
 }
 
 export type TrustEvaluation = {
@@ -63,6 +65,7 @@ export function evaluateTrust(input: TrustInputs, cfg: TrustConfig, now: number)
   if (bans === "unknown") {
     reasons.push("steam_unchecked")
     blocksTrusted = true
+    if (cfg.requireSteamCheck) blocksVerified = true
   } else if (bans) {
     const count = steamBanCount(bans)
     if (bans.CommunityBanned) {

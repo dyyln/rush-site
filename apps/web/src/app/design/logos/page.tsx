@@ -15,11 +15,11 @@ const OPTIONS: { family: Family; concept: string }[] = [
   { family: "Crosshair", concept: "Ring and dot scope with four ticks crossing the ring." },
   { family: "Silhouette", concept: "Head and shoulders peeking out from behind a wall edge." },
   { family: "Silhouette", concept: "Full lean out of cover with a rifle held level." },
-  { family: "Silhouette", concept: "Low crouch at the base of a wall, rifle out." },
+  { family: "Silhouette", concept: "Kneeling low at the base of a wall, rifle out." },
   { family: "Mixture", concept: "Head and shoulders sitting in the centre of a gap crosshair." },
   { family: "Mixture", concept: "Crosshair whose right arm is a wall, a head peeking into the centre." },
-  { family: "Mixture", concept: "Square corner-bracket reticle framing a figure peeking round a wall." },
-  { family: "Mixture", concept: "Solid badge with crosshair and head-and-shoulders cut out as negative space." },
+  { family: "Mixture", concept: "Square reticle whose right side is a wall, a figure peeking into the corner brackets." },
+  { family: "Mixture", concept: "Solid badge with the crosshair and a head-and-shoulders cut out as negative space." },
 ];
 
 const SIZES = [24, 48, 200];
@@ -40,7 +40,7 @@ const panel = (dark: boolean): CSSProperties => ({
   border: "1px solid var(--color-border)",
 });
 
-function Mark({ svg, size }: { svg: string; size: number }) {
+function Mark({ svg, size, dark }: { svg: string; size: number; dark: boolean }) {
   return (
     <figure style={{ margin: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" }}>
       <span
@@ -48,7 +48,7 @@ function Mark({ svg, size }: { svg: string; size: number }) {
         style={{ display: "block", width: size, height: size, lineHeight: 0 }}
         dangerouslySetInnerHTML={{ __html: svg.replace("<svg ", `<svg width="${size}" height="${size}" `) }}
       />
-      <figcaption className="mono" style={{ fontSize: "var(--text-xs)", color: "#8a8f99" }}>
+      <figcaption className="mono" style={{ fontSize: "var(--text-xs)", color: dark ? "var(--color-text-muted)" : "#4b505a" }}>
         {size}px
       </figcaption>
     </figure>
@@ -85,7 +85,7 @@ export default function LogoOptionsPage() {
                 {[true, false].map((dark) => (
                   <div key={String(dark)} style={panel(dark)} aria-label={dark ? "Accent on dark" : "Black on white"} role="img">
                     {SIZES.map((s) => (
-                      <Mark key={s} svg={svg} size={s} />
+                      <Mark key={s} svg={svg} size={s} dark={dark} />
                     ))}
                   </div>
                 ))}

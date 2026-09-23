@@ -91,6 +91,7 @@ describe("accept flow", () => {
     await h.ctx.flow.respond(b, matchId, false)
     const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
     expect(m!.status).toBe("cancelled")
+    expect(h.notifier.ofType("match_cancelled")[0]!.msg.payload).toEqual({ matchId, reason: "accept_declined" })
     const cds = await h.db.select().from(cooldowns).where(eq(cooldowns.steamId, b))
     expect(cds).toHaveLength(1)
     expect(cds[0]!.reason).toBe("decline")

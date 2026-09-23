@@ -68,14 +68,14 @@ export function registerWsRoutes(app: FastifyInstance, ctx: AppContext, hub: Loc
           }
           parsed = r.data
         } catch {
-          send("error", { code: "invalid_json" })
+          send("error", { code: "invalid_json", message: "message is not valid JSON" })
           return
         }
         handleClientMessage(ctx, steamId, parsed).catch((err: unknown) => {
           if (err instanceof ApiError) send("error", { code: err.code, message: err.message, for: parsed.type })
           else {
             req.log.error({ err, steamId, type: parsed.type }, "ws message failed")
-            send("error", { code: "internal", for: parsed.type })
+            send("error", { code: "internal", message: "something went wrong", for: parsed.type })
           }
         })
       })

@@ -152,6 +152,17 @@ describe("schemas", () => {
     expect(() => ServerMessageSchema.parse({ ...ev, payload: { kind: "nope", payload: null } })).toThrow()
   })
 
+  it("parses match_cancelled and error", () => {
+    const c = serverMessage("match_cancelled", { matchId: MID, reason: "accept_timeout" })
+    expect(ServerMessageSchema.parse(c)).toEqual(c)
+    const e = serverMessage("error", { code: "queue_party_too_large", message: "Party too large" })
+    expect(ServerMessageSchema.parse(e)).toEqual(e)
+    const eRef = serverMessage("error", { code: "x", message: "y", ref: MID })
+    expect(ServerMessageSchema.parse(eRef)).toEqual(eRef)
+    expect(() => ServerMessageSchema.parse({ ...e, payload: { code: "x" } })).toThrow()
+    expect(() => ServerMessageSchema.parse({ ...c, payload: { matchId: "bad", reason: "r" } })).toThrow()
+  })
+
   it("veto state round trips", () => {
     const s = createVeto({
       pool: ["a", "b", "c", "d", "e"],

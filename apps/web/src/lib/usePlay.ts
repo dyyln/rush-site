@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   MatchFoundPayload,
   MatchResultPayload,
@@ -14,6 +14,21 @@ import type {
 import { api } from "./api";
 import { getRealtime, type ConnectionState } from "./ws";
 
+export type MatchCancelled = { matchId: string; reason: string };
+export type WsError = { code: string; message: string };
+
+function isCancel(v: unknown): v is MatchCancelled {
+  const o = v as MatchCancelled | null;
+  return !!o && typeof o.matchId === "string" && typeof o.reason === "string";
+}
+
+function isWsError(v: unknown): v is WsError {
+  const o = v as WsError | null;
+  return !!o && typeof o.code === "string" && typeof o.message === "string";
+}
+
+type Notices = { onCancelled?: (c: MatchCancelled) => void; onError?: (e: WsError) => void };
+
 export type MatchPhase =
   | { phase: "none" }
   | { phase: "found"; found: MatchFoundPayload; responded: boolean }
@@ -24,7 +39,7 @@ export type MatchPhase =
 const IDLE: QueueStatusPayload = { state: "idle", partyId: null, modes: [], cooldownUntil: null };
 
 // Live state for the play page. REST gives the first snapshot, WS keeps it current
-export function usePlay() {
+export function usePlay(notices: Notices = {}) {
   const rt = getRealtime();
   const [connection, setConnection] = useState<ConnectionState>(rt.state);
   const [queue, setQueue] = useState<QueueStatusPayload>(IDLE);
@@ -32,6 +47,8 @@ export function usePlay() {
   const [match, setMatch] = useState<MatchPhase>({ phase: "none" });
   const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<ModeStatsPayload | null>(null);
+  const noticesRef = useRef(notices);
+  noticesRef.current = notices;
 
   useEffect(() => {
     rt.connect();
@@ -48,6 +65,15 @@ export function usePlay() {
         setMatch((m) => ({ phase: "ready", server, veto: m.phase === "veto" ? m.veto : null })),
       ),
       rt.on("match_result", (result) => setMatch({ phase: "result", result })),
+      // Read raw so this works before and after shared adds the schemas
+      rt.onRaw("match_cancelled", (p) => {
+        if (!isCancel(p)) return;
+        setMatch({ phase: "none" });
+        noticesRef.current.onCancelled?.(p);
+      }),
+      rt.onRaw("error", (p) => {
+        if (isWsError(p)) noticesRef.current.onError?.(p);
+      }),
     ];
     setConnection(rt.state);
     let live = true;

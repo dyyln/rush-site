@@ -1,0 +1,12 @@
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+}
+.empty {
+  color: var(--color-text-muted);
+}
+.over {
+  color: var(--color-loss);
+}

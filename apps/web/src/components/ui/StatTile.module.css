@@ -25,3 +25,9 @@
 }
 .up { color: var(--color-win); }
 .down { color: var(--color-loss); }
+.sm {
+  padding: var(--space-2) var(--space-3);
+}
+.sm .value {
+  font-size: var(--text-xl);
+}

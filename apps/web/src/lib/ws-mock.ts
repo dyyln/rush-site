@@ -31,6 +31,8 @@ export class MockRealtime extends Emitter implements Realtime {
   private ticker: ReturnType<typeof setInterval> | null = null;
   private veto: VetoState | null = null;
   private accepted = 0;
+  // The first match found is cancelled to show that flow once
+  private cancelShown = false;
   private required = 2;
 
   connect() {
@@ -128,6 +130,17 @@ export class MockRealtime extends Emitter implements Realtime {
       accepted: 0,
       required: this.required,
     });
+    if (!this.cancelShown) {
+      this.cancelShown = true;
+      for (let i = 1; i < this.required - 1; i++) this.later(900 * i, () => this.bumpAccepted(mode));
+      this.later(6000, () => {
+        this.clear();
+        this.mode = null;
+        this.dispatchRaw("match_cancelled", { matchId: MATCH_ID, reason: "An opponent did not accept" });
+        this.idle();
+      });
+      return;
+    }
     for (let i = 1; i < this.required; i++) {
       this.later(900 * i, () => this.bumpAccepted(mode));
     }

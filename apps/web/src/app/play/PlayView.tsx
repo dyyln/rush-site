@@ -7,6 +7,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
+import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
 import { Throbber } from "@/components/ui/Throbber";
 import { StatTile } from "@/components/ui/StatTile";
@@ -28,8 +29,11 @@ const MAX_PARTY = Math.max(...MODES.map((m) => MODE_CONFIGS[m].teamSize));
 
 export function PlayView() {
   const { user, loading } = useSession();
-  const play = usePlay();
   const toast = useToast();
+  const play = usePlay({
+    onCancelled: (c) => toast.push({ title: "Match cancelled", body: c.reason, tone: "error" }),
+    onError: (e) => toast.push({ title: "Something went wrong", body: e.message, tone: "error" }),
+  });
   const [selected, setSelected] = useState<Mode[]>([]);
   const [origin, setOrigin] = useState("");
   const profile = useAsync(() => (user ? api.profile(user.steamId) : Promise.resolve(null)), [user?.steamId]);
@@ -152,6 +156,7 @@ export function PlayView() {
                       <li key={mode}>
                         <label
                           className={`${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""}`}
+                          title={reason ?? undefined}
                         >
                           <input
                             type="checkbox"
@@ -163,7 +168,14 @@ export function PlayView() {
                           />
                           <span className={styles.modeTop}>
                             <span className={styles.modeName}>
-                              {copy.name} <span className={styles.format}>{copy.format}</span>
+                              {copy.name}{" "}
+                              <span className={styles.format}>
+                                <PartySize
+                                  count={MODE_CONFIGS[mode].teamSize}
+                                  overflow={Math.max(0, partySize - MODE_CONFIGS[mode].teamSize)}
+                                  label={reason ? `${copy.players}. ${reason}` : copy.players}
+                                />
+                              </span>
                             </span>
                             <span className={styles.check} aria-hidden="true">
                               {q ? (
@@ -175,8 +187,8 @@ export function PlayView() {
                               )}
                             </span>
                           </span>
-                          <span id={`mode-${mode}-desc`} className={reason ? styles.reason : styles.modeBlurb}>
-                            {reason ?? copy.blurb}
+                          <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
+                            {copy.blurb}
                           </span>
                           <Standing profile={me} mode={mode} />
                           <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>
@@ -354,10 +366,10 @@ function YourStats({ profile }: { profile: Profile }) {
       <h2 id="your-stats" className="visually-hidden">
         Your stats
       </h2>
-      <StatTile label="Win rate" value={pct(matches ? wins / matches : 0)} />
-      <StatTile label="Headshot" value={pct(weighted((m) => m.headshotPct))} />
-      <StatTile label="K/D" value={weighted((m) => m.kd).toFixed(2)} />
-      <StatTile label="Matches" value={matches} />
+      <StatTile size="sm" label="Win rate" value={pct(matches ? wins / matches : 0)} />
+      <StatTile size="sm" label="Headshot" value={pct(weighted((m) => m.headshotPct))} />
+      <StatTile size="sm" label="K/D" value={weighted((m) => m.kd).toFixed(2)} />
+      <StatTile size="sm" label="Matches" value={matches} />
       <div className={styles.form}>
         <p className={styles.formLabel}>Last 5</p>
         <ol className={styles.dots}>

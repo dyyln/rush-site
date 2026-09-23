@@ -87,6 +87,7 @@ export function buildContext(deps: ContextDeps): AppContext {
       trustedMinMatches: env.TRUST_TRUSTED_MIN_MATCHES,
       trustedMinAccountDays: env.TRUST_TRUSTED_MIN_ACCOUNT_DAYS,
       banGraceDays: env.TRUST_BAN_GRACE_DAYS,
+      requireSteamCheck: env.NODE_ENV === "production",
     },
     log,
     now,

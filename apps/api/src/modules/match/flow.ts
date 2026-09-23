@@ -10,6 +10,7 @@ import {
   resolveStep,
   unresolvedConfig,
   vote as castVetoVote,
+  type MatchCancelledPayload,
   type MatchEvent,
   type MatchFoundPayload,
   type MatchResultPayload,
@@ -275,6 +276,7 @@ export class MatchFlow {
       return
     }
     const reason = outcome.reason === "declined" ? "decline" : "accept_timeout"
+    this.sendCancelled(m, `accept_${outcome.reason}`)
     for (const id of outcome.penalize) await this.d.cooldowns.issue(id, reason, m.id)
     for (const t of outcome.dropTickets) await this.d.queue.cancelTicket(t, reason)
     for (const t of outcome.requeueTickets) await this.d.queue.requeue(t)
@@ -465,6 +467,7 @@ export class MatchFlow {
       else await this.d.queue.cancelTicket(t, reason)
     }
     await this.d.queue.notifyParty(r.players.map((p) => p.steamId))
+    this.sendCancelled(r.m, reason)
     this.d.events?.emit("match", { event: "match_cancelled", matchId, reason })
     await this.emitResult({ matchId, outcome: "cancelled", reason })
     return true
@@ -539,6 +542,11 @@ export class MatchFlow {
         else await this.abandonMatch(matchId, event.missingSteamIds, event.reason)
         return
     }
+  }
+
+  private sendCancelled(m: MatchRow, reason: string): void {
+    const payload: MatchCancelledPayload = { matchId: m.id, reason }
+    toUsers(this.d.notifier, this.allSteamIds(m), "match_cancelled", payload)
   }
 
   private sendServerReady(m: MatchRow): void {
@@ -712,6 +720,7 @@ export class MatchFlow {
       ratingChanges: r.changes,
     }
     toUsers(this.d.notifier, this.allSteamIds(r.m), "match_result", payload)
+    if (r.m.status !== "live") this.sendCancelled(r.m, reason)
     this.d.events?.emit("match", { event: "match_abandoned", matchId, reason, forfeiters: r.outcome.forfeiters })
     await this.emitResult({ matchId, outcome: "abandoned", reason, missingSteamIds: r.outcome.forfeiters })
   }
