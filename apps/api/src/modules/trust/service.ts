@@ -1,11 +1,19 @@
 import { isFaceitUnavailableError, type FaceitSignal } from "@rushsite/faceit"
-import type { TrustLevel } from "@rushsite/shared"
+import type { TrustLevel, TrustLevelsResponse, TrustProgress } from "@rushsite/shared"
 import { and, count, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm"
 import type { FastifyBaseLogger } from "fastify"
 import type { Db } from "../../db/client.js"
 import { bans, flags, matchPlayers, matches, steamProfiles, trustLevels, trustSignals } from "../../db/schema.js"
 import type { SteamBans, SteamWebApi } from "../auth/steam.js"
-import { evaluateTrust, steamBanCount, type TrustConfig, type TrustEvaluation, type TrustInputs } from "./evaluate.js"
+import {
+  evaluateTrust,
+  steamBanCount,
+  trustLevels as trustLevelDefinitions,
+  trustProgress,
+  type TrustConfig,
+  type TrustEvaluation,
+  type TrustInputs,
+} from "./evaluate.js"
 
 export type FaceitLookup = (steamId64: string) => Promise<FaceitSignal | null>
 
@@ -89,7 +97,7 @@ export class TrustService {
       cs2PlaytimeMinutes: profile?.playtime ?? null,
       platform: {
         completedMatches: completed?.n ?? 0,
-        openFlags: flagRows.find((f) => f.status === "open")?.n ?? 0,
+        openFlags: flagRows.filter((f) => f.status === "open" || f.status === "reviewing").reduce((n, f) => n + f.n, 0),
         confirmedFlags: flagRows.find((f) => f.status === "confirmed")?.n ?? 0,
         activeBan,
       },
@@ -108,6 +116,16 @@ export class TrustService {
         setWhere: eq(trustLevels.locked, false),
       })
     return result
+  }
+
+  // Progress toward the next level for the player themselves
+  async progress(steamId: string): Promise<TrustProgress> {
+    const [row] = await this.db.select().from(trustLevels).where(eq(trustLevels.steamId, steamId))
+    return trustProgress(row?.level ?? "new", await this.inputs(steamId), this.cfg, this.now(), { locked: row?.locked ?? false })
+  }
+
+  levelDefinitions(): TrustLevelsResponse {
+    return trustLevelDefinitions(this.cfg)
   }
 
   async onLogin(steamId: string): Promise<void> {

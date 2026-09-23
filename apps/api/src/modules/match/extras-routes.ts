@@ -6,6 +6,7 @@ import type { AppContext } from "../../context.js"
 import { matchPlayers, matches, reports } from "../../db/schema.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import { requireUser } from "../auth/session.js"
+import { reviewService } from "../review/index.js"
 
 const Uuid = z.uuid()
 
@@ -37,6 +38,12 @@ export function registerMatchExtrasRoutes(app: FastifyInstance, ctx: AppContext)
       .onConflictDoNothing()
       .returning({ id: reports.id, createdAt: reports.createdAt })
     if (!row) throw conflict("already_reported")
+    // A failed auto flag never loses the report
+    try {
+      await reviewService(ctx).onReport({ reporter, target, matchId: id })
+    } catch (err) {
+      req.log.error({ err, matchId: id, target }, "auto flag failed")
+    }
     return reply.code(201).send({ report: { id: row.id, matchId: id, steamId: target, reason, createdAt: row.createdAt.toISOString() } })
   })
 }

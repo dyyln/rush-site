@@ -1,6 +1,7 @@
 // Deterministic mock data so server and client renders match.
 import { AIM_MAPS, MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import { teamSize } from "./modes";
+import { MOCK_TRUST } from "./trust";
 import type {
   Bracket,
   BracketMatch,
@@ -66,9 +67,11 @@ export const MOCK_ME: User = {
   steamId: mockSteamId(0),
   displayName: "meridius",
   avatarUrl: null,
-  trustLevel: "verified",
+  trustLevel: "new",
   region: "eu",
   isAdmin: true,
+  trust: MOCK_TRUST,
+  settings: { minTrust: "new" },
 };
 
 export function mockUser(i: number): User {
@@ -135,6 +138,13 @@ function mockModeStats(steamId: string, mode: Mode): ModeStats {
     rating += (r() - 0.42) * 40;
     return { ts: MOCK_NOW - (points - i) * DAY * 0.8, rating: Math.round(rating) };
   });
+  // Older points walk back from the first one so the history covers 90 days
+  const back = rng(hash(steamId + mode + "older"));
+  let older = history[0]!.rating;
+  for (let ts = history[0]!.ts - DAY * 1.1; ts > MOCK_NOW - 90 * DAY; ts -= DAY * (0.6 + back() * 1.2)) {
+    older -= (back() - 0.45) * 45;
+    history.unshift({ ts: Math.round(ts), rating: Math.round(older) });
+  }
   const matches = 40 + Math.floor(r() * 200);
   const wins = Math.floor(matches * (0.45 + r() * 0.15));
   const maps = mode === "rush3v3" ? [RUSH_MAP] : AIM_MAPS;
@@ -231,7 +241,7 @@ export function mockProfile(steamId: string): Profile {
 export function mockParty(size = 2): PartyUpdatePayload {
   const members = Array.from({ length: size }, (_, i) => {
     const u = mockUser(i === 0 ? 0 : i + 3);
-    return { steamId: u.steamId, displayName: u.displayName, avatarUrl: u.avatarUrl };
+    return { steamId: u.steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, trustLevel: u.trustLevel };
   });
   return {
     partyId: "5b0c9f1e-3a7d-4e2b-9c11-1f2a3b4c5d6e",

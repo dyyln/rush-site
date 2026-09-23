@@ -74,10 +74,15 @@ export interface TournamentsPluginOptions {
   getParty(steamId: string): Promise<PartyInfo | null>
   // Display names and avatars. Missing players fall back to their SteamID64.
   getProfiles(steamIds: string[]): Promise<Record<string, ProfileInfo>>
+  // Admin routes under /admin/tournaments are registered only when this is given.
+  isAdmin?(steamId: string): boolean
+  // Stops a CS2 match that no longer counts after a cancel, disqualification or forced result.
+  cancelMatch?(matchId: string, reason: string): Promise<unknown>
   // Defaults to true. Tests turn it off.
   scheduler?: boolean
   schedulerIntervalMs?: number
   now?: () => Date
+  // Seeds cup_schedules when it is empty. Used by tests with the memory store.
   cups?: import("./config.js").CupDefinition[]
 }
 

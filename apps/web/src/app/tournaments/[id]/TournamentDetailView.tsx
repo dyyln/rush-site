@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { trustAtLeast } from "@rushsite/shared";
+import { TEAM_NAME_MAX, TeamNameSchema, trustAtLeast } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { BracketView, entryName, entryPlayers } from "@/components/ui/BracketView";
 import { TeamCard } from "@/components/ui/TeamCard";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
@@ -16,14 +17,21 @@ import { ApiError, api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
+import { trustProgressLine } from "@/lib/trust";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
 import type { TournamentBracket, TournamentDetail } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { useVisibleInterval } from "@/lib/useVisibleInterval";
 import { getRealtime } from "@/lib/ws";
 import styles from "./detail.module.css";
 
+// Signed out viewers have no socket, so the bracket is polled by version instead
+const BRACKET_POLL_MS = 5000;
+
 // Bracket changes only refetch the bracket, by version. Other changes reload the page data
 function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload: () => void): TournamentBracket | null {
+  const { user, loading } = useSession();
+  const signedIn = !!user;
   const [live, setLive] = useState<TournamentBracket | null>(null);
   const version = useRef<number | undefined>(undefined);
   const inFlight = useRef(false);
@@ -60,7 +68,10 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     }
   }, [id]);
 
+  useVisibleInterval(() => void refresh(), BRACKET_POLL_MS, !loading && !signedIn);
+
   useEffect(() => {
+    if (!signedIn) return;
     const rt = getRealtime();
     rt.connect();
     const subscribe = () => rt.send("subscribe_tournament", { tournamentId: id });
@@ -85,7 +96,7 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
       offs.forEach((off) => off());
       rt.send("unsubscribe_tournament", { tournamentId: id });
     };
-  }, [id, reload, refresh]);
+  }, [id, reload, refresh, signedIn]);
 
   return live && detail && live.version > detail.bracketVersion ? live : null;
 }
@@ -127,12 +138,25 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const winner = t.winnerEntryId ? t.entries.find((e) => e.id === t.winnerEntryId) : undefined;
   const eligible = user ? trustAtLeast(user.trustLevel, t.minTrust) : false;
   const full = t.entrantCount >= t.maxEntrants;
+  const teamMode = t.mode !== "aim1v1";
+  const [teamName, setTeamName] = useState("");
+  const [teamNameError, setTeamNameError] = useState<string>();
 
   async function toggleEntry() {
+    let name: string | undefined;
+    if (!entered && teamMode && teamName.trim()) {
+      const parsed = TeamNameSchema.safeParse(teamName);
+      if (!parsed.success) {
+        setTeamNameError(parsed.error.issues[0]?.message ?? "Invalid team name");
+        return;
+      }
+      name = parsed.data;
+    }
+    setTeamNameError(undefined);
     setBusy(true);
     try {
       if (entered) await api.tournaments.withdraw(t.id);
-      else await api.tournaments.enter(t.id);
+      else await api.tournaments.enter(t.id, name);
       setEntered(!entered);
       toast.push({ title: entered ? "Withdrawn" : "You're in", tone: "success" });
       reload();
@@ -165,10 +189,28 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
         {t.status === "open" &&
           (user ? (
             <div className={styles.cta}>
+              {teamMode && eligible && !entered && !full && (
+                <Input
+                  label="Team name (optional)"
+                  value={teamName}
+                  maxLength={TEAM_NAME_MAX}
+                  placeholder="3 to 24 characters"
+                  error={teamNameError}
+                  onChange={(e) => {
+                    setTeamName(e.target.value);
+                    setTeamNameError(undefined);
+                  }}
+                />
+              )}
               <Button size="lg" variant={entered ? "danger" : "primary"} onClick={toggleEntry} loading={busy} disabled={!eligible || (!entered && full)}>
                 {entered ? "Withdraw" : full ? "Full" : "Enter cup"}
               </Button>
-              {!eligible && <p className={styles.note}>Requires a {t.minTrust} account.</p>}
+              {!eligible && (
+                <p className={styles.note}>
+                  {user.trust ? trustProgressLine(user.trust) : `Requires a ${t.minTrust} account`}.{" "}
+                  <Link href="/play">How to get Verified</Link>
+                </p>
+              )}
               {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
             </div>
           ) : (
@@ -202,6 +244,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
                     <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
                     <span className={styles.entrantName}>{entryName(e)}</span>
                   </TeamCard>
+                  {e.disqualified && <Badge tone="loss">DQ</Badge>}
                   {e.rating !== null && <span className="mono muted">{e.rating}</span>}
                 </li>
               ))}

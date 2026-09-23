@@ -44,6 +44,8 @@ export const QueueStatusPayloadSchema = z.object({
   modes: z.array(QueueModeStatusSchema).refine((m) => uniqueModes(m.map((x) => x.mode)), "duplicate mode"),
   // Epoch ms, set when state is cooldown
   cooldownUntil: z.number().nullable(),
+  // Opponent trust floor of the ticket. Set when queued
+  minTrust: TrustLevelSchema.optional(),
   // True only on the periodic refresh. A slow socket may drop these, never a state change
   refresh: z.boolean().optional(),
 })
@@ -119,7 +121,8 @@ export const TournamentSummarySchema = z.object({
   cupKey: z.string(),
   name: z.string(),
   mode: ModeSchema,
-  cadence: z.enum(["daily", "weekly"]),
+  // special is a one-off cup created by an admin
+  cadence: z.enum(["daily", "weekly", "special"]),
   status: TournamentStatusSchema,
   // ISO timestamps
   startsAt: z.string(),
@@ -162,8 +165,12 @@ export const TournamentEntrySchema = z.object({
   rating: z.number().nullable(),
   // ISO timestamp
   registeredAt: z.string(),
-  // Team name. Defaults to the captain's display name
+  // Display name. The team name when set, otherwise the captain's display name
   name: z.string().optional(),
+  // Team name chosen at entry for 2v2 and 3v3 cups
+  teamName: z.string().nullable().optional(),
+  // Set when an admin disqualified the entry
+  disqualified: z.boolean().optional(),
   players: z.array(EntryPlayerSchema).optional(),
 })
 export type TournamentEntry = z.infer<typeof TournamentEntrySchema>
@@ -189,7 +196,7 @@ export const BracketMatchSchema = z.object({
   liveMatchId: UuidSchema.nullable(),
   winner: UuidSchema.nullable(),
   resolution: z
-    .enum(["played", "bye", "walkover", "forfeit", "double_forfeit", "void"])
+    .enum(["played", "bye", "walkover", "forfeit", "double_forfeit", "void", "disqualified", "admin_decision"])
     .nullable(),
 })
 export type BracketMatchView = z.infer<typeof BracketMatchSchema>
@@ -219,6 +226,7 @@ export const TournamentUpdatePayloadSchema = z.object({
     "match_live",
     "match_updated",
     "completed",
+    "rescheduled",
   ]),
   tournament: TournamentSummarySchema,
   // Bumped on every bracket change. Viewers refetch GET /tournaments/:id/bracket when it moves
@@ -313,12 +321,14 @@ export type AcceptMatchPayload = z.infer<typeof AcceptMatchPayloadSchema>
 
 export const VetoVotePayloadSchema = z.object({
   matchId: UuidSchema,
-  mapId: z.string().min(1),
+  mapId: z.string().min(1).max(64),
 })
 export type VetoVotePayload = z.infer<typeof VetoVotePayloadSchema>
 
 export const QueueJoinPayloadSchema = z.object({
   modes: z.array(ModeSchema).min(1).refine(uniqueModes, "duplicate mode"),
+  // Lowest trust level an opponent may have. Omitted means the saved setting, which defaults to new
+  minTrust: TrustLevelSchema.optional(),
 })
 export type QueueJoinPayload = z.infer<typeof QueueJoinPayloadSchema>
 

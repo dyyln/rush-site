@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { isUuid } from "./store.js"
 import { TournamentError, type TournamentService } from "./service.js"
-import { MODES, TournamentStatusSchema } from "@rushsite/shared"
+import { EnterTournamentBodySchema, MODES, TournamentStatusSchema } from "@rushsite/shared"
 import type { Mode, TournamentStatus } from "./types.js"
 
 const STATUSES = TournamentStatusSchema.options
@@ -75,7 +75,11 @@ export function registerRoutes(
     checkId(req.params.id)
     const steamId = await requireUser(req, reply)
     if (!steamId) return reply
-    const entry = await service.enter(req.params.id, steamId)
+    const body = EnterTournamentBodySchema.safeParse(req.body ?? undefined)
+    if (!body.success) {
+      throw new TournamentError(400, "invalid_team_name", body.error.issues[0]?.message ?? "Invalid team name")
+    }
+    const entry = await service.enter(req.params.id, steamId, body.data?.teamName)
     return reply.code(201).send({ entry })
   })
 

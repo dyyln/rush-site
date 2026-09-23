@@ -16,9 +16,11 @@ import {
 import { sql } from "drizzle-orm"
 
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
-export { adminAudit } from "../modules/admin/schema.js"
-export { badges, bracketMatches, brackets, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
+export { adminAudit, metricSamples } from "../modules/admin/schema.js"
+export { announcements, featureFlags } from "../modules/flags/schema.js"
+export { badges, bracketMatches, brackets, cupSchedules, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
 export { challenges } from "../modules/challenges/schema.js"
+export { userSettings } from "../modules/queue/schema.js"
 export { friendRequests, friendships, partyInvites } from "../modules/friends/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
@@ -46,9 +48,12 @@ export const slotStatusEnum = pgEnum("slot_status", ["free", "reserved", "runnin
 export const gsltStatusEnum = pgEnum("gslt_status", ["free", "in_use", "invalid"])
 export const cooldownReasonEnum = pgEnum("cooldown_reason", ["decline", "accept_timeout", "no_connect", "abandon"])
 export const ratingEventReasonEnum = pgEnum("rating_event_reason", ["match", "forfeit", "rollback", "adjust"])
-export const flagStatusEnum = pgEnum("flag_status", ["open", "confirmed", "dismissed"])
+// dismissed is a legacy value. Review uses cleared
+export const flagStatusEnum = pgEnum("flag_status", ["open", "confirmed", "dismissed", "reviewing", "cleared"])
 export const verdictEnum = pgEnum("review_verdict", ["cheat", "clean"])
 export const reportStatusEnum = pgEnum("report_status", ["open", "actioned", "dismissed"])
+// What the reporter sees. Updated when the flag is claimed or decided
+export const reportOutcomeEnum = pgEnum("report_outcome", ["received", "reviewed", "actioned", "dismissed"])
 
 // Identity is the SteamID64
 export const users = pgTable("users", {
@@ -146,6 +151,9 @@ export const queueTickets = pgTable(
     matchId: uuid("match_id"),
     matchedMode: modeEnum("matched_mode"),
     cancelReason: text("cancel_reason"),
+    // Opponent trust floor, and each player's trust level when the ticket was queued
+    minTrust: trustLevelEnum("min_trust").notNull().default("new"),
+    playerTrust: jsonb("player_trust").$type<Record<string, "new" | "verified" | "trusted">>().notNull().default({}),
     enqueuedAt: ts("enqueued_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
@@ -406,10 +414,19 @@ export const flags = pgTable(
     source: text("source").notNull(),
     status: flagStatusEnum("status").notNull().default("open"),
     detail: jsonb("detail"),
+    // Admin who claimed the flag. Kept after the decision
+    reviewerSteamId: steamId("reviewer_steam_id"),
+    decidedAt: ts("decided_at"),
+    note: text("note"),
     createdAt: createdAt(),
     resolvedAt: ts("resolved_at"),
   },
-  (t) => [index("flags_user_idx").on(t.steamId, t.status)],
+  (t) => [
+    index("flags_user_idx").on(t.steamId, t.status),
+    index("flags_status_idx").on(t.status, t.createdAt),
+    // One flag per player per match
+    uniqueIndex("flags_player_match_idx").on(t.steamId, t.matchId).where(sql`${t.matchId} is not null`),
+  ],
 )
 
 // Every ruling is a labelled training example
@@ -459,10 +476,14 @@ export const reports = pgTable(
     reason: text("reason").notNull(),
     detail: text("detail"),
     status: reportStatusEnum("status").notNull().default("open"),
+    outcome: reportOutcomeEnum("outcome").notNull().default("received"),
     createdAt: createdAt(),
   },
   // One report per reporter per target per match. Rows without a match are not limited
-  (t) => [uniqueIndex("reports_once_per_match_idx").on(t.reporterSteamId, t.reportedSteamId, t.matchId)],
+  (t) => [
+    uniqueIndex("reports_once_per_match_idx").on(t.reporterSteamId, t.reportedSteamId, t.matchId),
+    index("reports_target_match_idx").on(t.reportedSteamId, t.matchId),
+  ],
 )
 
 export const cooldowns = pgTable(

@@ -7,8 +7,10 @@ import { buildContext, type AppContext, type ContextDeps } from "./context.js"
 import { realtimeMetrics } from "./lib/backpressure.js"
 import { ApiError } from "./lib/errors.js"
 import { withLock } from "./lib/redis.js"
+import { registerSecurity } from "./lib/security.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
 import challengesPlugin from "./modules/challenges/index.js"
+import { registerFlagRoutes } from "./modules/flags/routes.js"
 import friendsPlugin from "./modules/friends/index.js"
 import { createSurgeDriver } from "./modules/match/dathost.js"
 import { registerMatchRoutes } from "./modules/match/routes.js"
@@ -16,9 +18,11 @@ import { registerPartyRoutes } from "./modules/parties/routes.js"
 import { matchmakeAll } from "./modules/queue/loop.js"
 import { LoopMetrics } from "./modules/queue/metrics.js"
 import { registerQueueRoutes } from "./modules/queue/routes.js"
+import reviewPlugin from "./modules/review/index.js"
 import { MODE_STATS_KEY, type LiveTicket } from "./modules/queue/service.js"
 import { registerStatsFeatures } from "./modules/stats/features.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
+import { sampleMetrics } from "./modules/admin/metrics.js"
 import { LocalHub, type Audience } from "./modules/ws/hub.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
 
@@ -60,6 +64,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   // The default method list leaves out DELETE, which kick, unfriend and cancel routes use
   await app.register(cors, { origin: [opts.env.PUBLIC_URL], credentials: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] })
   await app.register(websocket, { options: { maxPayload: 64 * 1024 } })
+  await registerSecurity(app, { env: opts.env, redis: opts.redis })
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) {
@@ -97,8 +102,10 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   registerStatsRoutes(app, ctx)
   registerStatsFeatures(app, ctx)
   registerWsRoutes(app, ctx, hub)
+  registerFlagRoutes(app, ctx)
   await app.register(challengesPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
   await app.register(friendsPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
+  await app.register(reviewPlugin, { ctx })
 
   if (opts.plugins?.tournaments !== false) {
     const tournamentsPlugin = await optionalPlugin(app, "./modules/tournaments/index.js")
@@ -110,6 +117,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
         emit: (message: { type: string; payload: unknown; ts: number }, audience?: Audience) =>
           ctx.notifier.send(audience ?? { kind: "broadcast" }, message),
         authenticate: ctx.auth,
+        isAdmin: ctx.isAdmin,
+        cancelMatch: (matchId: string, reason: string) => ctx.flow.cancelMatch(matchId, reason, { requeue: false }),
         getTrustLevels: (ids: string[]) => ctx.trust.levels(ids),
         getRatings: (ids: string[], mode: Mode) => ctx.ratings.ratingValues(ids, mode),
         getParty: (steamId: string) => ctx.parties.partyOf(steamId),
@@ -129,7 +138,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
     if (adminPlugin) await app.register(adminPlugin as Parameters<FastifyInstance["register"]>[0], adminOptions(ctx))
   }
 
-  if (!opts.env.DISABLE_LOOPS) startLoops(app, ctx, loopMetrics)
+  if (!opts.env.DISABLE_LOOPS) startLoops(app, ctx, loopMetrics, hub)
   return { app, ctx, hub }
 }
 
@@ -174,11 +183,37 @@ export function adminOptions(ctx: AppContext) {
     unban: async (steamId: string) => (await ctx.bans.unban(steamId)) > 0,
     recentEvents: (limit: number) => ctx.events.recent(limit),
     emitAdmin: (kind: AdminEventKind, payload: unknown) => ctx.events.emit(kind, payload),
+    flags: ctx.flags,
+    announcements: ctx.announcements,
+    onModeClosed: (mode: Mode) => drainMode(ctx, mode),
+    resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
+    now: () => new Date(ctx.now()),
   }
 }
 
+// Removes a closed mode from every waiting ticket. Tickets with no other mode leave the queue
+async function drainMode(ctx: AppContext, mode: Mode): Promise<number> {
+  const tickets = await ctx.queue.waiting(mode)
+  for (const t of tickets) {
+    const member = t.steamIds[0]
+    if (member) await ctx.queue.leave(member, [mode])
+  }
+  return tickets.length
+}
+
+async function resolveVanity(ctx: AppContext, vanity: string): Promise<string | null> {
+  if (!ctx.env.STEAM_API_KEY) return null
+  const url = new URL("https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/")
+  url.searchParams.set("key", ctx.env.STEAM_API_KEY)
+  url.searchParams.set("vanityurl", vanity)
+  const res = await ctx.fetch(url.toString())
+  if (!res.ok) return null
+  const body = (await res.json()) as { response?: { success?: number; steamid?: string } }
+  return body.response?.success === 1 && body.response.steamid ? body.response.steamid : null
+}
+
 // Background loops. Redis locks keep one instance doing each job
-function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics): void {
+function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics, hub: LocalHub): void {
   const timers: NodeJS.Timeout[] = []
   const loop = (name: string, everyMs: number, fn: (lockTtlMs: number) => Promise<unknown>, lockTtlMs?: number) => {
     let running = false
@@ -215,6 +250,12 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics)
     // A pass can wait on a 15 s agent call, so the lock outlives it
     loop("match_alloc", ctx.env.ALLOCATION_TICK_INTERVAL_MS, () => ctx.flow.allocationTick(ctx.env.ALLOCATION_CONCURRENCY), 30_000)
     loop("hosts", 30_000, () => ctx.allocator.syncHosts(ctx.env.AGENT_URLS))
+    // Dashboard samples. Socket count is this instance only
+    loop("metric_samples", 60_000, async () => {
+      const depth = Object.fromEntries(MODES.map((m) => [m, 0])) as Record<Mode, number>
+      for (const t of await queueSnapshot(ctx)) for (const m of t.modes) depth[m] += t.steamIds.length
+      await sampleMetrics(ctx.db, { at: new Date(ctx.now()), queueDepth: depth, activeSockets: hub.connectedSockets() })
+    })
     // Every instance holds the last value it saw so only changes go out. The lock picks one sender
     let lastStats = ""
     loop("mode_stats", 5000, async () => {

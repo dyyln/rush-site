@@ -1,3 +1,4 @@
+import { TrustLevelsResponseSchema, TrustProgressSchema } from "@rushsite/shared"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createAppHarness } from "../../../test/helpers.js"
 import { safeRedirectPath } from "./routes.js"
@@ -53,6 +54,9 @@ describe("steam openid checks", () => {
     expect(safeRedirectPath("/play")).toBe("/play")
     expect(safeRedirectPath("//evil.example")).toBe("/")
     expect(safeRedirectPath("https://evil.example")).toBe("/")
+    expect(safeRedirectPath("/\t/evil.example")).toBe("/")
+    expect(safeRedirectPath("/play\r\nSet-Cookie: x=1")).toBe("/")
+    expect(safeRedirectPath("/\\evil.example")).toBe("/")
   })
 })
 
@@ -111,9 +115,26 @@ describe("login flow", () => {
 
     const me = await h.app.inject({ method: "GET", url: "/me", cookies: { rs_sid: session!.value } })
     expect(me.statusCode).toBe(200)
-    expect(me.json()).toEqual({
-      user: { steamId: SID, displayName: "Maximus", avatarUrl: "https://a/b.jpg", trustLevel: "new", region: "eu", isAdmin: false },
+    const body = me.json()
+    expect(body.user).toEqual({
+      steamId: SID,
+      displayName: "Maximus",
+      avatarUrl: "https://a/b.jpg",
+      trustLevel: "new",
+      region: "eu",
+      isAdmin: false,
     })
+    const trust = TrustProgressSchema.parse(body.trust)
+    expect(trust).toMatchObject({ level: "new", next: "verified" })
+    expect(trust.requirements.map((r) => r.key)).toEqual(["steam_check", "faceit_check", "matches", "clean_history"])
+    expect(trust.requirements.find((r) => r.key === "matches")).toMatchObject({ met: false, progress: { current: 0, required: 5 } })
+    expect(trust.blockedBy).toBeUndefined()
+
+    // Own profile shows progress, anyone else sees the level only
+    const own = (await h.app.inject({ method: "GET", url: `/users/${SID}/profile`, cookies: { rs_sid: session!.value } })).json()
+    expect(TrustProgressSchema.parse(own.trust).next).toBe("verified")
+    const other = (await h.app.inject({ method: "GET", url: `/users/${SID}/profile` })).json()
+    expect(other.trust).toEqual({ level: "new" })
 
     // The same assertion cannot be replayed
     const replay = await h.app.inject({
@@ -129,7 +150,69 @@ describe("login flow", () => {
     expect(res.headers.location).toContain("error=state_missing")
   })
 
+  it("serves the level definitions with the configured thresholds", async () => {
+    const res = await h.app.inject({ method: "GET", url: "/trust/levels" })
+    const body = TrustLevelsResponseSchema.parse(res.json())
+    expect(body.levels.map((l) => l.level)).toEqual(["new", "verified", "trusted"])
+    expect(body.thresholds).toEqual({ verifiedMinMatches: 5, trustedMinMatches: 150, trustedMinAccountDays: 365, banGraceDays: 1825 })
+    expect(body.levels[1]!.requirements.find((r) => r.key === "matches")!.required).toBe(5)
+  })
+
   it("rejects /me without a session", async () => {
     expect((await h.app.inject({ method: "GET", url: "/me" })).statusCode).toBe(401)
+  })
+
+  const signed = (sid: string) => h.app.signCookie(sid)
+  const disconnects = () => h.notifier.sent.filter((s) => s.audience.kind === "disconnect").map((s) => s.audience)
+
+  it("closes the player's sockets on logout", async () => {
+    const sid = await h.ctx.sessions.create(SID)
+    h.notifier.clear()
+    const res = await h.app.inject({ method: "POST", url: "/auth/logout", cookies: { rs_sid: signed(sid) } })
+    expect(res.statusCode).toBe(204)
+    expect(disconnects()).toEqual([{ kind: "disconnect", steamIds: [SID], reason: "logged_out" }])
+  })
+
+  it("bans end sessions and sockets, refuse sign in and refuse any session left over", async () => {
+    const before = await h.ctx.sessions.create(SID)
+    h.notifier.clear()
+    const until = new Date(NOW + 3 * 86400_000)
+    await h.ctx.bans.ban(SID, "aimbot", { until })
+    expect(await h.ctx.sessions.get(before)).toBeNull()
+    expect(disconnects()).toEqual([{ kind: "disconnect", steamIds: [SID], reason: "banned" }])
+
+    // Sign in again with a fresh assertion
+    const start = await h.app.inject({ method: "GET", url: "/auth/steam" })
+    const returnTo = new URL(start.headers.location as string).searchParams.get("openid.return_to")!
+    const callback = new URL(returnTo)
+    for (const [k, v] of Object.entries(assertion(returnTo, { "openid.response_nonce": "2026-09-23T12:00:00ZBanned" }))) {
+      callback.searchParams.set(k, v)
+    }
+    const res = await h.app.inject({
+      method: "GET",
+      url: callback.pathname + callback.search,
+      cookies: { rs_login: start.cookies.find((c) => c.name === "rs_login")!.value },
+    })
+    expect(res.statusCode).toBe(302)
+    const target = new URL(res.headers.location as string)
+    expect(target.origin + target.pathname).toBe("http://localhost:3000/banned")
+    expect(target.searchParams.get("until")).toBe(until.toISOString())
+    expect(target.searchParams.get("reason")).toBe("aimbot")
+    expect(res.cookies.find((c) => c.name === "rs_sid")).toBeUndefined()
+
+    // A session that exists anyway is refused everywhere
+    const stale = signed(await h.ctx.sessions.create(SID))
+    const party = await h.app.inject({ method: "GET", url: "/parties/me", cookies: { rs_sid: stale } })
+    expect(party.statusCode).toBe(401)
+    expect(party.json()).toMatchObject({ error: "banned" })
+    const ws = await h.app.inject({ method: "GET", url: "/ws", cookies: { rs_sid: stale } })
+    expect(ws.statusCode).toBe(401)
+    const me = await h.app.inject({ method: "GET", url: "/me", cookies: { rs_sid: stale } })
+    expect(me.statusCode).toBe(403)
+    expect(me.json()).toMatchObject({ error: "banned", details: { reason: "aimbot", until: until.toISOString() } })
+
+    // Unban lifts it at once
+    await h.ctx.bans.unban(SID)
+    expect((await h.app.inject({ method: "GET", url: "/me", cookies: { rs_sid: stale } })).statusCode).toBe(200)
   })
 })

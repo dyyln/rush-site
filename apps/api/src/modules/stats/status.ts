@@ -16,6 +16,8 @@ export type StatusInput = {
   surgeActive: number
   // Config issues per mode. Empty means the mode is fully configured
   unresolved: Record<Mode, string[]>
+  // Modes an admin closed through the queue flags
+  closed?: Mode[]
   now: number
 }
 
@@ -50,8 +52,11 @@ export function buildStatus(input: StatusInput): ServiceStatus {
     regions,
     surge: { enabled: input.surgeEnabled, active: input.surgeActive },
     modes: MODES.map((mode) => {
-      const reason: ModeUnavailableReason | undefined =
-        input.unresolved[mode].length > 0 ? "not_configured" : capacityReason
+      const reason: ModeUnavailableReason | undefined = input.closed?.includes(mode)
+        ? "closed"
+        : input.unresolved[mode].length > 0
+          ? "not_configured"
+          : capacityReason
       return reason ? { mode, available: false, reason } : { mode, available: true }
     }),
     updatedAt: new Date(input.now).toISOString(),
@@ -77,6 +82,7 @@ export async function serviceStatus(ctx: AppContext): Promise<ServiceStatus> {
     surgeEnabled: ctx.allocator.driver("dathost") !== null,
     surgeActive: surge?.n ?? 0,
     unresolved,
+    closed: await ctx.flags.closedModes(),
     now: ctx.now(),
   })
 }
@@ -91,6 +97,8 @@ export function createAvailabilitySource(ctx: AppContext, ttlMs = 5000): (mode: 
     const m = cached.status.modes.find((x) => x.mode === mode)
     if (!m || m.available) return null
     // Outside production only missing config blocks, so the flow can be tested without an agent
+    // Closed modes are refused by the queue flag gate with their own error code
+    if (m.reason === "closed") return null
     if (ctx.env.NODE_ENV !== "production" && m.reason !== "not_configured") return null
     return m.reason ?? "unavailable"
   }

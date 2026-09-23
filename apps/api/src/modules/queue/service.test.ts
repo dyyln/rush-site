@@ -130,8 +130,8 @@ describe("queue status refresh", () => {
 
     expect(h.notifier.ofType("queue_status")).toHaveLength(60)
     expect(large).toBe(small)
-    // Only the ETA reads, one per mode on a cold cache
-    expect(large).toBeLessThanOrEqual(3)
+    // Only the ETA reads, one per mode plus one for the trust buckets on a cold cache
+    expect(large).toBeLessThanOrEqual(4)
     // A warm ETA cache leaves no Postgres work at all
     await h.redis.del("q:agg")
     expect(await countQueries(h.db, () => h.ctx.queue.refreshQueued())).toBe(0)

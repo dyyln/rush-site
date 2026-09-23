@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { MODE_CONFIGS, MODES, type Mode, type ServerReadyPayload } from "@rushsite/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MODE_CONFIGS, MODES, trustAtLeast, type Mode, type ServerReadyPayload, type TrustLevel } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
+import { GetVerifiedCard } from "@/components/trust/GetVerifiedCard";
+import { ProfileNudge } from "@/components/profile/ProfileNudge";
+import { readFlag, writeFlag } from "@/components/profile/flags";
 import { InvitePopover } from "@/components/party/InvitePopover";
 import { FriendsCard } from "@/components/friends/FriendsCard";
 import { RematchButton } from "@/components/challenges/RematchButton";
@@ -16,6 +19,7 @@ import { ModeCardWarning } from "@/components/stats/ModeCardWarning";
 import { modeUnavailable, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { Throbber } from "@/components/ui/Throbber";
 import { SignInLink } from "@/components/ui/SignInLink";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatTile } from "@/components/ui/StatTile";
 import { TierChip } from "@/components/ui/TierChip";
 import { Timer } from "@/components/ui/Timer";
@@ -25,10 +29,18 @@ import { ApiError, api } from "@/lib/api";
 import { formatStat, signed } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { TRUST_NAMES } from "@/lib/trust";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { usePlay } from "@/lib/usePlay";
+import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import styles from "./play.module.css";
+
+const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
+  { value: "new", label: "Any" },
+  { value: "verified", label: "Verified" },
+  { value: "trusted", label: "Trusted" },
+];
 
 const MAX_PARTY = Math.max(...MODES.map((m) => MODE_CONFIGS[m].teamSize));
 
@@ -40,9 +52,36 @@ export function PlayView() {
     onError: (e) => toast.push({ title: "Something went wrong", body: e.message, tone: "error" }),
   });
   const [selected, setSelected] = useState<Mode[]>([]);
+  const [minTrust, setMinTrust] = useState<TrustLevel>("new");
+  useEffect(() => {
+    if (user?.settings?.minTrust) setMinTrust(user.settings.minTrust);
+  }, [user?.settings?.minTrust]);
+
+  async function changeMinTrust(v: TrustLevel) {
+    const prev = minTrust;
+    setMinTrust(v);
+    try {
+      await api.updateSettings({ minTrust: v });
+    } catch {
+      setMinTrust(prev);
+      toast.push({ title: "Could not save the setting", tone: "error" });
+    }
+  }
   const [origin, setOrigin] = useState("");
   const profile = useAsync(() => (user ? api.profile(user.steamId) : Promise.resolve(null)), [user?.steamId]);
   const me = profile.data ?? null;
+  // Members without a level yet count as new
+  const memberTrust = (play.party?.members ?? []).filter((m) => m.steamId !== user?.steamId).map((m) => m.trustLevel ?? "new");
+  // The lowest trust in the party caps the opponent filter
+  const trustCap = useMemo(() => {
+    const own: TrustLevel = user?.trust?.level ?? user?.trustLevel ?? "new";
+    let level = own;
+    for (const t of memberTrust) if (!trustAtLeast(t, level)) level = t;
+    // True when the viewer is the one holding the cap down
+    return { level, own: level === own };
+  }, [user, memberTrust]);
+  // A stored preference above the cap falls back to the highest allowed
+  const effectiveMinTrust: TrustLevel = trustAtLeast(trustCap.level, minTrust) ? minTrust : trustCap.level;
 
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -91,6 +130,31 @@ export function PlayView() {
     }
   }, [play.match, toast, user?.steamId]);
 
+  // A cooldown right after a match found means this player declined or let the window lapse
+  const lastFound = useRef(0);
+  const prevQueueState = useRef(play.queue.state);
+  useEffect(() => {
+    if (play.match.phase === "found") lastFound.current = Date.now();
+  }, [play.match]);
+  useEffect(() => {
+    const prev = prevQueueState.current;
+    prevQueueState.current = play.queue.state;
+    const until = play.queue.cooldownUntil;
+    if (play.queue.state !== "cooldown" || prev === "cooldown" || !until) return;
+    if (Date.now() - lastFound.current > 120_000) return;
+    if (play.match.phase === "found") play.dismissMatch();
+    const explain = !readFlag(COOLDOWN_EXPLAINER_FLAG);
+    if (explain) writeFlag(COOLDOWN_EXPLAINER_FLAG);
+    const ref = { id: 0 };
+    ref.id = toast.push({
+      title: "Queue cooldown",
+      body: <CooldownNote until={until} explain={explain} onDone={() => toast.dismiss(ref.id)} />,
+      tone: "info",
+      durationMs: explain ? 0 : 8000,
+    });
+    // Only queue transitions matter here
+  }, [play.queue.state, play.queue.cooldownUntil]);
+
   function disabledReason(mode: Mode): string | null {
     const size = MODE_CONFIGS[mode].teamSize;
     if (partySize > size) return `Party of ${partySize} is too big for ${MODE_COPY[mode].players}`;
@@ -109,7 +173,7 @@ export function PlayView() {
 
   function start() {
     if (eligible.length === 0) return;
-    if (!play.joinQueue(eligible)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
+    if (!play.joinQueue(eligible, effectiveMinTrust)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
   }
 
   async function createParty() {
@@ -249,9 +313,24 @@ export function PlayView() {
               </fieldset>
               <ModeAvailabilityHint status={service} />
 
+              <ProfileNudge trust={user?.trust} enabled={!!user} variant="line" />
+
+              <GetVerifiedCard trust={user?.trust} />
+
               {me && <YourStats profile={me} />}
 
               <div className={styles.queueBar}>
+                <SegmentedControl
+                  label="Opponents"
+                  value={effectiveMinTrust}
+                  onChange={changeMinTrust}
+                  disabled={locked}
+                  options={TRUST_OPTIONS.map((o) => {
+                    const allowed = trustAtLeast(trustCap.level, o.value);
+                    const why = trustCap.own ? `Reach ${TRUST_NAMES[o.value]} to use this` : `A party member needs ${TRUST_NAMES[o.value]} to use this`;
+                    return { ...o, disabled: !allowed, title: allowed ? undefined : why };
+                  })}
+                />
                 {isLeader ? (
                   <Button
                     size="lg"
@@ -264,7 +343,7 @@ export function PlayView() {
                     {queued ? "Stop queue" : "Start queue"}
                   </Button>
                 ) : null}
-                <QueueStatus status={play.queue} connection={play.connection} />
+                <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
               </div>
               <p id="queue-hint" className={styles.hint}>
                 {!isLeader

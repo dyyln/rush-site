@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify"
 import type { Redis } from "ioredis"
 import { randomToken } from "../../lib/hmac.js"
-import { unauthorized } from "../../lib/errors.js"
+import { ApiError, unauthorized } from "../../lib/errors.js"
 
 export const SESSION_COOKIE = "rs_sid"
 
@@ -46,10 +46,15 @@ export function sessionIdFrom(request: FastifyRequest): string | null {
 
 export type Authenticator = (request: FastifyRequest) => Promise<string | null>
 
-export function makeAuthenticator(sessions: SessionStore): Authenticator {
+export const banned = () => new ApiError(401, "banned")
+
+// A banned player's session is refused on every request
+export function makeAuthenticator(sessions: SessionStore, isBanned: (steamId: string) => Promise<unknown>): Authenticator {
   return async (request) => {
     const id = sessionIdFrom(request)
-    return id ? sessions.get(id) : null
+    const steamId = id ? await sessions.get(id) : null
+    if (steamId && (await isBanned(steamId))) throw banned()
+    return steamId
   }
 }
 

@@ -37,7 +37,7 @@ export const TierDistributionSchema = z.object({
 export type TierDistribution = z.infer<typeof TierDistributionSchema>
 
 // GET /status
-export const ModeUnavailableReasonSchema = z.enum(["not_configured", "no_servers", "servers_updating"])
+export const ModeUnavailableReasonSchema = z.enum(["not_configured", "no_servers", "servers_updating", "closed"])
 export type ModeUnavailableReason = z.infer<typeof ModeUnavailableReasonSchema>
 
 export const RegionStatusSchema = z.object({

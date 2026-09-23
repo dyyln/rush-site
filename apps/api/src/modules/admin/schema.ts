@@ -1,5 +1,5 @@
 // Tables for the admin module. Re-export from src/db/schema.ts so migrations include them.
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { doublePrecision, index, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 // One row per admin action. Rows are never updated or deleted.
 export const adminAudit = pgTable(
@@ -17,5 +17,21 @@ export const adminAudit = pgTable(
   (t) => [
     index("admin_audit_target_idx").on(t.target, t.createdAt),
     index("admin_audit_created_idx").on(t.createdAt),
+  ],
+)
+
+// One row per metric per minute. Mode is empty for platform wide metrics. Rows older than 7 days are deleted.
+export const metricSamples = pgTable(
+  "metric_samples",
+  {
+    // queue_depth, matches_started, median_wait_sec, active_sockets
+    metric: text("metric").notNull(),
+    mode: text("mode").notNull().default(""),
+    sampledAt: timestamp("sampled_at", { withTimezone: true }).notNull(),
+    value: doublePrecision("value").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.metric, t.mode, t.sampledAt] }),
+    index("metric_samples_sampled_idx").on(t.sampledAt),
   ],
 )

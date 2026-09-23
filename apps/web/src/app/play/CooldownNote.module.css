@@ -1,0 +1,38 @@
+.note {
+  display: flex;
+  flex-direction: column;
+}
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms ease-out;
+}
+.expand[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.inner p {
+  margin: 0;
+}
+.inner p:first-child {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .expand {
+    transition: none;
+  }
+}

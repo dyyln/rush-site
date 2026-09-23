@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
+import { TrustChip } from "@/components/trust/TrustChip";
 import { Avatar } from "@/components/ui/Avatar";
 import { useSession } from "@/lib/session";
 import type { User } from "@/lib/types";
@@ -61,6 +62,11 @@ export function UserMenu({ user, onNavigate }: { user: User; onNavigate?: () => 
       </button>
       {open && (
         <ul id={menuId} className={styles.menu}>
+          {user.trust && (
+            <li className={styles.menuTrust}>
+              <TrustChip trust={user.trust} />
+            </li>
+          )}
           <li>
             <Link
               href={`/profile/${user.steamId}`}

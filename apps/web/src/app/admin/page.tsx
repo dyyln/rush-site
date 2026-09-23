@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { MODES } from "@rushsite/shared";
 import { Card } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
-import { MODE_COPY } from "@/lib/modes";
 import { adminApi } from "./_lib/client";
-import { duration } from "./_lib/format";
 import { useLiveData } from "./_lib/live";
 import type { Health, OverviewView } from "./_lib/types";
 import { Dot, ErrorPanel, PageHeader } from "./_components/parts";
+import { QueueToggles } from "./_components/QueueToggles";
+import { Trends } from "./_components/Trends";
 import styles from "./admin.module.css";
 
 const HEALTH_LABEL: Record<keyof OverviewView["health"], string> = {
@@ -84,21 +83,10 @@ export default function AdminOverviewPage() {
             <h2 id="ov-queue" className="eyebrow">
               Queues
             </h2>
-            <div className={styles.tiles}>
-              {MODES.map((mode) => {
-                const q = o?.queue.find((x) => x.mode === mode);
-                return (
-                  <Tile
-                    key={mode}
-                    href={`/admin/queue#${mode}`}
-                    label={MODE_COPY[mode].label}
-                    value={q ? `${q.players}` : undefined}
-                    sub={q && (q.tickets > 0 ? `${q.tickets} tickets, longest ${duration(q.longestWaitSec)}` : "Empty")}
-                  />
-                );
-              })}
-            </div>
+            <QueueToggles queue={o?.queue} onChanged={live.reload} />
           </section>
+
+          <Trends />
 
           <section aria-labelledby="ov-day" className="stack">
             <h2 id="ov-day" className="eyebrow">

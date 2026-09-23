@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "./api";
-import { resetRealtime } from "./ws";
+import { ApiError, api } from "./api";
+import { resetRealtime, setRealtimeAllowed } from "./ws";
 import type { User } from "./types";
 
 type Session = { user: User | null; loading: boolean; refresh: () => void; signOut: () => Promise<void> };
@@ -22,7 +22,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     api
       .me()
-      .then(setUser, () => setUser(null))
+      .then(
+        (u) => {
+          setUser(u);
+          // The socket only opens for a confirmed session. A closed session re-checks here
+          setRealtimeAllowed(!!u, refresh);
+        },
+        (e: unknown) => {
+          setUser(null);
+          setRealtimeAllowed(false);
+          if (e instanceof ApiError && e.status === 403 && e.code === "banned") showBanned(e.details);
+        },
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -33,11 +44,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await api.logout();
     } finally {
       setUser(null);
+      setRealtimeAllowed(false);
       resetRealtime();
     }
   }, []);
 
   return <SessionContext.Provider value={{ user, loading, refresh, signOut }}>{children}</SessionContext.Provider>;
+}
+
+function showBanned(details: unknown) {
+  if (typeof window === "undefined" || window.location.pathname === "/banned") return;
+  const d = (details ?? {}) as { reason?: string; until?: string | null };
+  const q = new URLSearchParams({ until: d.until ?? "", reason: d.reason ?? "" });
+  window.location.assign(`/banned?${q.toString()}`);
 }
 
 export function useSession(): Session {

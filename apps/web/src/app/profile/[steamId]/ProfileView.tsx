@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendButton } from "@/components/friends/FriendButton";
-import { RatingSparkline } from "@/components/ui/RatingSparkline";
+import { RatingChart } from "@/components/ui/RatingChart";
+import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
@@ -19,6 +20,9 @@ import { formatStat, pct, shortDate, signed, winRate } from "@/lib/format";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
 import type { BadgeKind, MatchSummary, ModeStats, Profile, TrustLevel } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { useSession } from "@/lib/session";
+import { TrustChip } from "@/components/trust/TrustChip";
+import { MyReports } from "@/components/review/MyReports";
 import styles from "./profile.module.css";
 
 const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
@@ -99,7 +103,9 @@ function ProfileBody({ profile }: { profile: Profile }) {
   const best = [...profile.modes].sort((a, b) => b.rating - a.rating)[0]?.mode ?? "rush3v3";
   const [mode, setMode] = useState<Mode>(best);
   const stats = profile.modes.find((m) => m.mode === mode);
+  const { user: viewer } = useSession();
   const trust = TRUST[profile.user.trustLevel];
+  const own = !!viewer && viewer.steamId === profile.user.steamId;
 
   return (
     <div className="container page">
@@ -108,7 +114,11 @@ function ProfileBody({ profile }: { profile: Profile }) {
         <div className={styles.heroText}>
           <h1>{profile.user.displayName}</h1>
           <div className="row">
-            <Badge tone={trust.tone}>{trust.label}</Badge>
+            {viewer?.trust && viewer.steamId === profile.user.steamId ? (
+              <TrustChip trust={viewer.trust} />
+            ) : (
+              <Badge tone={trust.tone}>{trust.label}</Badge>
+            )}
             <Badge>{profile.user.region.toUpperCase()}</Badge>
             <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
               Steam profile
@@ -118,6 +128,8 @@ function ProfileBody({ profile }: { profile: Profile }) {
           </div>
         </div>
       </header>
+
+      {own && <ProfileNudge trust={viewer?.trust} enabled />}
 
       <section aria-labelledby="ratings-heading">
         <h2 id="ratings-heading" className="visually-hidden">
@@ -168,6 +180,8 @@ function ProfileBody({ profile }: { profile: Profile }) {
           )}
         </section>
       </div>
+
+      {viewer?.steamId === profile.user.steamId && <MyReports />}
     </div>
   );
 }
@@ -186,7 +200,7 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
       </span>
       {stats && (
         <span className={styles.ratingSpark}>
-          <RatingSparkline points={stats.history} label={`${MODE_COPY[mode].label} rating trend`} width={200} height={40} />
+          <RatingChart points={stats.history} label={`${MODE_COPY[mode].label} rating trend`} compact />
         </span>
       )}
     </button>
@@ -207,7 +221,7 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
       </div>
       <div className="grid-2">
         <Card title="Rating history">
-          <RatingSparkline points={stats.history} label={`${MODE_COPY[stats.mode].label} rating history`} width={400} height={180} detailed />
+          <RatingChart key={stats.mode} points={stats.history} label={`${MODE_COPY[stats.mode].label} rating history`} />
         </Card>
         <Card title="Best maps">
           {stats.bestMaps.length === 0 ? (

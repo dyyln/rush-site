@@ -190,6 +190,8 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
         trustLevel: trust,
         region: user.region,
       },
+      // Full progress only for the player looking at their own profile
+      trust: (await ctx.auth(req)) === steamId ? await ctx.trust.progress(steamId) : { level: trust },
       modes,
       badges: badgeRows.map(({ b, tournamentName, tournamentMode }) => ({
         id: b.id,

@@ -1,0 +1,58 @@
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.legend {
+  float: left;
+  padding: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-right: var(--space-2);
+}
+.options {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  cursor: pointer;
+}
+.option + .option {
+  border-left: 1px solid var(--color-border-strong);
+}
+.option:hover {
+  color: var(--color-text);
+}
+.selected {
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.option:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+  position: relative;
+}
+.group:disabled .option {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.disabled,
+.disabled:hover {
+  cursor: not-allowed;
+  color: var(--color-disabled-text);
+  background: var(--color-disabled-surface);
+}

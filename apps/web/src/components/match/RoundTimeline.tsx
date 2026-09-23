@@ -18,9 +18,11 @@ type Props = {
   // Undefined when the api sends no kill data for this viewer
   kills?: MatchKill[];
   roster: Roster;
+  // Player to mark in the kill feed
+  highlight?: string;
 };
 
-export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster }: Props) {
+export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const [all, setAll] = useState(false);
   const panelId = useId();
@@ -141,7 +143,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
                 </Button>
               </div>
             </div>
-            {kills ? <KillFeed kills={killsOf(current.round)} roster={roster} /> : <NoKills />}
+            {kills ? <KillFeed kills={killsOf(current.round)} roster={roster} highlight={highlight} /> : <NoKills />}
           </div>
         )}
       </div>
@@ -151,7 +153,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
           {rounds.map((r) => (
             <li key={r.round} className={styles.allRound}>
               <RoundTitle r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} />
-              <KillFeed kills={killsOf(r.round)} roster={roster} />
+              <KillFeed kills={killsOf(r.round)} roster={roster} highlight={highlight} />
             </li>
           ))}
         </ol>

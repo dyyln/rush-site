@@ -1,8 +1,16 @@
 import type { FastifyRequest } from "fastify"
 import type { PgDatabase } from "drizzle-orm/pg-core"
-import type { AdminEventKind, Mode, TrustLevel } from "@rushsite/shared"
+import type {
+  AdminEventKind,
+  Announcement,
+  FeatureFlag,
+  MetricsRange,
+  MetricsView,
+  Mode,
+  TrustLevel,
+} from "@rushsite/shared"
 
-export type { AdminEventKind, Mode, TrustLevel }
+export type { AdminEventKind, Announcement, FeatureFlag, MetricsRange, MetricsView, Mode, TrustLevel }
 
 // Any drizzle postgres database, node-postgres, postgres-js or PGlite.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,6 +71,31 @@ export interface RedisLike {
   ping(): Promise<string>
 }
 
+// Flag store. FlagService in modules/flags satisfies it.
+export interface FlagsLike {
+  list(): Promise<FeatureFlag[]>
+  get(key: string): Promise<FeatureFlag | null>
+  set(key: string, enabled: boolean, value: unknown, by: string | null): Promise<{ flag: FeatureFlag; before: FeatureFlag | null }>
+  remove(key: string): Promise<FeatureFlag | null>
+}
+
+export interface AnnouncementWrite {
+  text: string
+  level: "info" | "warn"
+  startsAt: Date
+  endsAt: Date | null
+  dismissible: boolean
+}
+
+// Announcement store. AnnouncementService in modules/flags satisfies it.
+export interface AnnouncementsLike {
+  list(limit?: number): Promise<Announcement[]>
+  get(id: string): Promise<Announcement | null>
+  create(input: AnnouncementWrite, by: string | null): Promise<Announcement>
+  update(id: string, patch: Partial<AnnouncementWrite>): Promise<Announcement | null>
+  remove(id: string): Promise<Announcement | null>
+}
+
 export interface AdminPluginOptions {
   db: Db
   redis: RedisLike
@@ -87,6 +120,15 @@ export interface AdminPluginOptions {
   recentEvents(limit: number): Promise<RecentEventSnapshot[]>
   // Sends an admin_event WS message to connected admins.
   emitAdmin(kind: AdminEventKind, payload: unknown): void
+  // Admin ops. Routes that need a missing one answer 404.
+  flags?: FlagsLike
+  announcements?: AnnouncementsLike
+  // Defaults to reading metric_samples from db
+  metrics?(range: MetricsRange, now: Date): Promise<MetricsView>
+  // Pulls every waiting ticket out of a mode that was just closed. Returns how many tickets it touched
+  onModeClosed?(mode: Mode): Promise<number>
+  // Turns a /id/<vanity> profile URL into a SteamID64. Null when unknown or Steam is not configured
+  resolveVanity?(vanity: string): Promise<string | null>
   now?: () => Date
 }
 
@@ -195,7 +237,17 @@ export interface AuditEntry {
   createdAt: string
 }
 
-export type AuditAction = "queue.remove" | "match.cancel" | "user.ban" | "user.unban" | "user.trust"
+export type AuditAction =
+  | "queue.remove"
+  | "match.cancel"
+  | "user.ban"
+  | "user.unban"
+  | "user.trust"
+  | "flag.set"
+  | "flag.delete"
+  | "announcement.create"
+  | "announcement.update"
+  | "announcement.delete"
 
 export interface BanView {
   id: string

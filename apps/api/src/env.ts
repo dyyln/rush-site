@@ -92,6 +92,8 @@ export const EnvSchema = z.object({
   ALLOW_UNRESOLVED_MODES: bool.default(false),
   // Disable background loops, for tests and one-off scripts
   DISABLE_LOOPS: bool.default(false),
+  // Per route HTTP rate limits backed by Redis
+  RATE_LIMIT_ENABLED: bool.default(true),
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -102,7 +104,24 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")
     throw new Error(`Invalid environment:\n${issues}`)
   }
+  const unsafe = productionProblems(parsed.data)
+  if (unsafe.length > 0) throw new Error(`Unsafe production environment:\n${unsafe.map((p) => `  ${p}`).join("\n")}`)
   return parsed.data
+}
+
+const PLACEHOLDER = /change-?me|example|placeholder|secret-?here/i
+
+// Refuses to boot production with the dev defaults from .env.example or the schema
+export function productionProblems(env: Env): string[] {
+  if (env.NODE_ENV !== "production") return []
+  const out: string[] = []
+  if (PLACEHOLDER.test(env.SESSION_SECRET)) out.push("SESSION_SECRET is a placeholder. Use openssl rand -hex 32")
+  if (new Set(env.SESSION_SECRET).size < 10) out.push("SESSION_SECRET is too repetitive")
+  if (PLACEHOLDER.test(env.RUSHSITE_AGENT_TOKEN) || env.RUSHSITE_AGENT_TOKEN.length < 16) {
+    out.push("RUSHSITE_AGENT_TOKEN is a placeholder or shorter than 16 characters. Use openssl rand -hex 32")
+  }
+  if (!env.RATE_LIMIT_ENABLED) out.push("RATE_LIMIT_ENABLED must stay on in production")
+  return out
 }
 
 export function testEnv(overrides: Partial<Record<keyof Env, string>> = {}): Env {
@@ -112,6 +131,7 @@ export function testEnv(overrides: Partial<Record<keyof Env, string>> = {}): Env
     SESSION_SECRET: "test-session-secret-that-is-long-enough-1234",
     DISABLE_LOOPS: "true",
     DB_MIGRATE_ON_START: "false",
+    RATE_LIMIT_ENABLED: "false",
     ...overrides,
   })
 }

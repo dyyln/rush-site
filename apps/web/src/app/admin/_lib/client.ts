@@ -3,6 +3,7 @@ import { api, ApiError } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { mockCall } from "@/lib/mock";
 import { MockNotFound, mockAdmin } from "./mock";
+import { mockOps } from "./ops-mock";
 import type {
   ActionResult,
   EventView,
@@ -12,7 +13,21 @@ import type {
   OverviewView,
   QueueView,
   UserDetailView,
+  Announcement,
+  AuditEntry,
+  FeatureFlag,
+  MetricsRange,
+  MetricsView,
+  ResolvedProfile,
 } from "./types";
+
+export type AnnouncementInput = {
+  text: string;
+  level: "info" | "warn";
+  startsAt?: string;
+  endsAt?: string | null;
+  dismissible: boolean;
+};
 
 async function mocked<T>(fn: () => T): Promise<T> {
   try {
@@ -74,6 +89,43 @@ export const adminApi = {
   setTrust(steamId: string, level: TrustLevel): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.setTrust(steamId, level));
     return api.post(`/admin/users/${steamId}/trust`, { level });
+  },
+
+  resolveProfile(q: string): Promise<ResolvedProfile> {
+    if (isMock) return mocked(() => mockOps.resolve(q));
+    return api.get("/admin/users/resolve", { q });
+  },
+  metrics(range: MetricsRange): Promise<MetricsView> {
+    if (isMock) return mocked(() => mockOps.metrics(range));
+    return api.get("/admin/metrics", { range });
+  },
+  async flags(): Promise<FeatureFlag[]> {
+    if (isMock) return mocked(() => mockOps.flags());
+    return (await api.get<{ flags: FeatureFlag[] }>("/admin/flags")).flags;
+  },
+  setFlag(key: string, enabled: boolean, value?: unknown): Promise<{ flag: FeatureFlag; audit: AuditEntry; drained?: number }> {
+    if (isMock) return mocked(() => mockOps.setFlag(key, enabled, value));
+    return api.put(`/admin/flags/${encodeURIComponent(key)}`, value === undefined ? { enabled } : { enabled, value });
+  },
+  deleteFlag(key: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockOps.deleteFlag(key));
+    return api.del(`/admin/flags/${encodeURIComponent(key)}`);
+  },
+  async announcements(): Promise<Announcement[]> {
+    if (isMock) return mocked(() => mockOps.announcements());
+    return (await api.get<{ announcements: Announcement[] }>("/admin/announcements")).announcements;
+  },
+  createAnnouncement(input: AnnouncementInput): Promise<{ announcement: Announcement; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockOps.createAnnouncement(input));
+    return api.post("/admin/announcements", input);
+  },
+  updateAnnouncement(id: string, patch: Partial<AnnouncementInput>): Promise<{ announcement: Announcement; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockOps.updateAnnouncement(id, patch));
+    return api.patch(`/admin/announcements/${id}`, patch);
+  },
+  deleteAnnouncement(id: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockOps.deleteAnnouncement(id));
+    return api.del(`/admin/announcements/${id}`);
   },
 };
 

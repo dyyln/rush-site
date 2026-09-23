@@ -86,7 +86,17 @@ export type EventView = {
   detail: unknown;
 };
 
-export type AuditAction = "queue.remove" | "match.cancel" | "user.ban" | "user.unban" | "user.trust";
+export type AuditAction =
+  | "queue.remove"
+  | "match.cancel"
+  | "user.ban"
+  | "user.unban"
+  | "user.trust"
+  | "flag.set"
+  | "flag.delete"
+  | "announcement.create"
+  | "announcement.update"
+  | "announcement.delete";
 
 export type AuditEntry = {
   id: string;
@@ -161,3 +171,7 @@ export type OverviewView = {
 };
 
 export type ActionResult = { ok: true; audit: AuditEntry };
+
+export type { Announcement, FeatureFlag, MetricPoint, MetricsRange, MetricsView } from "@rushsite/shared";
+
+export type ResolvedProfile = { steamId: string; registered: boolean; user: UserCard | null };

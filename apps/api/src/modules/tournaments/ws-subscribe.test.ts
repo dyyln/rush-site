@@ -31,10 +31,16 @@ const update = (tournamentId: string) => ({ type: "tournament_update", payload: 
 describe("tournament subscriptions", () => {
   const hub = new LocalHub()
   const sockets: FakeSocket[] = []
-  // Spectator sockets never touch the context.
+  // Just enough context for a signed in socket with an empty snapshot
+  const ctx = {
+    isAdmin: () => false,
+    presence: { heartbeat: async () => {} },
+    snapshots: { read: async () => ({}) },
+  } as unknown as AppContext
+  let n = 0
   const spectator = () => {
     const s = new FakeSocket()
-    attachSocket({} as AppContext, hub, s as never, null, pino({ level: "silent" }))
+    attachSocket(ctx, hub, s as never, `7656119800000${String(n++).padStart(4, "0")}`, pino({ level: "silent" }))
     sockets.push(s)
     return s
   }

@@ -1,3 +1,5 @@
+import type { TrustStatus } from "./trust";
+
 // REST response shapes the web expects from the api.
 // WS payloads and config come from @rushsite/shared. These cover the HTTP side.
 import type {
@@ -28,6 +30,9 @@ import type {
 
 export type { Mode, TierId, TrustLevel };
 
+// Matchmaking preferences on GET /me, changed with PATCH /me/settings
+export type UserSettings = { minTrust: TrustLevel };
+
 export type User = {
   steamId: string;
   displayName: string;
@@ -36,6 +41,8 @@ export type User = {
   region: string;
   // Only set on GET /me
   isAdmin?: boolean;
+  trust?: TrustStatus;
+  settings?: UserSettings;
 };
 
 export type RatingPoint = { ts: number; rating: number };

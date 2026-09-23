@@ -9,10 +9,21 @@ export type Audience =
   | { kind: "admins" }
   | { kind: "match"; matchId: string }
   | { kind: "tournament"; tournamentId: string }
+  // Closes every socket of these users instead of delivering msg
+  | { kind: "disconnect"; steamIds: string[]; reason: string }
+
+// Close code for a socket whose session was ended by logout or a ban
+export const CLOSE_SESSION_ENDED = 4001
 
 // Anything services use to push messages to connected players
 export interface Notifier {
   send(audience: Audience, msg: Outgoing): void
+}
+
+// Ends the live sockets of a user on every instance
+export function disconnectUsers(notifier: Notifier, steamIds: string[], reason: string): void {
+  if (steamIds.length === 0) return
+  notifier.send({ kind: "disconnect", steamIds, reason }, { type: "session_ended", payload: { reason }, ts: Date.now() })
 }
 
 export function toUsers(notifier: Notifier, steamIds: string[], type: string, payload: unknown, ts = Date.now()): void {
@@ -100,7 +111,18 @@ export class LocalHub {
     if (set.size === 0) this.byUser.delete(steamId)
   }
 
+  // Closing fires the socket close handler, which removes it from the hub
+  closeUser(steamId: string, reason: string): number {
+    const sockets = [...(this.byUser.get(steamId) ?? [])]
+    for (const socket of sockets) socket.close?.(CLOSE_SESSION_ENDED, reason)
+    return sockets.length
+  }
+
   deliver(audience: Audience, msg: Outgoing): void {
+    if (audience.kind === "disconnect") {
+      for (const id of audience.steamIds) this.closeUser(id, audience.reason)
+      return
+    }
     const data = JSON.stringify(msg)
     const targets =
       audience.kind === "broadcast"
@@ -119,6 +141,12 @@ export class LocalHub {
 
   connectedUsers(): number {
     return this.byUser.size
+  }
+
+  connectedSockets(): number {
+    let n = 0
+    for (const set of this.byUser.values()) n += set.size
+    return n
   }
 }
 

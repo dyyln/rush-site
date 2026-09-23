@@ -1,9 +1,13 @@
 // In-memory TournamentStore for tests.
 import { randomUUID } from "node:crypto"
 import type {
+  AuditRow,
   BadgeRecord,
   EntryRecord,
+  NewEntry,
+  NewSchedule,
   NewTournament,
+  ScheduleRecord,
   StoredBracket,
   TournamentFilter,
   TournamentRecord,
@@ -15,6 +19,8 @@ export class MemoryTournamentStore implements TournamentStore {
   entries = new Map<string, EntryRecord>()
   brackets = new Map<string, StoredBracket>()
   badges: BadgeRecord[] = []
+  schedules = new Map<string, ScheduleRecord>()
+  audit: AuditRow[] = []
   private locks = new Map<string, Promise<unknown>>()
   private clock = 0
 
@@ -53,7 +59,14 @@ export class MemoryTournamentStore implements TournamentStore {
 
   async updateTournament(id: string, patch: Partial<TournamentRecord>) {
     const t = this.tournaments.get(id)
-    if (t) this.tournaments.set(id, { ...t, ...patch, id })
+    if (!t) return
+    const next = { ...t, ...patch, id }
+    for (const x of this.tournaments.values()) {
+      if (x.id !== id && x.cupKey === next.cupKey && +x.startsAt === +next.startsAt) {
+        throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" })
+      }
+    }
+    this.tournaments.set(id, next)
   }
 
   async listEntries(tournamentId: string) {
@@ -66,7 +79,7 @@ export class MemoryTournamentStore implements TournamentStore {
   async countEntries(ids: string[]) {
     const out: Record<string, number> = {}
     for (const e of this.entries.values()) {
-      if (ids.includes(e.tournamentId)) out[e.tournamentId] = (out[e.tournamentId] ?? 0) + 1
+      if (ids.includes(e.tournamentId) && !e.disqualifiedAt) out[e.tournamentId] = (out[e.tournamentId] ?? 0) + 1
     }
     return out
   }
@@ -74,14 +87,17 @@ export class MemoryTournamentStore implements TournamentStore {
   async findPlayerEntries(steamId: string, ids: string[]) {
     const out: Record<string, string> = {}
     for (const e of this.entries.values()) {
-      if (ids.includes(e.tournamentId) && e.steamIds.includes(steamId)) out[e.tournamentId] = e.id
+      if (ids.includes(e.tournamentId) && e.steamIds.includes(steamId) && !e.disqualifiedAt) out[e.tournamentId] = e.id
     }
     return out
   }
 
-  async insertEntry(e: Omit<EntryRecord, "id" | "createdAt" | "seed" | "rating">) {
+  async insertEntry(e: NewEntry) {
     const row: EntryRecord = {
       ...e,
+      teamName: e.teamName ?? null,
+      disqualifiedAt: null,
+      disqualifyReason: null,
       id: randomUUID(),
       seed: null,
       rating: null,
@@ -89,6 +105,11 @@ export class MemoryTournamentStore implements TournamentStore {
     }
     this.entries.set(row.id, row)
     return { ...row }
+  }
+
+  async disqualifyEntry(id: string, reason: string, at: Date) {
+    const e = this.entries.get(id)
+    if (e) this.entries.set(id, { ...e, disqualifiedAt: at, disqualifyReason: reason })
   }
 
   async deleteEntries(ids: string[]) {
@@ -128,6 +149,37 @@ export class MemoryTournamentStore implements TournamentStore {
         this.badges.push(r)
       }
     }
+  }
+
+  async listSchedules() {
+    return [...this.schedules.values()].map((x) => ({ ...x }))
+  }
+
+  async getSchedule(id: string) {
+    const x = this.schedules.get(id)
+    return x ? { ...x } : null
+  }
+
+  async insertSchedule(s: NewSchedule) {
+    const row: ScheduleRecord = { ...s, id: randomUUID(), updatedAt: new Date() }
+    this.schedules.set(row.id, row)
+    return { ...row }
+  }
+
+  async updateSchedule(id: string, patch: Partial<NewSchedule>) {
+    const x = this.schedules.get(id)
+    if (!x) return null
+    const row = { ...x, ...patch, id, updatedAt: new Date() }
+    this.schedules.set(id, row)
+    return { ...row }
+  }
+
+  async deleteSchedule(id: string) {
+    return this.schedules.delete(id)
+  }
+
+  async writeAudit(row: AuditRow) {
+    this.audit.push(row)
   }
 
   async locked<T>(tournamentId: string, fn: (s: TournamentStore) => Promise<T>): Promise<T> {

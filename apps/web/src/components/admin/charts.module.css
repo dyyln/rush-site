@@ -1,0 +1,194 @@
+/* Chart palette. Categorical slots validated for CVD against the surface, mode colours follow the entity */
+.viz {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --grid: var(--color-border);
+  --axis-text: var(--color-text-muted);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin: 0;
+}
+.sub {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin: var(--space-1) 0 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.key {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  flex: none;
+}
+.keyBox {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.plot {
+  position: relative;
+  width: 100%;
+  touch-action: pan-y;
+}
+.plot svg {
+  display: block;
+  overflow: visible;
+}
+.refreshing {
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+
+.gridline {
+  stroke: var(--grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.tick {
+  fill: var(--axis-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.crosshair {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.dot {
+  stroke: var(--color-surface-1);
+  stroke-width: 2;
+}
+.bar {
+  transition: opacity 80ms;
+}
+.barDim {
+  opacity: 0.45;
+}
+
+.tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;
+  min-width: 140px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+}
+.tipTime {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-mono);
+}
+.tipRows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.tipValue {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  margin-left: auto;
+  padding-left: var(--space-3);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.table summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  min-height: 24px;
+}
+.tableWrap {
+  max-height: 240px;
+  overflow: auto;
+  margin-top: var(--space-2);
+}
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.table th,
+.table td {
+  text-align: right;
+  padding: 2px var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+}

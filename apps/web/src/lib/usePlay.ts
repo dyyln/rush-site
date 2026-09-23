@@ -10,6 +10,7 @@ import type {
   Mode,
   PartyUpdatePayload,
   QueueStatusPayload,
+  TrustLevel,
   ServerReadyPayload,
   VetoStatePayload,
 } from "@rushsite/shared";
@@ -108,7 +109,10 @@ export function usePlay(notices: Notices = {}) {
     };
   }, [rt]);
 
-  const joinQueue = useCallback((modes: Mode[]) => rt.send("queue_join", { modes }), [rt]);
+  const joinQueue = useCallback(
+    (modes: Mode[], minTrust?: TrustLevel) => rt.send("queue_join", minTrust ? { modes, minTrust } : { modes }),
+    [rt],
+  );
   const leaveQueue = useCallback((modes?: Mode[]) => rt.send("queue_leave", modes ? { modes } : {}), [rt]);
 
   const respond = useCallback(

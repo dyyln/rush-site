@@ -12,6 +12,7 @@ import { DemoActions } from "@/components/match/DemoActions";
 import { MatchSummary } from "@/components/match/MatchSummary";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
+import { MatchReportOutcomes } from "@/components/review/MatchReportOutcomes";
 import { ShareButton } from "@/components/match/ShareButton";
 import { RematchButton } from "@/components/challenges/RematchButton";
 import { buildRoster, ownTeamIndex } from "@/components/match/roster";
@@ -105,6 +106,8 @@ function MatchBody({ m }: { m: MatchDetail }) {
           )}
         </div>
       </header>
+
+      {user && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
 
       {finished && <MatchSummary m={m} roster={roster} ownIndex={ownIndex} viewer={user?.steamId} />}
 

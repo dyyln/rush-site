@@ -4,6 +4,16 @@ import type { WebSocket } from "ws"
 import type { AppContext } from "../../context.js"
 import { realtimeMetrics, sendChecked } from "../../lib/backpressure.js"
 import { ApiError } from "../../lib/errors.js"
+import {
+  allowedOrigins,
+  ConnectionCounter,
+  originAllowed,
+  TokenBucket,
+  WS_MAX_PER_USER,
+  WS_MAX_STRIKES,
+  WS_MESSAGE_BURST,
+  WS_MESSAGES_PER_SEC,
+} from "../../lib/security.js"
 import { MAX_MATCH_SUBSCRIPTIONS, MAX_TOURNAMENT_SUBSCRIPTIONS, type LocalHub } from "./hub.js"
 
 type AuthedRequest = FastifyRequest & { wsSteamId?: string }
@@ -20,7 +30,7 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
       await ctx.flow.vote(steamId, msg.payload.matchId, msg.payload.mapId)
       return
     case "queue_join":
-      await ctx.queue.join(steamId, msg.payload.modes)
+      await ctx.queue.join(steamId, msg.payload.modes, msg.payload.minTrust)
       return
     case "queue_leave":
       await ctx.queue.leave(steamId, msg.payload.modes)
@@ -46,23 +56,21 @@ export type ClientSocket = {
   on(event: "pong" | "close", fn: () => void): unknown
 }
 
-// Wires one socket. steamId is null for signed out spectators, who may only follow match pages
+// Wires one socket of a signed in player
 export function attachSocket(
   ctx: AppContext,
   hub: LocalHub,
   socket: ClientSocket,
-  steamId: string | null,
+  steamId: string,
   log: FastifyBaseLogger,
 ): void {
-  // Spectators register under a private key so they get match and broadcast messages only
-  const hubKey = steamId ?? `anon:${Math.random().toString(36).slice(2)}`
-  hub.add(hubKey, socket, !!steamId && ctx.isAdmin(steamId))
+  hub.add(steamId, socket, ctx.isAdmin(steamId))
   const send = (type: string, payload: unknown, ts = Date.now()) => {
     sendChecked(socket, { type, payload }, JSON.stringify({ type, payload, ts }))
   }
   let alive = true
   const heartbeat = () => {
-    if (steamId) void ctx.presence.heartbeat(steamId).catch((err) => log.warn({ err, steamId }, "presence heartbeat failed"))
+    void ctx.presence.heartbeat(steamId).catch((err) => log.warn({ err, steamId }, "presence heartbeat failed"))
   }
   socket.on("pong", () => {
     alive = true
@@ -78,7 +86,15 @@ export function attachSocket(
     socket.ping()
   }, PING_MS)
 
+  const bucket = new TokenBucket(WS_MESSAGE_BURST, WS_MESSAGES_PER_SEC)
+  let strikes = 0
   socket.on("message", (data) => {
+    if (!bucket.take()) {
+      if (++strikes < WS_MAX_STRIKES) send("error", { code: "rate_limited", message: "slow down" })
+      else if (socket.close) socket.close(1008, "rate limited")
+      else socket.terminate()
+      return
+    }
     let parsed: ClientMessage
     try {
       const raw: unknown = JSON.parse(data.toString())
@@ -116,10 +132,6 @@ export function attachSocket(
       send("error", { code: "invalid_json", message: "message is not valid JSON" })
       return
     }
-    if (!steamId) {
-      send("error", { code: "unauthorized", message: "sign in first", for: parsed.type })
-      return
-    }
     handleClientMessage(ctx, steamId, parsed).catch((err: unknown) => {
       if (err instanceof ApiError) send("error", { code: err.code, message: err.message, for: parsed.type })
       else {
@@ -130,11 +142,11 @@ export function attachSocket(
   })
   socket.on("close", () => {
     clearInterval(ping)
-    hub.remove(hubKey, socket)
+    hub.remove(steamId, socket)
   })
 
   // Initial snapshot so a reconnecting client catches up
-  if (steamId) void sendSnapshot(ctx, steamId, send).catch((err) => log.warn({ err, steamId }, "ws snapshot failed"))
+  void sendSnapshot(ctx, steamId, send).catch((err) => log.warn({ err, steamId }, "ws snapshot failed"))
 }
 
 // Serves the Redis snapshot. Postgres is only read when it is missing
@@ -168,16 +180,26 @@ async function sendSnapshot(
 }
 
 export function registerWsRoutes(app: FastifyInstance, ctx: AppContext, hub: LocalHub): void {
+  const origins = allowedOrigins(ctx.env)
+  const counter = new ConnectionCounter()
   app.get(
     "/ws",
     {
       websocket: true,
-      preValidation: async (req) => {
-        ;(req as AuthedRequest).wsSteamId = (await ctx.auth(req)) ?? undefined
+      preValidation: async (req, reply) => {
+        // Stops other sites from riding the session cookie over a socket
+        if (!originAllowed(req, origins)) return reply.code(403).send({ error: "bad_origin" })
+        // Signed out visitors get no socket. Public pages poll instead
+        const steamId = await ctx.auth(req)
+        if (!steamId) return reply.code(401).send({ error: "unauthorized" })
+        ;(req as AuthedRequest).wsSteamId = steamId
+        if (!counter.tryOpen(steamId, WS_MAX_PER_USER)) return reply.code(429).send({ error: "too_many_connections" })
       },
     },
     (socket: WebSocket, req: FastifyRequest) => {
-      attachSocket(ctx, hub, socket, (req as AuthedRequest).wsSteamId ?? null, req.log)
+      const steamId = (req as AuthedRequest).wsSteamId!
+      socket.on("close", () => counter.close(steamId))
+      attachSocket(ctx, hub, socket, steamId, req.log)
     },
   )
 }

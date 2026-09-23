@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify"
+import { registerOpsRoutes } from "./ops-routes.js"
 import { registerRoutes, requireAdmin } from "./routes.js"
 import { DrizzleAdminStore, type AdminStore } from "./store.js"
 import type { AdminPluginOptions } from "./types.js"
@@ -24,20 +25,25 @@ const adminPlugin: FastifyPluginAsync<AdminPluginOptions & AdminPluginInternals>
     admins.set(req, steamId)
   })
 
+  const store = opts.store ?? new DrizzleAdminStore(opts.db)
+  const adminOf = (req: FastifyRequest) => {
+    const id = admins.get(req)
+    if (!id) throw new Error("admin identity missing")
+    return id
+  }
+  const now = opts.now ?? (() => new Date())
+
   registerRoutes(
     app,
     {
-      store: opts.store ?? new DrizzleAdminStore(opts.db),
+      store,
       hooks: opts,
       pingRedis: () => opts.redis.ping(),
-      now: opts.now ?? (() => new Date()),
+      now,
     },
-    (req) => {
-      const id = admins.get(req)
-      if (!id) throw new Error("admin identity missing")
-      return id
-    },
+    adminOf,
   )
+  registerOpsRoutes(app, { store, opts, now }, adminOf)
 }
 
 export default adminPlugin

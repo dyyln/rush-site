@@ -16,6 +16,7 @@ import type {
   TournamentStatus,
   TournamentSummary,
   User,
+  UserSettings,
 } from "./types";
 
 export class ApiError extends Error {
@@ -75,7 +76,8 @@ function mocked<T>(value: T | null, what = "Not found"): Promise<T> {
 
 // Only same site paths are allowed as a return target
 export function safeReturnTo(v: string | null | undefined): string {
-  return v && v.startsWith("/") && !v.startsWith("//") ? v : "/play";
+  // Backslashes and control characters can turn a path into another host in some browsers
+  return v && v.startsWith("/") && !v.startsWith("//") && !/[\\\u0000-\u001f\u007f]/.test(v) ? v : "/play";
 }
 
 // Where a sign in link points. Mock mode goes through /login which fakes the session
@@ -106,6 +108,15 @@ export const api = {
       if (e instanceof ApiError && e.status === 401) return null;
       throw e;
     }
+  },
+
+  async updateSettings(patch: Partial<UserSettings>): Promise<UserSettings> {
+    if (isMock) {
+      mock.MOCK_ME.settings = { minTrust: "new", ...mock.MOCK_ME.settings, ...patch };
+      return mocked(mock.MOCK_ME.settings);
+    }
+    const res = await request<{ settings: UserSettings } | UserSettings>("PATCH", "/me/settings", { body: patch });
+    return "settings" in res ? res.settings : res;
   },
 
   async logout(): Promise<void> {
@@ -223,9 +234,10 @@ export const api = {
       if (!res.ok) throw new ApiError(res.status, "http_error", res.statusText);
       return (await res.json()) as TournamentBracket;
     },
-    async enter(id: string): Promise<void> {
+    // teamName is only for 2v2 and 3v3 cups
+    async enter(id: string, teamName?: string): Promise<void> {
       if (isMock) return mockDelay();
-      await request("POST", `/tournaments/${id}/enter`);
+      await request("POST", `/tournaments/${id}/enter`, teamName ? { body: { teamName } } : {});
     },
     async withdraw(id: string): Promise<void> {
       if (isMock) return mockDelay();

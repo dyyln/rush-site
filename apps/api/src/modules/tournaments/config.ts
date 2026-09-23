@@ -1,3 +1,4 @@
+import type { NewSchedule, ScheduleRecord } from "./store.js"
 import type { CupCadence, Mode, TrustLevel } from "./types.js"
 
 const MODE_LABEL: Record<Mode, string> = {
@@ -31,20 +32,32 @@ export interface CupDefinition {
 
 const FORMAT: CupFormat = { type: "single_elimination", bestOf: { default: 1, semis: 1, final: 3 } }
 
-const MAX_ENTRANTS: Record<CupCadence, Record<Mode, number>> = {
+const MAX_ENTRANTS: Record<"daily" | "weekly", Record<Mode, number>> = {
   daily: { aim1v1: 32, aim2v2: 16, rush3v3: 16 },
   weekly: { aim1v1: 64, aim2v2: 32, rush3v3: 32 },
 }
 
-function cup(mode: Mode, cadence: CupCadence): CupDefinition {
+export function formatFor(bestOfFinal: number): CupFormat {
+  return { type: "single_elimination", bestOf: { default: 1, semis: 1, final: bestOfFinal } }
+}
+
+export function defaultCupName(mode: Mode, cadence: CupCadence): string {
+  const label = cadence === "daily" ? "Daily" : cadence === "weekly" ? "Weekly" : "Special"
+  return `${label} ${MODE_LABEL[mode]} Cup`
+}
+
+// Hours before the start that sign-ups open, per cadence.
+export const REGISTRATION_OPENS_HOURS = { daily: 24, weekly: 7 * 24 } as const
+
+function cup(mode: Mode, cadence: "daily" | "weekly"): CupDefinition {
   const daily = cadence === "daily"
   return {
     key: `${cadence}-${mode}`,
-    name: `${daily ? "Daily" : "Weekly"} ${MODE_LABEL[mode]} Cup`,
+    name: defaultCupName(mode, cadence),
     mode,
     cadence,
     schedule: daily ? { hourUtc: 18, minuteUtc: 0 } : { hourUtc: 17, minuteUtc: 0, weekdayUtc: 0 },
-    registrationOpensHours: daily ? 24 : 7 * 24,
+    registrationOpensHours: REGISTRATION_OPENS_HOURS[cadence],
     maxEntrants: MAX_ENTRANTS[cadence][mode],
     minTrust: "verified",
     entryFee: 0,
@@ -59,6 +72,41 @@ export const DEFAULT_CUPS: CupDefinition[] = [
   ...MODES.map((m) => cup(m, "daily")),
   ...MODES.map((m) => cup(m, "weekly")),
 ]
+
+// The cups the first cup_schedules migration seeds. Tests seed the memory store from these.
+const pad = (n: number) => String(n).padStart(2, "0")
+
+export function cupToSchedule(c: CupDefinition): NewSchedule {
+  return {
+    cupKey: c.key,
+    name: c.name,
+    mode: c.mode,
+    cadence: c.cadence === "weekly" ? "weekly" : "daily",
+    weekday: c.cadence === "weekly" ? (c.schedule.weekdayUtc ?? 0) : null,
+    startTime: `${pad(c.schedule.hourUtc)}:${pad(c.schedule.minuteUtc)}`,
+    maxEntrants: c.maxEntrants,
+    minTrust: c.minTrust,
+    bestOfFinal: c.format.bestOf.final,
+    enabled: true,
+  }
+}
+
+export function scheduleToCup(s: Pick<ScheduleRecord, Exclude<keyof ScheduleRecord, "id" | "updatedAt">>): CupDefinition {
+  const [h, m] = s.startTime.split(":").map(Number)
+  return {
+    key: s.cupKey,
+    name: s.name,
+    mode: s.mode,
+    cadence: s.cadence,
+    schedule: { hourUtc: h ?? 0, minuteUtc: m ?? 0, ...(s.cadence === "weekly" ? { weekdayUtc: s.weekday ?? 0 } : {}) },
+    registrationOpensHours: REGISTRATION_OPENS_HOURS[s.cadence],
+    maxEntrants: s.maxEntrants,
+    minTrust: s.minTrust,
+    entryFee: 0,
+    checkIn: false,
+    format: formatFor(s.bestOfFinal),
+  }
+}
 
 // First start time of the cup strictly after `after`.
 export function nextStart(def: CupDefinition, after: Date): Date {

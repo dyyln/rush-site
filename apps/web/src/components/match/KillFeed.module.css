@@ -47,12 +47,20 @@
   white-space: nowrap;
 }
 .assist {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+.assistIcon {
+  flex: none;
+}
+.assistName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 .how {
   display: inline-flex;
@@ -86,14 +94,15 @@
   }
 }
 .tk {
+  flex: none;
   margin-left: var(--space-1);
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-loss);
-  border-radius: var(--radius-sm);
   color: var(--color-loss);
-  font-family: var(--font-display);
-  font-size: 10px;
+}
+.name[data-highlight] .nameText {
+  color: var(--color-text);
   font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 16px;
+  text-decoration: underline;
+  text-decoration-color: var(--color-info);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }

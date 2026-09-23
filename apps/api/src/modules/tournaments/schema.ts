@@ -8,6 +8,7 @@ import {
   pgTable,
   real,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -58,6 +59,10 @@ export const tournamentEntries = pgTable(
     // Filled when the bracket is built.
     seed: integer("seed"),
     rating: real("rating"),
+    // Chosen by the captain in 2v2 and 3v3 cups. 3 to 24 characters
+    teamName: text("team_name"),
+    disqualifiedAt: timestamp("disqualified_at", { withTimezone: true }),
+    disqualifyReason: text("disqualify_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -131,4 +136,29 @@ export const badges = pgTable(
     uniqueIndex("badges_user_tournament_uq").on(t.steamId, t.tournamentId),
     index("badges_steam_idx").on(t.steamId),
   ],
+)
+
+// Recurring cups. The scheduler creates the next tournament for every enabled row.
+export const cupSchedules = pgTable(
+  "cup_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Stored on every tournament the schedule creates as tournaments.cup_key
+    cupKey: text("cup_key").notNull(),
+    name: text("name").notNull(),
+    mode: text("mode").notNull(),
+    // daily or weekly
+    cadence: text("cadence").notNull(),
+    // 0 is Sunday. Only used by weekly schedules
+    weekday: integer("weekday"),
+    // UTC time of day
+    startTime: time("start_time").notNull(),
+    maxEntrants: integer("max_entrants").notNull(),
+    minTrust: text("min_trust").notNull(),
+    bestOfFinal: integer("best_of_final").notNull().default(3),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("cup_schedules_cup_key_uq").on(t.cupKey)],
 )

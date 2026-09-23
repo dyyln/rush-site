@@ -12,7 +12,7 @@ import { registerMatchExtrasRoutes } from "./extras-routes.js"
 import { buildMatchPage } from "./match-page.js"
 
 const AcceptBody = z.object({ accept: z.boolean() })
-const VetoBody = z.object({ mapId: z.string().min(1) })
+const VetoBody = z.object({ mapId: z.string().min(1).max(64) })
 const Uuid = z.uuid()
 
 export async function matchView(ctx: AppContext, matchId: string, viewer: string | null) {
@@ -47,6 +47,7 @@ export function registerMatchRoutes(app: FastifyInstance, ctx: AppContext): void
   app.post("/matches/:id/accept", async (req, reply) => {
     const steamId = await requireUser(ctx.auth, req)
     const { id } = req.params as { id: string }
+    if (!Uuid.safeParse(id).success) throw notFound("match_not_found")
     const body = AcceptBody.safeParse(req.body)
     if (!body.success) throw badRequest("invalid_body")
     await ctx.flow.respond(steamId, id, body.data.accept)
@@ -56,6 +57,7 @@ export function registerMatchRoutes(app: FastifyInstance, ctx: AppContext): void
   app.post("/matches/:id/veto", async (req, reply) => {
     const steamId = await requireUser(ctx.auth, req)
     const { id } = req.params as { id: string }
+    if (!Uuid.safeParse(id).success) throw notFound("match_not_found")
     const body = VetoBody.safeParse(req.body)
     if (!body.success) throw badRequest("invalid_body")
     await ctx.flow.vote(steamId, id, body.data.mapId)

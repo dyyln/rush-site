@@ -7,6 +7,10 @@ export type MmTicket = {
   rating: number
   enqueuedAt: number
   region: string
+  // Trust as a rank, new 0, verified 1, trusted 2. Every other player in the match must be at least minTrust. Missing means 0
+  minTrust?: number
+  // Lowest trust rank among the ticket's players
+  trust?: number
 }
 
 export type Proposal = {
@@ -29,6 +33,11 @@ export type MatchmakerOptions = {
 const CANDIDATE_SPREAD = 2
 
 const waitSec = (t: MmTicket, now: number) => Math.max(0, (now - t.enqueuedAt) / 1000)
+
+// Both tickets meet each other's trust floor, whichever side they end up on. Waiting never relaxes this
+export function trustCompatible(a: MmTicket, b: MmTicket): boolean {
+  return (b.trust ?? 0) >= (a.minTrust ?? 0) && (a.trust ?? 0) >= (b.minTrust ?? 0)
+}
 
 // Team rating is the mean over players, so a party ticket counts once per member
 export function teamMean(team: MmTicket[]): number {
@@ -113,7 +122,7 @@ class RatingIndex {
   }
 
   // The k unused tickets nearest in rating to the anchor within maxGap, with ties at the cut kept
-  nearest(anchor: MmTicket, k: number, maxGap: number): MmTicket[] {
+  nearest(anchor: MmTicket, k: number, maxGap: number, accept: (t: MmTicket) => boolean = () => true): MmTicket[] {
     const at = this.pos.get(anchor.id)!
     const n = this.byRating.length
     let l = this.left(at - 1)
@@ -128,10 +137,10 @@ class RatingIndex {
       const d = Math.min(ld, rd)
       if (d > maxGap || d > cut || d === Number.POSITIVE_INFINITY) break
       if (ld <= rd) {
-        out.push(lt!)
+        if (accept(lt!)) out.push(lt!)
         l = this.left(l - 1)
       } else {
-        out.push(rt!)
+        if (accept(rt!)) out.push(rt!)
         r = this.right(r + 1)
       }
       if (out.length === k) cut = d
@@ -166,8 +175,9 @@ export function findMatches(tickets: MmTicket[], opts: MatchmakerOptions): Propo
     if (used.has(anchor.id)) continue
     const index = indexes.get(anchor.region)!
     const window = windowFor(waitSec(anchor, opts.now)) ?? Number.POSITIVE_INFINITY
+    // Tickets that cannot share a match with the anchor are skipped so they do not crowd out usable ones
     const candidates = index
-      .nearest(anchor, maxCandidates, window * CANDIDATE_SPREAD)
+      .nearest(anchor, maxCandidates, window * CANDIDATE_SPREAD, (t) => trustCompatible(anchor, t))
       .sort(
         (a, b) =>
           Math.abs(a.rating - anchor.rating) - Math.abs(b.rating - anchor.rating) ||
@@ -204,12 +214,15 @@ function bestProposal(
   const weighted = new Float64Array(k)
   const party = new Uint8Array(k)
   const mix = new Uint8Array(k)
+  // Bit j set when candidates i and j cannot share a match. Candidates already all accept the anchor
+  const clash = new Int32Array(k)
   for (let i = 0; i < k; i++) {
     const c = candidates[i]!
     sizes[i] = c.size
     weighted[i] = c.rating * c.size
     party[i] = partyBucket(c.size) === "party" ? 1 : 0
     mix[i] = mayMix(c) ? 1 : 0
+    for (let j = 0; j < k; j++) if (!trustCompatible(c, candidates[j]!)) clash[i] = clash[i]! | (1 << j)
   }
   // Same summation order as teamMean so ties resolve exactly as before
   const stats = (mask: number, sum0: number, players0: number, party0: number, mix0: number) => {
@@ -217,25 +230,29 @@ function bestProposal(
     let players = players0
     let p = party0
     let m = mix0
+    let c = 0
     for (let i = 0; i < k; i++) {
       if (!(mask & (1 << i))) continue
       sum += weighted[i]!
       players += sizes[i]!
       p |= party[i]!
       m &= mix[i]!
+      c |= clash[i]!
     }
-    return { mean: sum / players, party: p, mix: m }
+    return { mean: sum / players, party: p, mix: m, clash: c }
   }
   const bMasks = subsetMasks(sizes, teamSize)
   if (bMasks.length === 0) return null
   const bMean = new Float64Array(bMasks.length)
   const bParty = new Uint8Array(bMasks.length)
   const bMix = new Uint8Array(bMasks.length)
+  const bClash = new Int32Array(bMasks.length)
   for (let j = 0; j < bMasks.length; j++) {
     const st = stats(bMasks[j]!, 0, 0, 0, 1)
     bMean[j] = st.mean
     bParty[j] = st.party
     bMix[j] = st.mix
+    bClash[j] = st.clash
   }
   const waited = (a: MmTicket[], b: MmTicket[]) => [...a, ...b].reduce((s, t) => s + waitSec(t, now), 0)
   const anchorParty = partyBucket(anchor.size) === "party" ? 1 : 0
@@ -247,10 +264,14 @@ function bestProposal(
     const meanA = st.mean
     const partyA = st.party
     const mixA = st.mix
+    // Teammates are held to the floor too
+    if (st.clash & am) continue
     let teamA: MmTicket[] | null = null
     for (let j = 0; j < bMasks.length; j++) {
       const bm = bMasks[j]!
       if (bm & am) continue
+      // Every ticket's floor covers every player in the match. Checked before the rating window and never widened
+      if ((st.clash | bClash[j]!) & (am | bm)) continue
       const diff = Math.abs(meanA - bMean[j]!)
       if (diff > window) continue
       const mixed = partyA !== bParty[j] ? 1 : 0

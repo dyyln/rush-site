@@ -10,6 +10,7 @@ import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
+import { AnnouncementService, FlagService } from "./modules/flags/service.js"
 import { FriendsService } from "./modules/friends/service.js"
 import { PresenceService } from "./modules/friends/presence.js"
 import { HttpAgentClient, type AgentApi } from "./modules/match/agent.js"
@@ -20,9 +21,10 @@ import { PartyService } from "./modules/parties/service.js"
 import { CooldownService } from "./modules/queue/cooldowns.js"
 import { QueueService } from "./modules/queue/service.js"
 import { RatingService } from "./modules/rating/service.js"
+import { BanGate } from "./modules/trust/ban-gate.js"
 import { BanService } from "./modules/trust/bans.js"
 import { TrustService, type FaceitLookup } from "./modules/trust/service.js"
-import type { Notifier } from "./modules/ws/hub.js"
+import { disconnectUsers, type Notifier } from "./modules/ws/hub.js"
 
 export type AppContext = {
   env: Env
@@ -35,6 +37,9 @@ export type AppContext = {
   events: EventLog
   sessions: SessionStore
   auth: Authenticator
+  banGate: BanGate
+  // Closes the user's open sockets on every instance
+  disconnectUser: (steamId: string, reason: string) => void
   isAdmin: (steamId: string) => boolean
   steam: SteamWebApi
   users: UsersService
@@ -50,6 +55,8 @@ export type AppContext = {
   presence: PresenceService
   friends: FriendsService
   snapshots: SnapshotStore
+  flags: FlagService
+  announcements: AnnouncementService
 }
 
 export type ContextDeps = {
@@ -142,7 +149,11 @@ export function buildContext(deps: ContextDeps): AppContext {
   flow.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onMatchChanged((m) => presence.matchChanged(m))
   flow.onResult(async (r) => presence.refresh((await flow.playersOf(r.matchId)).map((p) => p.steamId)))
-  const bans = new BanService(db, ratings, trust, queue, parties, sessions, now, env.ROLLBACK_WINDOW_DAYS)
+  const banGate = new BanGate(db, redis, now)
+  const disconnectUser = (steamId: string, reason: string) => disconnectUsers(notifier, [steamId], reason)
+  const flags = new FlagService(db, now)
+  queue.setModeGate((mode) => flags.queueOpen(mode))
+  const bans = new BanService(db, ratings, trust, queue, parties, sessions, now, env.ROLLBACK_WINDOW_DAYS, banGate, disconnectUser)
   return {
     env,
     db,
@@ -153,7 +164,9 @@ export function buildContext(deps: ContextDeps): AppContext {
     fetch: fetchFn,
     events,
     sessions,
-    auth: makeAuthenticator(sessions),
+    auth: makeAuthenticator(sessions, (id) => banGate.cached(id)),
+    banGate,
+    disconnectUser,
     isAdmin: (id) => admins.has(id),
     steam,
     users,
@@ -169,5 +182,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     presence,
     friends,
     snapshots,
+    flags,
+    announcements: new AnnouncementService(db, now),
   }
 }

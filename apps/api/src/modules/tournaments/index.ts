@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify"
-import { DEFAULT_CUPS } from "./config.js"
+import { registerAdminRoutes } from "./admin-routes.js"
+import { cupToSchedule } from "./config.js"
 import { registerRoutes } from "./routes.js"
 import { TournamentService } from "./service.js"
 import { DrizzleTournamentStore, type TournamentStore } from "./store.js"
@@ -16,9 +17,13 @@ export interface TournamentsPluginInternals {
 const tournamentsPlugin: FastifyPluginAsync<
   TournamentsPluginOptions & TournamentsPluginInternals
 > = async (app: FastifyInstance, opts) => {
+  const store = opts.store ?? new DrizzleTournamentStore(opts.db)
+  // Tests pass cups to seed an empty store. Production reads the cup_schedules table.
+  if (opts.cups && (await store.listSchedules()).length === 0) {
+    for (const cup of opts.cups) await store.insertSchedule(cupToSchedule(cup))
+  }
   const service = new TournamentService({
-    store: opts.store ?? new DrizzleTournamentStore(opts.db),
-    cups: opts.cups ?? DEFAULT_CUPS,
+    store,
     now: opts.now ?? (() => new Date()),
     log: app.log,
     startMatch: opts.startMatch,
@@ -27,6 +32,7 @@ const tournamentsPlugin: FastifyPluginAsync<
     getRatings: opts.getRatings,
     getParty: opts.getParty,
     getProfiles: opts.getProfiles,
+    cancelMatch: opts.cancelMatch,
   })
 
   opts.onMatchResult(async (result) => {
@@ -38,6 +44,9 @@ const tournamentsPlugin: FastifyPluginAsync<
   })
 
   registerRoutes(app, service, opts.authenticate)
+  if (opts.isAdmin) {
+    registerAdminRoutes(app, service, store, { authenticate: opts.authenticate, isAdmin: opts.isAdmin })
+  }
   opts.onService?.(service)
 
   if (opts.scheduler !== false) {

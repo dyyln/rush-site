@@ -5,6 +5,8 @@ import {
   buildBracket,
   cancelGame,
   claimGame,
+  decide,
+  disqualify,
   forfeit,
   isComplete,
   placements,
@@ -14,13 +16,24 @@ import {
   seedEntries,
   startGame,
 } from "./bracket.js"
-import { type CupDefinition, nextStart } from "./config.js"
+import { randomUUID } from "node:crypto"
+import {
+  REGISTRATION_OPENS_HOURS,
+  defaultCupName,
+  formatFor,
+  nextStart,
+  scheduleToCup,
+} from "./config.js"
 import type {
   BadgeRecord,
   EntryRecord,
+  NewSchedule,
+  ScheduleRecord,
+  StoredBracket,
   TournamentRecord,
   TournamentStore,
 } from "./store.js"
+import type { CupSchedule } from "@rushsite/shared"
 import { getModeConfig, tierForRating, trustAtLeast } from "@rushsite/shared"
 import { eachLimit } from "../../lib/async.js"
 import {
@@ -62,7 +75,6 @@ export interface Logger {
 
 export interface ServiceDeps {
   store: TournamentStore
-  cups: CupDefinition[]
   now: () => Date
   log: Logger
   startMatch(params: StartMatchParams): Promise<{ matchId: string }>
@@ -71,6 +83,8 @@ export interface ServiceDeps {
   getRatings(steamIds: string[], mode: Mode): Promise<Record<string, number>>
   getParty(steamId: string): Promise<PartyInfo | null>
   getProfiles(steamIds: string[]): Promise<Record<string, ProfileInfo>>
+  // Stops a CS2 match that no longer counts for the bracket. Optional in tests.
+  cancelMatch?(matchId: string, reason: string): Promise<unknown>
 }
 
 const DEFAULT_RATING = 1500
@@ -96,7 +110,9 @@ function toEntryView(e: EntryRecord, { profiles, ratings }: PlayerInfo): EntryVi
     }
   })
   return {
-    name: profiles[e.captainSteamId]?.displayName ?? e.captainSteamId,
+    name: e.teamName ?? profiles[e.captainSteamId]?.displayName ?? e.captainSteamId,
+    teamName: e.teamName,
+    ...(e.disqualifiedAt ? { disqualified: true } : {}),
     players,
     id: e.id,
     captainSteamId: e.captainSteamId,
@@ -151,9 +167,9 @@ export class TournamentService {
     const entries = await this.d.store.listEntries(id)
     const stored = await this.d.store.loadBracket(id)
     const profiles = await this.playerInfo(entries.flatMap((e) => e.steamIds), t.mode)
-    const mine = viewer ? entries.find((e) => e.steamIds.includes(viewer)) : undefined
+    const mine = viewer ? entries.find((e) => !e.disqualifiedAt && e.steamIds.includes(viewer)) : undefined
     return {
-      ...this.summary(t, entries.length),
+      ...this.summary(t, entries.filter((e) => !e.disqualifiedAt).length),
       entries: entries.map((e) => toEntryView(e, profiles)),
       bracket: stored?.bracket ?? null,
       bracketVersion: t.bracketVersion,
@@ -176,10 +192,13 @@ export class TournamentService {
 
   // Sign-up
 
-  async enter(tournamentId: string, steamId: string): Promise<EntryView> {
+  async enter(tournamentId: string, steamId: string, teamName?: string): Promise<EntryView> {
     const t = await this.d.store.getTournament(tournamentId)
     if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
     this.assertRegistrationOpen(t)
+    if (teamName !== undefined && getModeConfig(t.mode).teamSize === 1) {
+      throw new TournamentError(400, "team_name_not_allowed", "Solo cups do not take a team name")
+    }
 
     let members = [steamId]
     if (getModeConfig(t.mode).teamSize > 1) {
@@ -209,7 +228,13 @@ export class TournamentService {
       const fresh = await s.getTournament(tournamentId)
       if (!fresh) throw new TournamentError(404, "not_found", "Tournament not found")
       this.assertRegistrationOpen(fresh)
-      const entries = await s.listEntries(tournamentId)
+      const all = await s.listEntries(tournamentId)
+      const banned = all.filter((e) => e.disqualifiedAt).flatMap((e) => e.steamIds)
+      const dq = members.filter((m) => banned.includes(m))
+      if (dq.length) {
+        throw new TournamentError(403, "disqualified", "Disqualified from this cup", { steamIds: dq })
+      }
+      const entries = all.filter((e) => !e.disqualifiedAt)
       const taken = entries.flatMap((e) => e.steamIds)
       const clash = members.filter((m) => taken.includes(m))
       if (clash.length) {
@@ -218,7 +243,11 @@ export class TournamentService {
       if (entries.length >= fresh.maxEntrants) {
         throw new TournamentError(409, "full", "Tournament is full")
       }
-      return s.insertEntry({ tournamentId, captainSteamId: steamId, steamIds: members })
+      const wanted = teamName?.toLowerCase()
+      if (wanted && entries.some((e) => e.teamName?.toLowerCase() === wanted)) {
+        throw new TournamentError(409, "team_name_taken", "Another team in this cup has that name")
+      }
+      return s.insertEntry({ tournamentId, captainSteamId: steamId, steamIds: members, teamName: teamName ?? null })
     })
     await this.announce(tournamentId, "entries_changed")
     return toEntryView(entry, await this.playerInfo(entry.steamIds, t.mode))
@@ -232,7 +261,7 @@ export class TournamentService {
         throw new TournamentError(409, "registration_closed", "Tournament has already started")
       }
       const entries = await s.listEntries(tournamentId)
-      const entry = entries.find((e) => e.steamIds.includes(steamId))
+      const entry = entries.find((e) => !e.disqualifiedAt && e.steamIds.includes(steamId))
       if (!entry) throw new TournamentError(404, "not_entered", "Not entered")
       await s.deleteEntries([entry.id])
     })
@@ -289,10 +318,15 @@ export class TournamentService {
     }
   }
 
-  // Creates the next tournament for every cup.
+  // Creates the next tournament for every enabled schedule that has no open one.
   async ensureUpcoming(): Promise<void> {
     const now = this.d.now()
-    for (const cup of this.d.cups) {
+    const schedules = (await this.d.store.listSchedules()).filter((x) => x.enabled)
+    if (schedules.length === 0) return
+    const open = await this.d.store.listTournaments({ status: ["open"], limit: 1000 })
+    const waiting = new Set(open.map((t) => t.cupKey))
+    for (const cup of schedules.map(scheduleToCup)) {
+      if (waiting.has(cup.key)) continue
       const startsAt = nextStart(cup, now)
       const created = await this.d.store.createTournament({
         cupKey: cup.key,
@@ -333,7 +367,7 @@ export class TournamentService {
       const now = this.d.now()
 
       // Entries whose members lost the required trust since sign-up are dropped.
-      let entries = await s.listEntries(tournamentId)
+      let entries = (await s.listEntries(tournamentId)).filter((e) => !e.disqualifiedAt)
       const all = entries.flatMap((e) => e.steamIds)
       const failing = new Set(await this.untrusted(all, t.minTrust))
       const dropped = entries.filter((e) => e.steamIds.some((id) => failing.has(id)))
@@ -372,14 +406,22 @@ export class TournamentService {
   // Claims every bracket match waiting on its next game under the row lock, then
   // requests servers after commit so slow allocation never holds the lock.
   async provision(tournamentId: string): Promise<void> {
+    let completed = false
     const claims = await this.d.store.locked(tournamentId, async (s) => {
       const t = await s.getTournament(tournamentId)
       const stored = await s.loadBracket(tournamentId)
       if (!t || t.status !== "running" || !stored) return []
       const nowMs = this.d.now().getTime()
-      let { bracket } = stored
+      const entries = new Map((await s.listEntries(tournamentId)).map((e) => [e.id, e]))
+      let bracket = sweepDisqualified(stored.bracket, entries)
+      let changed = bracket !== stored.bracket
+      if (isComplete(bracket)) {
+        await s.saveBracket(tournamentId, { ...stored, bracket })
+        await this.complete(s, t, bracket)
+        completed = true
+        return []
+      }
       const at = { ...stored.provisioningAt }
-      let changed = false
 
       // A claim this old belongs to a process that died mid request.
       for (const m of bracket.matches) {
@@ -392,7 +434,6 @@ export class TournamentService {
       }
 
       const ready = playableMatches(bracket)
-      const entries = new Map((await s.listEntries(tournamentId)).map((e) => [e.id, e]))
       const out: Claim[] = []
       for (const m of ready) {
         const a = entries.get(m.a as string)
@@ -426,6 +467,10 @@ export class TournamentService {
       if (changed) await s.saveBracket(tournamentId, { ...stored, bracket, provisioningAt: at })
       return out
     })
+    if (completed) {
+      await this.announce(tournamentId, "completed")
+      return
+    }
     await eachLimit(claims, PROVISION_CONCURRENCY, (c) => this.startClaim(tournamentId, c))
   }
 
@@ -439,12 +484,14 @@ export class TournamentService {
         "tournament match provisioning failed, retrying next tick",
       )
     }
+    let orphan: string | null = null
     const live = await this.d.store.locked(tournamentId, async (s) => {
       const stored = await s.loadBracket(tournamentId)
       const m = stored?.bracket.matches.find((x) => x.id === c.bracketMatchId)
       if (!stored || !m || m.status !== "provisioning" || stored.provisioningAt[m.id] !== c.claimedAt) {
         if (matchId) {
-          this.d.log.error({ tournamentId, match: c.bracketMatchId, matchId }, "claim lost, match left orphaned")
+          this.d.log.warn({ tournamentId, match: c.bracketMatchId, matchId }, "claim lost, cancelling the new match")
+          orphan = matchId
         }
         return false
       }
@@ -462,6 +509,7 @@ export class TournamentService {
       await s.saveBracket(tournamentId, { bracket, provisionAttempts: attempts, provisioningAt })
       return matchId !== null
     })
+    if (orphan) await this.stopMatches([orphan], "tournament_match_resolved")
     if (live) await this.announce(tournamentId, "match_live", c.bracketMatchId)
   }
 
@@ -543,6 +591,272 @@ export class TournamentService {
     })
   }
 
+  // Admin: schedules
+
+  scheduleView(x: ScheduleRecord): CupSchedule {
+    return {
+      id: x.id,
+      cupKey: x.cupKey,
+      name: x.name,
+      mode: x.mode,
+      cadence: x.cadence,
+      weekday: x.cadence === "weekly" ? x.weekday : null,
+      startTime: x.startTime,
+      maxEntrants: x.maxEntrants,
+      minTrust: x.minTrust,
+      bestOfFinal: x.bestOfFinal as CupSchedule["bestOfFinal"],
+      enabled: x.enabled,
+      nextStartsAt: x.enabled ? nextStart(scheduleToCup(x), this.d.now()).toISOString() : null,
+      updatedAt: x.updatedAt.toISOString(),
+    }
+  }
+
+  async listSchedules(): Promise<CupSchedule[]> {
+    return (await this.d.store.listSchedules()).map((x) => this.scheduleView(x))
+  }
+
+  async createSchedule(input: Omit<NewSchedule, "cupKey" | "name"> & { name?: string }): Promise<CupSchedule> {
+    const row = await this.d.store.insertSchedule({
+      ...input,
+      weekday: input.cadence === "weekly" ? input.weekday : null,
+      name: input.name ?? defaultCupName(input.mode, input.cadence),
+      cupKey: `${input.cadence}-${input.mode}-${randomUUID().slice(0, 8)}`,
+    })
+    await this.ensureUpcoming()
+    return this.scheduleView(row)
+  }
+
+  // Changes carry over to the schedule's open cup. A new time moves that cup to the next slot.
+  async updateSchedule(id: string, patch: Partial<Omit<NewSchedule, "cupKey">>): Promise<CupSchedule> {
+    const before = await this.d.store.getSchedule(id)
+    if (!before) throw new TournamentError(404, "not_found", "Schedule not found")
+    const merged = { ...before, ...patch }
+    if (merged.cadence === "weekly" && (merged.weekday === null || merged.weekday === undefined)) {
+      throw new TournamentError(400, "invalid_request", "Weekly schedules need a weekday")
+    }
+    if (merged.cadence === "daily") merged.weekday = null
+
+    const open = (await this.d.store.listTournaments({ status: ["open"], limit: 1000 })).filter(
+      (t) => t.cupKey === before.cupKey,
+    )
+    const counts = await this.d.store.countEntries(open.map((t) => t.id))
+    if (merged.mode !== before.mode && open.some((t) => (counts[t.id] ?? 0) > 0)) {
+      throw new TournamentError(409, "schedule_has_entries", "The open cup has entries. Cancel it before changing the mode")
+    }
+
+    const { id: _id, updatedAt: _u, ...fields } = merged
+    const row = await this.d.store.updateSchedule(id, fields)
+    if (!row) throw new TournamentError(404, "not_found", "Schedule not found")
+
+    const cup = scheduleToCup(row)
+    const timing =
+      row.cadence !== before.cadence || row.weekday !== before.weekday || row.startTime !== before.startTime
+    const now = this.d.now()
+    for (const t of open) {
+      const startsAt = timing ? nextStart(cup, now) : t.startsAt
+      const opens = new Date(startsAt.getTime() - cup.registrationOpensHours * 3600_000)
+      await this.d.store.locked(t.id, async (s) => {
+        const fresh = await s.getTournament(t.id)
+        if (!fresh || fresh.status !== "open") return
+        await s.updateTournament(t.id, {
+          name: row.name,
+          mode: row.mode,
+          maxEntrants: row.maxEntrants,
+          minTrust: row.minTrust,
+          format: cup.format,
+          startsAt,
+          registrationOpensAt: timing ? (opens < fresh.registrationOpensAt ? opens : fresh.registrationOpensAt) : fresh.registrationOpensAt,
+        })
+      })
+      await this.announce(t.id, timing ? "rescheduled" : "entries_changed")
+    }
+    if (row.enabled) await this.ensureUpcoming()
+    return this.scheduleView(row)
+  }
+
+  // Open cups the schedule already created stay. Cancel them on their own.
+  async deleteSchedule(id: string): Promise<ScheduleRecord> {
+    const row = await this.d.store.getSchedule(id)
+    if (!row || !(await this.d.store.deleteSchedule(id))) {
+      throw new TournamentError(404, "not_found", "Schedule not found")
+    }
+    return row
+  }
+
+  // Admin: cups
+
+  async createCup(input: {
+    mode: Mode
+    name: string
+    startsAt: Date
+    maxEntrants: number
+    minTrust: TrustLevel
+    bestOfFinal: number
+  }): Promise<TournamentSummary> {
+    const now = this.d.now()
+    if (input.startsAt.getTime() <= now.getTime() + 60_000) {
+      throw new TournamentError(400, "invalid_request", "startsAt must be at least a minute in the future")
+    }
+    const id = await this.d.store.createTournament({
+      cupKey: `special-${randomUUID()}`,
+      name: input.name,
+      mode: input.mode,
+      cadence: "special",
+      maxEntrants: input.maxEntrants,
+      minTrust: input.minTrust,
+      entryFee: 0,
+      format: formatFor(input.bestOfFinal),
+      registrationOpensAt: now,
+      startsAt: input.startsAt,
+    })
+    if (!id) throw new Error("one-off cup insert returned no id")
+    await this.announce(id, "created")
+    return this.summaryOf(id)
+  }
+
+  async cancel(tournamentId: string): Promise<TournamentSummary> {
+    const live = await this.d.store.locked(tournamentId, async (s) => {
+      const t = await s.getTournament(tournamentId)
+      if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+      if (t.status !== "open" && t.status !== "running") {
+        throw new TournamentError(409, "tournament_over", `Tournament is already ${t.status}`)
+      }
+      const stored = await s.loadBracket(tournamentId)
+      await s.updateTournament(tournamentId, {
+        status: "cancelled",
+        cancelReason: "admin_cancelled",
+        completedAt: this.d.now(),
+      })
+      return liveMatchIds(stored)
+    })
+    await this.stopMatches(live, "tournament_cancelled")
+    await this.announce(tournamentId, "cancelled")
+    return this.summaryOf(tournamentId)
+  }
+
+  async reschedule(tournamentId: string, startsAt: Date): Promise<{ before: string; tournament: TournamentSummary }> {
+    const now = this.d.now()
+    if (startsAt.getTime() <= now.getTime() + 60_000) {
+      throw new TournamentError(400, "invalid_request", "startsAt must be at least a minute in the future")
+    }
+    const before = await this.d.store.locked(tournamentId, async (s) => {
+      const t = await s.getTournament(tournamentId)
+      if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+      if (t.status !== "open") throw new TournamentError(409, "already_started", "Only open cups can be rescheduled")
+      try {
+        await s.updateTournament(tournamentId, {
+          startsAt,
+          registrationOpensAt: t.registrationOpensAt < startsAt ? t.registrationOpensAt : now,
+        })
+      } catch (err) {
+        if ((err as { code?: string }).code === "23505") {
+          throw new TournamentError(409, "slot_taken", "This cup already has a tournament at that time")
+        }
+        throw err
+      }
+      return t.startsAt.toISOString()
+    })
+    await this.announce(tournamentId, "rescheduled")
+    return { before, tournament: await this.summaryOf(tournamentId) }
+  }
+
+  // Open cups keep the entry but block it. Running cups also knock it out of its current series.
+  async disqualify(tournamentId: string, entryId: string, reason: string): Promise<EntryRecord> {
+    const out = await this.d.store.locked(tournamentId, async (s) => {
+      const t = await s.getTournament(tournamentId)
+      if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+      if (t.status !== "open" && t.status !== "running") {
+        throw new TournamentError(409, "tournament_over", `Tournament is already ${t.status}`)
+      }
+      const entry = (await s.listEntries(tournamentId)).find((e) => e.id === entryId)
+      if (!entry) throw new TournamentError(404, "not_found", "Entry not found")
+      if (entry.disqualifiedAt) throw new TournamentError(409, "already_disqualified", "Entry is already disqualified")
+      await s.disqualifyEntry(entryId, reason, this.d.now())
+      if (t.status === "open") return { entry, stop: [] as string[], matchId: undefined, complete: false }
+
+      const stored = await s.loadBracket(tournamentId)
+      if (!stored) return { entry, stop: [], matchId: undefined, complete: false }
+      const m = stored.bracket.matches.find(
+        (x) => (x.a === entryId || x.b === entryId) && ["ready", "provisioning", "live"].includes(x.status),
+      )
+      if (!m) return { entry, stop: [], matchId: undefined, complete: false }
+      const bracket = disqualify(stored.bracket, m.id, m.a === entryId ? "a" : "b")
+      return this.saveAdminBracket(s, t, stored, bracket, m, entry)
+    })
+    await this.afterAdminBracket(tournamentId, out.stop, out.matchId, out.complete, "disqualified")
+    return out.entry
+  }
+
+  async forceResult(tournamentId: string, bracketMatchId: string, winnerEntryId: string): Promise<{ loserEntryId: string | null }> {
+    const out = await this.d.store.locked(tournamentId, async (s) => {
+      const t = await s.getTournament(tournamentId)
+      if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+      if (t.status !== "running") throw new TournamentError(409, "not_running", "Tournament is not running")
+      const stored = await s.loadBracket(tournamentId)
+      const m = stored?.bracket.matches.find((x) => x.id === bracketMatchId)
+      if (!stored || !m) throw new TournamentError(404, "not_found", "Bracket match not found")
+      if (!["ready", "provisioning", "live"].includes(m.status)) {
+        throw new TournamentError(409, "match_not_open", `Bracket match is ${m.status}`)
+      }
+      if (winnerEntryId !== m.a && winnerEntryId !== m.b) {
+        throw new TournamentError(400, "not_in_match", "Winner must be one of the two entries in the match")
+      }
+      const loser = winnerEntryId === m.a ? m.b : m.a
+      const bracket = decide(stored.bracket, m.id, winnerEntryId === m.a ? "a" : "b")
+      return { ...(await this.saveAdminBracket(s, t, stored, bracket, m, null)), loser }
+    })
+    await this.afterAdminBracket(tournamentId, out.stop, out.matchId, out.complete, "admin_forced_result")
+    return { loserEntryId: out.loser }
+  }
+
+  private async saveAdminBracket<E>(
+    s: TournamentStore,
+    t: TournamentRecord,
+    stored: StoredBracket,
+    bracket: Bracket,
+    m: BracketMatch,
+    entry: E,
+  ) {
+    const provisioningAt = { ...stored.provisioningAt }
+    delete provisioningAt[m.id]
+    await s.saveBracket(t.id, { ...stored, bracket, provisioningAt })
+    const complete = isComplete(bracket)
+    if (complete) await this.complete(s, t, bracket)
+    return { entry, stop: m.liveMatchId ? [m.liveMatchId] : [], matchId: m.id as string | undefined, complete }
+  }
+
+  private async afterAdminBracket(
+    tournamentId: string,
+    stop: string[],
+    matchId: string | undefined,
+    complete: boolean,
+    reason: string,
+  ) {
+    await this.stopMatches(stop, reason)
+    if (matchId) await this.announce(tournamentId, "match_updated", matchId)
+    else await this.announce(tournamentId, "entries_changed")
+    if (complete) await this.announce(tournamentId, "completed")
+    else await this.provision(tournamentId)
+  }
+
+  private async stopMatches(matchIds: string[], reason: string) {
+    if (!this.d.cancelMatch) return
+    for (const id of matchIds) {
+      try {
+        await this.d.cancelMatch(id, reason)
+      } catch (err) {
+        this.d.log.warn({ err, matchId: id }, "could not cancel tournament match")
+      }
+    }
+  }
+
+  async summaryOf(tournamentId: string): Promise<TournamentSummary> {
+    const t = await this.d.store.getTournament(tournamentId)
+    if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+    const counts = await this.d.store.countEntries([tournamentId])
+    return this.summary(t, counts[tournamentId] ?? 0)
+  }
+
   // Events
 
   private async announce(tournamentId: string, kind: TournamentUpdateKind, bracketMatchId?: string) {
@@ -570,6 +884,25 @@ interface Claim {
   bracketMatchId: string
   claimedAt: number
   params: StartMatchParams
+}
+
+function liveMatchIds(stored: StoredBracket | null): string[] {
+  if (!stored) return []
+  return stored.bracket.matches.flatMap((m) => (m.status === "live" && m.liveMatchId ? [m.liveMatchId] : []))
+}
+
+// Ready series with a disqualified side are settled before anything is provisioned.
+function sweepDisqualified(input: Bracket, entries: Map<string, EntryRecord>): Bracket {
+  const out = (id: string | null) => (id ? !!entries.get(id)?.disqualifiedAt : false)
+  let bracket = input
+  for (;;) {
+    const m = playableMatches(bracket).find((x) => out(x.a) || out(x.b))
+    if (!m) return bracket
+    bracket =
+      out(m.a) && out(m.b)
+        ? forfeit(bracket, m.id, ["a", "b"])
+        : disqualify(bracket, m.id, out(m.a) ? "a" : "b")
+  }
 }
 
 function mean(xs: number[]): number {

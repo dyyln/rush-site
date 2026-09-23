@@ -4,14 +4,21 @@ import {
   allowedModesForParty,
   maxRatingDiffAfter,
   unresolvedConfig,
+  DEFAULT_USER_SETTINGS,
+  QUEUE_ETA_WINDOW_SEC,
+  TRUST_LEVELS,
+  trustAtLeast,
   type Mode,
+  type TrustLevel,
+  type UserSettings,
+  type UserSettingsPatch,
   type QueueModeStatus,
   type QueueStatusPayload,
 } from "@rushsite/shared"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, ne, sql } from "drizzle-orm"
 import type { Redis } from "ioredis"
 import type { Db } from "../../db/client.js"
-import { matchPlayers, matches, queueTickets } from "../../db/schema.js"
+import { matchPlayers, matches, queueTickets, userSettings } from "../../db/schema.js"
 import { ApiError, badRequest, conflict, forbidden } from "../../lib/errors.js"
 import type { PartyService } from "../parties/service.js"
 import type { RatingService } from "../rating/service.js"
@@ -19,6 +26,7 @@ import type { TrustService } from "../trust/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
 import type { CooldownService } from "./cooldowns.js"
 import type { MmTicket } from "./matchmaker.js"
+import { estimateFromTickets, type TicketWait } from "../stats/eta.js"
 
 // Live queue state kept in Redis. Postgres queue_tickets is the durable record
 export type LiveTicket = {
@@ -29,7 +37,17 @@ export type LiveTicket = {
   ratings: Partial<Record<Mode, number>>
   region: string
   enqueuedAt: number
+  // Opponent trust floor. Tickets queued before the setting existed have none and count as new
+  minTrust?: TrustLevel
+  // Each player's trust level when the ticket was queued or requeued
+  trust?: Record<string, TrustLevel>
 }
+
+const trustRank = (level: TrustLevel | undefined) => TRUST_LEVELS.indexOf(level ?? "new")
+export function lowestTrust(levels: TrustLevel[]): TrustLevel {
+  return levels.reduce<TrustLevel>((low, l) => (trustAtLeast(low, l) ? l : low), "trusted")
+}
+const TRUST_ETA_TTL_MS = 15_000
 
 const K = {
   queue: (mode: Mode) => `q:${mode}`,
@@ -47,7 +65,13 @@ const MGET_CHUNK = 1000
 export const MODE_STATS_KEY = "mode_stats:last"
 
 // Figures that are the same for every ticket in a mode
-export type ModeAggregate = { playersInQueue: number; estimatedSec: number | null; matchesInProgress: number }
+export type ModeAggregate = {
+  playersInQueue: number
+  estimatedSec: number | null
+  matchesInProgress: number
+  // ETA of tickets that asked for a stricter opponent floor. Missing buckets fall back to estimatedSec
+  estimatedSecByTrust?: Partial<Record<TrustLevel, number | null>>
+}
 export type QueueAggregate = { at: number; modes: Record<Mode, ModeAggregate> }
 export type RefreshResult = { tickets: number; players: number }
 
@@ -59,17 +83,29 @@ export type QueueOptions = {
 export type ClaimResult = { ok: true } | { ok: false; lost: string[] }
 
 export function toMmTicket(t: LiveTicket, mode: Mode): MmTicket {
-  return { id: t.id, size: t.steamIds.length, rating: t.ratings[mode] ?? 1500, enqueuedAt: t.enqueuedAt, region: t.region }
+  const levels = t.steamIds.map((id) => t.trust?.[id] ?? "new")
+  return {
+    id: t.id,
+    size: t.steamIds.length,
+    rating: t.ratings[mode] ?? 1500,
+    enqueuedAt: t.enqueuedAt,
+    region: t.region,
+    minTrust: trustRank(t.minTrust),
+    trust: trustRank(lowestTrust(levels)),
+  }
 }
 
 export type EtaSource = (mode: Mode) => Promise<number | null>
 // Returns the reason a mode cannot queue, or null when it can
 export type AvailabilitySource = (mode: Mode) => Promise<string | null>
+// Returns false when an admin has closed the mode
+export type ModeGate = (mode: Mode) => Promise<boolean>
 
 export class QueueService {
   private eta: EtaSource | null = null
   private playerHooks: ((steamIds: string[]) => Promise<void>)[] = []
   private availability: AvailabilitySource | null = null
+  private modeGate: ModeGate | null = null
   // Set when the ETA source changes so the next read skips the shared cache
   private aggregateStale = false
   private aggregateInFlight: Promise<QueueAggregate> | null = null
@@ -99,6 +135,66 @@ export class QueueService {
   setEtaSource(source: EtaSource | null): void {
     this.eta = source
     this.aggregateStale = true
+    this.trustEtaCache = null
+  }
+
+  private trustEtaCache: { at: number; value: Map<string, number | null> } | null = null
+
+  // ETA per mode for tickets with a stricter floor. One query for every bucket, cached for a few seconds
+  private async trustEtas(): Promise<Map<string, number | null>> {
+    const now = this.now()
+    if (this.trustEtaCache && now - this.trustEtaCache.at < TRUST_ETA_TTL_MS) return this.trustEtaCache.value
+    const rows = await this.db
+      .select({
+        mode: queueTickets.matchedMode,
+        minTrust: queueTickets.minTrust,
+        matchId: queueTickets.matchId,
+        enqueuedAt: queueTickets.enqueuedAt,
+        matchedAt: queueTickets.updatedAt,
+      })
+      .from(queueTickets)
+      .where(
+        and(
+          eq(queueTickets.status, "matched"),
+          gte(queueTickets.updatedAt, new Date(now - QUEUE_ETA_WINDOW_SEC * 1000)),
+          ne(queueTickets.minTrust, "new"),
+        ),
+      )
+    const buckets = new Map<string, TicketWait[]>()
+    for (const r of rows) {
+      if (!r.mode) continue
+      const key = `${r.mode}:${r.minTrust}`
+      const list = buckets.get(key) ?? []
+      list.push({ matchId: r.matchId, enqueuedAt: r.enqueuedAt.getTime(), matchedAt: r.matchedAt.getTime() })
+      buckets.set(key, list)
+    }
+    const value = new Map([...buckets].map(([k, ws]) => [k, estimateFromTickets(ws)]))
+    this.trustEtaCache = { at: now, value }
+    return value
+  }
+
+  async getSettings(steamId: string): Promise<UserSettings> {
+    const [row] = await this.db.select().from(userSettings).where(eq(userSettings.steamId, steamId))
+    return row ? { minTrust: row.minTrust } : { ...DEFAULT_USER_SETTINGS }
+  }
+
+  // A player cannot ask for opponents trusted above their own level
+  async updateSettings(steamId: string, patch: UserSettingsPatch): Promise<UserSettings> {
+    const next = { ...(await this.getSettings(steamId)), ...patch }
+    if (patch.minTrust) {
+      const own = (await this.trust.levels([steamId]))[steamId] ?? "new"
+      if (!trustAtLeast(own, patch.minTrust)) throw badRequest("min_trust_above_own", `your trust level is ${own}`)
+    }
+    await this.saveMinTrust(steamId, next.minTrust)
+    return next
+  }
+
+  private async saveMinTrust(steamId: string, minTrust: TrustLevel): Promise<void> {
+    const updatedAt = new Date(this.now())
+    await this.db
+      .insert(userSettings)
+      .values({ steamId, minTrust, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.steamId, set: { minTrust, updatedAt } })
   }
 
   // Blocks joins for modes the status page reports as unavailable. The stats module installs it
@@ -106,10 +202,21 @@ export class QueueService {
     this.availability = source
   }
 
+  // Refuses joins for modes an admin closed. The flags module installs it
+  setModeGate(gate: ModeGate | null): void {
+    this.modeGate = gate
+  }
+
   // Joins one or more modes. Joining again while queued adds modes and keeps the original queue time
-  async join(steamId: string, modes: Mode[]): Promise<LiveTicket> {
+  // minTrust omitted means the leader's saved setting, lowered to what the party itself meets
+  async join(steamId: string, modes: Mode[], minTrust?: TrustLevel): Promise<LiveTicket> {
     const wanted = [...new Set(modes)]
     if (wanted.length === 0) throw badRequest("no_modes")
+    if (this.modeGate) {
+      const closed: Mode[] = []
+      for (const m of wanted) if (!(await this.modeGate(m))) closed.push(m)
+      if (closed.length > 0) throw new ApiError(503, "mode_closed", `The queue is closed right now for ${closed.join(", ")}`, { modes: closed })
+    }
     if (!this.opts.allowUnresolvedModes) {
       const blocked = wanted.filter((m) => unresolvedConfig(m).length > 0)
       if (blocked.length > 0) throw new ApiError(503, "mode_unavailable", `not configured yet: ${blocked.join(",")}`)
@@ -136,6 +243,16 @@ export class QueueService {
     }
     if ((await this.inActiveMatch(party.memberSteamIds)).length > 0) throw conflict("in_match")
 
+    const trust = await this.trust.levels(party.memberSteamIds)
+    const partyLow = lowestTrust(party.memberSteamIds.map((id) => trust[id] ?? "new"))
+    if (minTrust && !trustAtLeast(partyLow, minTrust)) {
+      throw badRequest("min_trust_above_own", `the party's lowest trust level is ${partyLow}`)
+    }
+    let floor = minTrust ?? (await this.getSettings(steamId)).minTrust
+    if (!trustAtLeast(partyLow, floor)) floor = partyLow
+    // An explicit choice becomes the saved preference. The party check above already covers the leader
+    if (minTrust) await this.saveMinTrust(steamId, minTrust)
+
     const ratings: Partial<Record<Mode, number>> = {}
     for (const m of wanted) {
       const map = await this.ratings.get(party.memberSteamIds, m)
@@ -148,10 +265,12 @@ export class QueueService {
         ...existing,
         modes: [...new Set([...existing.modes, ...wanted])],
         ratings: { ...existing.ratings, ...ratings },
+        minTrust: floor,
+        trust,
       }
       await this.db
         .update(queueTickets)
-        .set({ modes: merged.modes, ratings: merged.ratings, updatedAt: new Date(this.now()) })
+        .set({ modes: merged.modes, ratings: merged.ratings, minTrust: floor, playerTrust: trust, updatedAt: new Date(this.now()) })
         .where(and(eq(queueTickets.id, existing.id), eq(queueTickets.status, "waiting")))
       await this.putLive(merged)
       await this.assertRoster(merged)
@@ -168,11 +287,13 @@ export class QueueService {
         modes: wanted,
         steamIds: party.memberSteamIds,
         ratings,
+        minTrust: floor,
+        playerTrust: trust,
         enqueuedAt: new Date(enqueuedAt),
       })
       .onConflictDoNothing({ target: queueTickets.partyId, where: sql`status = 'waiting'` })
       .returning({ id: queueTickets.id })
-    if (!row) return this.joinExisting(party.partyId, wanted, ratings)
+    if (!row) return this.joinExisting(party.partyId, wanted, ratings, floor, trust)
     const ticket: LiveTicket = {
       id: row!.id,
       partyId: party.partyId,
@@ -181,6 +302,8 @@ export class QueueService {
       ratings,
       region: "eu",
       enqueuedAt,
+      minTrust: floor,
+      trust,
     }
     await this.putLive(ticket)
     await this.assertRoster(ticket)
@@ -201,7 +324,13 @@ export class QueueService {
   }
 
   // Adds the ticket to the waiting row of another join that won the insert
-  private async joinExisting(partyId: string, wanted: Mode[], ratings: Partial<Record<Mode, number>>): Promise<LiveTicket> {
+  private async joinExisting(
+    partyId: string,
+    wanted: Mode[],
+    ratings: Partial<Record<Mode, number>>,
+    minTrust: TrustLevel,
+    trust: Record<string, TrustLevel>,
+  ): Promise<LiveTicket> {
     const [row] = await this.db
       .select()
       .from(queueTickets)
@@ -216,11 +345,13 @@ export class QueueService {
       ratings: { ...row.ratings, ...ratings },
       region: row.region,
       enqueuedAt: row.enqueuedAt.getTime(),
+      minTrust,
+      trust,
     }
-    if (modes.length !== row.modes.length) {
+    if (modes.length !== row.modes.length || row.minTrust !== minTrust) {
       await this.db
         .update(queueTickets)
-        .set({ modes, ratings: merged.ratings, updatedAt: new Date(this.now()) })
+        .set({ modes, ratings: merged.ratings, minTrust, playerTrust: trust, updatedAt: new Date(this.now()) })
         .where(and(eq(queueTickets.id, row.id), eq(queueTickets.status, "waiting")))
     }
     await this.putLive(merged)
@@ -369,6 +500,10 @@ export class QueueService {
       await this.notifyParty(row.steamIds)
       return
     }
+    // Trust may have changed since the first join, for example after a ban review
+    const trust = await this.trust.levels(row.steamIds)
+    const low = lowestTrust(row.steamIds.map((id) => trust[id] ?? "new"))
+    const minTrust = trustAtLeast(low, row.minTrust) ? row.minTrust : low
     const ticket: LiveTicket = {
       id: row.id,
       partyId: row.partyId,
@@ -377,11 +512,13 @@ export class QueueService {
       ratings: row.ratings,
       region: row.region,
       enqueuedAt: row.enqueuedAt.getTime(),
+      minTrust,
+      trust,
     }
     try {
       await this.db
         .update(queueTickets)
-        .set({ status: "waiting", matchId: null, matchedMode: null, updatedAt: new Date(this.now()) })
+        .set({ status: "waiting", matchId: null, matchedMode: null, minTrust, playerTrust: trust, updatedAt: new Date(this.now()) })
         .where(eq(queueTickets.id, ticketId))
     } catch (err) {
       if (!isUniqueViolation(err)) throw err
@@ -426,12 +563,16 @@ export class QueueService {
     const run = (async () => {
       const sizes = players ?? (await this.sizes())
       const inProgress = await this.matchesInProgress()
+      const byTrust = await this.trustEtas()
       const modes = {} as Record<Mode, ModeAggregate>
       for (const mode of MODES) {
+        const buckets: Partial<Record<TrustLevel, number | null>> = {}
+        for (const level of TRUST_LEVELS) if (byTrust.has(`${mode}:${level}`)) buckets[level] = byTrust.get(`${mode}:${level}`)!
         modes[mode] = {
           playersInQueue: sizes[mode],
           estimatedSec: this.eta ? await this.eta(mode) : null,
           matchesInProgress: inProgress.get(mode) ?? 0,
+          estimatedSecByTrust: buckets,
         }
       }
       const agg: QueueAggregate = { at: this.now(), modes }
@@ -467,10 +608,11 @@ export class QueueService {
       waitSec: Math.floor(waitSec),
       ratingWindow: maxRatingDiffAfter(waitSec),
       playersInQueue: sizes?.[mode] ?? agg.modes[mode]?.playersInQueue ?? 0,
-      estimatedSec: agg.modes[mode]?.estimatedSec ?? null,
+      // A stricter floor uses its own bucket once it has enough samples, otherwise the whole mode
+      estimatedSec: agg.modes[mode]?.estimatedSecByTrust?.[ticket.minTrust ?? "new"] ?? agg.modes[mode]?.estimatedSec ?? null,
       matchesInProgress: agg.modes[mode]?.matchesInProgress ?? 0,
     }))
-    return { state: "queued", partyId: ticket.partyId, modes, cooldownUntil: null }
+    return { state: "queued", partyId: ticket.partyId, modes, cooldownUntil: null, minTrust: ticket.minTrust ?? "new" }
   }
 
   async status(steamId: string): Promise<QueueStatusPayload> {

@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events"
 import { eq } from "drizzle-orm"
 import pino from "pino"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { createAppHarness, createTestDb, startDuel, withServers } from "../../../test/helpers.js"
+import { createAppHarness, createTestDb, startDuel, steamId, withServers } from "../../../test/helpers.js"
 import { matchRounds, matches } from "../../db/schema.js"
 import { signBody } from "../../lib/hmac.js"
 import { LocalHub, MAX_MATCH_SUBSCRIPTIONS } from "../ws/hub.js"
@@ -62,10 +62,10 @@ describe("match pages", () => {
     })
   }
 
-  function spectator(steamId: string | null = null): FakeSocket {
+  function spectator(viewer: string = steamId()): FakeSocket {
     const s = new FakeSocket()
     sockets.push(s)
-    attachSocket(h.ctx, hub, s, steamId, pino({ level: "silent" }))
+    attachSocket(h.ctx, hub, s, viewer, pino({ level: "silent" }))
     return s
   }
 
@@ -138,7 +138,7 @@ describe("match pages", () => {
     expect(match.tournament).toEqual({ id: t!.id, name: "Daily Aim Cup", bracketMatchId: "r1m0", bestOf: 3, gameNumber: 2 })
   })
 
-  it("fans match_update out to subscribers only, signed in or not", async () => {
+  it("fans match_update out to subscribers only", async () => {
     const { matchId } = await startDuel(h)
     const watcher = spectator()
     const bystander = spectator()
@@ -178,13 +178,11 @@ describe("match pages", () => {
     expect(watcher.of("match_update").map((u) => u.payload.status)).toEqual(["cancelled"])
   })
 
-  it("caps subscriptions per socket and keeps spectators read only", async () => {
+  it("caps subscriptions per socket", async () => {
     const s = spectator()
     for (let i = 0; i < MAX_MATCH_SUBSCRIPTIONS + 1; i++) {
       s.message({ type: "subscribe_match", payload: { matchId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}` }, ts: Date.now() })
     }
     expect(s.of("error").map((e) => e.payload.code)).toEqual(["too_many_subscriptions"])
-    s.message({ type: "queue_join", payload: { modes: ["aim1v1"] }, ts: Date.now() })
-    expect(s.of("error").at(-1)!.payload.code).toBe("unauthorized")
   })
 })

@@ -6,6 +6,7 @@ import type { SessionStore } from "../auth/session.js"
 import type { PartyService } from "../parties/service.js"
 import type { QueueService } from "../queue/service.js"
 import type { RatingService, RollbackSummary } from "../rating/service.js"
+import type { BanGate } from "./ban-gate.js"
 import type { TrustService } from "./service.js"
 
 export type BanOptions = {
@@ -25,6 +26,8 @@ export class BanService {
     private readonly sessions: SessionStore,
     private readonly now: () => number,
     private readonly rollbackWindowDays: number,
+    private readonly gate?: BanGate,
+    private readonly disconnect?: (steamId: string, reason: string) => void,
   ) {}
 
   async ban(steamId: string, reason: string, opts: BanOptions = {}): Promise<{ banId: string; rollback: RollbackSummary | null }> {
@@ -40,8 +43,11 @@ export class BanService {
         rollbackFrom: rollback ? from : null,
       })
       .returning({ id: bans.id })
+    // The marker goes first so requests already in flight are refused too
+    await this.gate?.mark(steamId, { reason, until: opts.until ? opts.until.toISOString() : null })
     // Signs the player out everywhere so the ban takes effect at once
     await this.sessions.destroyAll(steamId)
+    this.disconnect?.(steamId, "banned")
     const party = await this.parties.partyOf(steamId)
     if (party) await this.queue.cancelParty(party.partyId, "banned")
     const summary = rollback ? await this.ratings.rollbackCheater(steamId, from) : null
@@ -55,6 +61,7 @@ export class BanService {
       .set({ revokedAt: new Date(this.now()) })
       .where(and(eq(bans.steamId, steamId), isNull(bans.revokedAt)))
       .returning({ id: bans.id })
+    await this.gate?.clear(steamId)
     await this.trust.recompute(steamId)
     return rows.length
   }

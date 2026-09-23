@@ -2,7 +2,7 @@ import type { PartyUpdatePayload } from "@rushsite/shared"
 import { and, asc, eq, inArray, isNull } from "drizzle-orm"
 import { ACTIVE_MATCH_STATUSES } from "@rushsite/shared"
 import type { Db } from "../../db/client.js"
-import { matches, matchPlayers, parties, partyMembers } from "../../db/schema.js"
+import { matches, matchPlayers, parties, partyMembers, trustLevels } from "../../db/schema.js"
 import { randomToken } from "../../lib/hmac.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { UsersService } from "../auth/users.js"
@@ -266,6 +266,14 @@ export class PartyService {
   async payload(info: PartyInfo | null): Promise<PartyUpdatePayload> {
     if (!info) return emptyParty()
     const cards = await this.users.cards(info.memberSteamIds)
+    const trust = new Map(
+      (
+        await this.db
+          .select({ steamId: trustLevels.steamId, level: trustLevels.level })
+          .from(trustLevels)
+          .where(inArray(trustLevels.steamId, info.memberSteamIds))
+      ).map((r) => [r.steamId, r.level]),
+    )
     return {
       partyId: info.partyId,
       leaderSteamId: info.leaderSteamId,
@@ -273,6 +281,7 @@ export class PartyService {
         steamId: id,
         displayName: cards.get(id)?.displayName ?? id,
         avatarUrl: cards.get(id)?.avatarUrl ?? null,
+        trustLevel: trust.get(id) ?? "new",
       })),
       inviteCode: info.inviteToken,
     }

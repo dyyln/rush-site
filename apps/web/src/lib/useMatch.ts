@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { useSession } from "./session";
 import type { MatchDetail, MatchUpdate } from "./types";
+import { useVisibleInterval } from "./useVisibleInterval";
 import { getRealtime } from "./ws";
+
+// Signed out viewers have no socket, so the page polls instead
+export const MATCH_POLL_MS = 5000;
+const OVER = new Set(["finished", "cancelled", "abandoned"]);
 
 function apply(m: MatchDetail, u: MatchUpdate): MatchDetail {
   const rounds =
@@ -20,6 +26,8 @@ function apply(m: MatchDetail, u: MatchUpdate): MatchDetail {
 export function useMatch(id: string) {
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const { user, loading } = useSession();
+  const signedIn = !!user;
 
   useEffect(() => {
     let live = true;
@@ -29,6 +37,13 @@ export function useMatch(id: string) {
       (m) => live && setMatch(m),
       (e: unknown) => live && setError(e instanceof Error ? e : new Error(String(e))),
     );
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!signedIn) return;
     const rt = getRealtime();
     rt.connect();
     const subscribe = () => rt.send("subscribe_match", { matchId: id });
@@ -40,11 +55,22 @@ export function useMatch(id: string) {
       }),
     ];
     return () => {
-      live = false;
       offs.forEach((off) => off());
       rt.send("unsubscribe_match", { matchId: id });
     };
-  }, [id]);
+  }, [id, signedIn]);
+
+  const polling = !loading && !signedIn && !!match && match.id === id && !OVER.has(match.status);
+  useVisibleInterval(
+    () => {
+      api.match(id).then(
+        (m) => setMatch((cur) => (cur && cur.id !== id ? cur : m)),
+        () => undefined,
+      );
+    },
+    MATCH_POLL_MS,
+    polling,
+  );
 
   return { match, error };
 }

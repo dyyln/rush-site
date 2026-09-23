@@ -140,11 +140,12 @@ describe("findMatches at scale", () => {
     findMatches(crowd(500, teamSize, 8), { mode, teamSize, now: NOW })
     let best = Number.POSITIVE_INFINITY
     let proposals = 0
-    // Best of five so a busy machine does not fail the run
+    // CPU time of this process, best of five, so other test files on a busy machine do not fail the run
     for (let i = 0; i < 5; i++) {
-      const t0 = performance.now()
+      const c0 = process.cpuUsage()
       proposals = findMatches(tickets, { mode, teamSize, now: NOW }).length
-      best = Math.min(best, performance.now() - t0)
+      const c = process.cpuUsage(c0)
+      best = Math.min(best, (c.user + c.system) / 1000)
     }
     expect(proposals).toBeGreaterThan(1000)
     expect(best).toBeLessThan(200)

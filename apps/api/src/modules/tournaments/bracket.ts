@@ -2,7 +2,15 @@
 
 export type Side = "a" | "b"
 export type BracketMatchStatus = "pending" | "ready" | "provisioning" | "live" | "done"
-export type Resolution = "played" | "bye" | "walkover" | "forfeit" | "double_forfeit" | "void"
+export type Resolution =
+  | "played"
+  | "bye"
+  | "walkover"
+  | "forfeit"
+  | "double_forfeit"
+  | "void"
+  | "disqualified"
+  | "admin_decision"
 
 export interface GameRecord {
   matchId: string
@@ -275,6 +283,32 @@ export function forfeit(input: Bracket, bracketMatchId: string, losers: Side[]):
   return settle(b)
 }
 
+const OPEN_STATUSES: BracketMatchStatus[] = ["ready", "provisioning", "live"]
+
+// Removes one side from a match that is waiting or being played. The other side advances.
+export function disqualify(input: Bracket, bracketMatchId: string, loser: Side): Bracket {
+  const current = find(input, bracketMatchId)
+  if (!OPEN_STATUSES.includes(current.status)) {
+    throw new BracketError(`${current.id} is ${current.status}, cannot disqualify`)
+  }
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  finish(b, m, loser === "a" ? m.b : m.a, "disqualified")
+  return settle(b)
+}
+
+// An admin names the series winner, for example after a dispute.
+export function decide(input: Bracket, bracketMatchId: string, winner: Side): Bracket {
+  const current = find(input, bracketMatchId)
+  if (!OPEN_STATUSES.includes(current.status)) {
+    throw new BracketError(`${current.id} is ${current.status}, cannot decide`)
+  }
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  finish(b, m, winner === "a" ? m.a : m.b, "admin_decision")
+  return settle(b)
+}
+
 export function finalMatch(b: Bracket): BracketMatch {
   return find(b, matchKey(b.rounds, 0))
 }
@@ -289,9 +323,10 @@ export interface Placements {
   semifinalists: string[]
 }
 
-// A side that lost by forfeit did not show up and earns no placement.
+// A side that lost by forfeit or disqualification earns no placement.
 function loserOf(m: BracketMatch): string | null {
-  if (m.status !== "done" || m.winner === null || m.resolution === "forfeit") return null
+  if (m.status !== "done" || m.winner === null) return null
+  if (m.resolution === "forfeit" || m.resolution === "disqualified") return null
   const loser = m.winner === m.a ? m.b : m.a
   return loser ?? null
 }

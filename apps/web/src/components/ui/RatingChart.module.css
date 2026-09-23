@@ -1,0 +1,169 @@
+.figure {
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.compact {
+  gap: 0;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.change {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.plot {
+  position: relative;
+  width: 100%;
+}
+.svg {
+  display: block;
+  touch-action: pan-y;
+}
+.svg:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+.band {
+  fill: var(--tier-iron);
+  opacity: 0.12;
+}
+.band[data-tier="bronze"] { fill: var(--tier-bronze); }
+.band[data-tier="silver"] { fill: var(--tier-silver); }
+.band[data-tier="gold"] { fill: var(--tier-gold); }
+.band[data-tier="platinum"] { fill: var(--tier-platinum); }
+.band[data-tier="elite"] { fill: var(--tier-elite); }
+.bandLabel {
+  fill: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bound {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+.axis {
+  fill: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 600ms ease-out forwards;
+}
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+.dot {
+  fill: var(--color-accent);
+  stroke: var(--color-surface-1);
+  stroke-width: 2;
+}
+.crosshair {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.tip {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: left 80ms linear;
+}
+.tipValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.tipDate {
+  color: var(--color-text-muted);
+}
+.up { color: var(--color-win); }
+.down { color: var(--color-loss); }
+.empty {
+  font-size: var(--text-sm);
+  padding: var(--space-4) 0;
+  margin: 0;
+}
+.emptyRange {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.data {
+  font-size: var(--text-sm);
+}
+.data summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  min-height: var(--target-min);
+  display: flex;
+  align-items: center;
+  width: fit-content;
+}
+.tableWrap {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tableWrap th,
+.tableWrap td {
+  padding: var(--space-1) var(--space-3);
+  text-align: right;
+  border-bottom: 1px solid var(--color-border);
+}
+.tableWrap th:first-child,
+.tableWrap td:first-child {
+  text-align: left;
+}
+.tableWrap th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+  .draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .tip {
+    transition: none;
+  }
+}

@@ -167,3 +167,6 @@
   background: var(--color-surface-3);
   color: var(--color-text);
 }
+.menuTrust {
+  padding: var(--space-1);
+}

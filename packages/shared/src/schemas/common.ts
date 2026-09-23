@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { TrustLevelSchema } from "./trust.js"
 
 export const SteamId64Schema = z.string().regex(/^\d{17}$/, "expected a 17 digit SteamID64")
 export type SteamId64 = z.infer<typeof SteamId64Schema>
@@ -8,6 +9,8 @@ export const PlayerCardSchema = z.object({
   steamId: SteamId64Schema,
   displayName: z.string(),
   avatarUrl: z.string().nullable(),
+  // Set on party member rows so the web can cap the opponent trust selector
+  trustLevel: TrustLevelSchema.optional(),
 })
 export type PlayerCard = z.infer<typeof PlayerCardSchema>
 

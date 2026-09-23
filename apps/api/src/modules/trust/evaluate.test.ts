@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { evaluateTrust, type TrustInputs } from "./evaluate.js"
+import { evaluateTrust, trustLevels, trustProgress, type TrustInputs } from "./evaluate.js"
 
 const NOW = Date.parse("2026-09-23T12:00:00Z")
 const cfg = { verifiedMinMatches: 5, trustedMinMatches: 150, trustedMinAccountDays: 365, banGraceDays: 1825 }
@@ -58,5 +58,52 @@ describe("evaluateTrust", () => {
   it("drops to New on open flags or a platform ban", () => {
     expect(evaluateTrust(base({}, { openFlags: 1 }), cfg, NOW).level).toBe("new")
     expect(evaluateTrust(base({}, { activeBan: true }), cfg, NOW).level).toBe("new")
+  })
+})
+
+describe("trustProgress", () => {
+  it("counts matches toward Verified with the configured threshold", () => {
+    const p = trustProgress("new", base({}, { completedMatches: 3 }), cfg, NOW)
+    expect(p.next).toBe("verified")
+    expect(p.requirements.find((r) => r.key === "matches")).toEqual({
+      key: "matches",
+      label: "Finish 5 matches without abandoning",
+      met: false,
+      progress: { current: 3, required: 5 },
+    })
+    expect(p.requirements.every((r) => r.key === "matches" || r.met)).toBe(true)
+  })
+
+  it("agrees with the evaluator when every requirement is met", () => {
+    const input = base({}, { completedMatches: 5 })
+    const p = trustProgress("new", input, cfg, NOW)
+    expect(p.requirements.every((r) => r.met)).toBe(true)
+    expect(evaluateTrust(input, cfg, NOW).level).not.toBe("new")
+  })
+
+  it("names the blocker when a ban stops promotion", () => {
+    const vac = { ...cleanBans, VACBanned: true, NumberOfVACBans: 1, DaysSinceLastBan: 30 }
+    const p = trustProgress("new", base({ steamBans: vac }), cfg, NOW)
+    expect(p.blockedBy).toBe("steam_recent_ban")
+    expect(p.requirements.find((r) => r.key === "steam_check")!.met).toBe(false)
+    expect(trustProgress("verified", base(), cfg, NOW, { locked: true }).blockedBy).toBe("admin_locked")
+  })
+
+  it("tracks account age and match count toward Trusted", () => {
+    const young = base({ accountCreatedAt: new Date(NOW - 100 * 86400_000) }, { completedMatches: 40 })
+    const p = trustProgress("verified", young, cfg, NOW)
+    expect(p.next).toBe("trusted")
+    expect(p.requirements.find((r) => r.key === "account_age")).toMatchObject({ met: false, progress: { current: 100, required: 365 } })
+    expect(p.requirements.find((r) => r.key === "matches")).toMatchObject({ met: false, progress: { current: 40, required: 150 } })
+  })
+
+  it("has nothing left at Trusted", () => {
+    expect(trustProgress("trusted", base(), cfg, NOW)).toEqual({ level: "trusted", next: null, requirements: [] })
+  })
+
+  it("puts the live thresholds in the level definitions", () => {
+    const defs = trustLevels({ ...cfg, verifiedMinMatches: 8 })
+    expect(defs.thresholds.verifiedMinMatches).toBe(8)
+    expect(defs.levels[1]!.requirements.find((r) => r.key === "matches")!.required).toBe(8)
   })
 })

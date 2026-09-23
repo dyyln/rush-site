@@ -377,3 +377,106 @@
 .nowrap {
   white-space: nowrap;
 }
+
+/* Admin ops */
+.toggles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.toggleText {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.toggleName {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.badgeIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.charts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+@media (min-width: 1100px) {
+  .charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+@media (min-width: 700px) {
+  .formGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.formWide {
+  grid-column: 1 / -1;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.found {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font: inherit;
+}
+.textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.fieldLabel {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-1);
+}

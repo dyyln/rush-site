@@ -10,6 +10,9 @@ const MAX_DELAY_MS = 15_000;
 // Spreads a mass reconnect after a deploy over a few seconds
 const RECONNECT_JITTER_MS = 3_000;
 
+// Close code the api uses when logout or a ban ends the session
+export const CLOSE_SESSION_ENDED = 4001;
+
 // Replayed after every reconnect because the server forgets them with the socket
 type Subscription = { type: ClientMessageType; payload: unknown };
 
@@ -18,6 +21,10 @@ export class RealtimeClient extends Emitter implements Realtime {
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
+  // Only a signed in session may open the socket
+  private allowed = false;
+  // Called when the api closes the socket because the session ended
+  onSessionEnded: (() => void) | null = null;
   private readonly subscriptions = new Map<string, Subscription>();
   state: ConnectionState = "closed";
 
@@ -25,9 +32,22 @@ export class RealtimeClient extends Emitter implements Realtime {
     super();
   }
 
+  // Opens or drops the socket as the session comes and goes. Wanted connects wait for it
+  setAllowed(on: boolean) {
+    this.allowed = on;
+    if (!on) {
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = null;
+      this.ws?.close();
+      this.ws = null;
+    } else if (this.wanted) {
+      this.connect();
+    }
+  }
+
   connect() {
     this.wanted = true;
-    if (this.ws || typeof window === "undefined") return;
+    if (!this.allowed || this.ws || typeof window === "undefined") return;
     this.setState("connecting");
     const ws = new WebSocket(this.url);
     this.ws = ws;
@@ -37,10 +57,16 @@ export class RealtimeClient extends Emitter implements Realtime {
       this.setState("open");
     };
     ws.onmessage = (ev) => this.handleMessage(ev.data);
-    ws.onclose = () => {
-      this.ws = null;
+    ws.onclose = (ev) => {
+      if (this.ws === ws) this.ws = null;
       this.setState("closed");
-      if (this.wanted) this.scheduleReconnect();
+      if (ev.code === CLOSE_SESSION_ENDED) {
+        // No blind reconnect. The session decides whether to allow the socket again
+        this.allowed = false;
+        this.onSessionEnded?.();
+        return;
+      }
+      if (this.wanted && this.allowed) this.scheduleReconnect();
     };
     ws.onerror = () => ws.close();
   }
@@ -117,6 +143,8 @@ function isKnownType(type: string): boolean {
 }
 
 let singleton: Realtime | null = null;
+let allowed = false;
+let sessionEnded: (() => void) | null = null;
 
 // Drops the socket so the next connect uses the new session cookie
 export function resetRealtime() {
@@ -124,8 +152,23 @@ export function resetRealtime() {
   singleton = null;
 }
 
+// Set by the session once GET /me succeeds, cleared when it fails or the user signs out
+export function setRealtimeAllowed(on: boolean, onEnded?: () => void) {
+  allowed = on;
+  if (onEnded) sessionEnded = onEnded;
+  if (singleton instanceof RealtimeClient) singleton.setAllowed(on);
+}
+
 export function getRealtime(): Realtime {
-  singleton ??= isMock ? new MockRealtime() : new RealtimeClient(wsUrl);
+  if (!singleton) {
+    if (isMock) singleton = new MockRealtime();
+    else {
+      const client = new RealtimeClient(wsUrl);
+      client.onSessionEnded = () => sessionEnded?.();
+      client.setAllowed(allowed);
+      singleton = client;
+    }
+  }
   return singleton;
 }
 

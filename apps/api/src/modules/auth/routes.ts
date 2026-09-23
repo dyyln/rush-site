@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import type { FastifyInstance } from "fastify"
 import { users } from "../../db/schema.js"
-import { unauthorized } from "../../lib/errors.js"
+import { ApiError, unauthorized } from "../../lib/errors.js"
 import { randomToken } from "../../lib/hmac.js"
 import type { AppContext } from "../../context.js"
 import { SESSION_COOKIE, requireUser, sessionIdFrom, setSessionCookie } from "./session.js"
@@ -12,6 +12,8 @@ const LOGIN_COOKIE = "rs_login"
 // Only same site relative paths are allowed as post login targets
 export function safeRedirectPath(p: unknown): string {
   if (typeof p !== "string" || !p.startsWith("/") || p.startsWith("//") || p.includes("\\")) return "/"
+  // Browsers drop tabs and newlines, which would turn /\t/evil into //evil
+  if (/[\u0000-\u001f\u007f]/.test(p) || p.length > 512) return "/"
   return p
 }
 
@@ -69,6 +71,13 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     if (!valid) return fail("signature")
 
     const steamId = check.steamId
+    // A banned player gets no session, only the page that says why and until when
+    const ban = await ctx.banGate.lookup(steamId)
+    if (ban) {
+      req.log.info({ steamId }, "banned player sign in refused")
+      const q = new URLSearchParams({ until: ban.until ?? "", reason: ban.reason })
+      return reply.redirect(`${web}/banned?${q.toString()}`, 302)
+    }
     let summary = null
     let playtime: number | null = null
     try {
@@ -87,12 +96,21 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
 
   app.post("/auth/logout", async (req, reply) => {
     const sid = sessionIdFrom(req)
+    const steamId = sid ? await ctx.sessions.get(sid) : null
     if (sid) await ctx.sessions.destroy(sid)
+    if (steamId) ctx.disconnectUser(steamId, "logged_out")
     reply.clearCookie(SESSION_COOKIE, { path: "/", ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}) })
     return reply.code(204).send()
   })
 
+  app.get("/trust/levels", async () => ctx.trust.levelDefinitions())
+
   app.get("/me", async (req) => {
+    // 403 with the ban so the web can show the banned page
+    const sid = sessionIdFrom(req)
+    const sessionUser = sid ? await ctx.sessions.get(sid) : null
+    const ban = sessionUser ? await ctx.banGate.cached(sessionUser) : null
+    if (ban) throw new ApiError(403, "banned", "this account is banned", ban)
     const steamId = await requireUser(ctx.auth, req)
     const [user] = await ctx.db.select().from(users).where(eq(users.steamId, steamId))
     if (!user) throw unauthorized()
@@ -106,6 +124,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
         region: user.region,
         isAdmin: ctx.isAdmin(steamId),
       },
+      trust: await ctx.trust.progress(steamId),
+      settings: await ctx.queue.getSettings(steamId),
     }
   })
 }
