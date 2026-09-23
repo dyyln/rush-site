@@ -152,3 +152,33 @@ Allocator order: every Hetzner host first. If none has a free slot, wait `SURGE_
 `GET /matches/:id` is public and returns `{ match: { id, mode, mapId, status, driver, startedAt, endedAt, teams: [{ name, score, players: [{ steamId, displayName, avatarUrl, tier, rating, kills, deaths, headshots, damage }] }], rounds: [{ round, winnerTeam, score: Record<team, number>, arena?, endedAt }], tournament?: { id, name, bracketMatchId, bestOf, gameNumber } } }`. Connect info is only included for participants, as `connect: { ip, port, password, connect }`. Signed-out spectators may open /ws and only subscribe.
 Rounds come from `round_end` webhooks stored in `match_rounds`.
 Live: client sends `subscribe_match { matchId }` / `unsubscribe_match { matchId }`; server sends `match_update { matchId, status, teams: [{ name, score }], lastRound?: Round }` on every round_end, match_started, match_end and cancel to subscribers. Anyone may subscribe.
+
+## Feature batch 2 (owners: challenges, match-api, match-web, stats, notify)
+
+Rules for this batch: each owner adds new files under its own folders. Edits to shared web files (SiteHeader, tokens.css, api.ts, ws.ts, types.ts, mock.ts, ws-mock.ts) and to apps/api/src/app.ts and env.ts must be small and additive, never restructuring. New schemas go in packages/shared/src/schemas/<feature>.ts with one export line added to the barrel, and a ws.ts message added only by the owner named below.
+
+### Challenges (owner: challenges) — features 2 rematch, 3 direct challenge links
+Tables: `challenges` (id, mode, created_by, target_steam_id nullable, rematch_of_match_id nullable, code unique, status open|accepted|declined|expired|cancelled, expires_at, match_id nullable).
+REST: `POST /challenges { mode, targetSteamId?, rematchOfMatchId? }` -> `{ challenge, url }`; `GET /challenges/:code`; `POST /challenges/:code/accept` (creates a match that skips queue and accept, runs veto for aim, allocates); `POST /challenges/:code/decline`; `GET /challenges/mine`.
+WS (challenges owner adds): `challenge_update { challenge }` to creator and target.
+Web: `/challenge/[code]` page, "Rematch" button on the finished match page and result toast, "Challenge" on profiles and party friends list.
+
+### Match extras (owner: match-api for plugin+api, match-web for web) — features 7, 8, 10, 11
+Plugin adds `MatchEvent { type: "kill"; round: number; tick: number; attacker: string; victim: string; weapon: string; headshot: boolean; wallbang: boolean; assister?: string }`. API stores in `match_kills`.
+`GET /matches/:id` gains `kills: Kill[]` (only when finished or for participants and spectators after round end), `mvp: { steamId, reason }` computed as highest damage then kills, and `demo: { available: boolean, url?: string, expiresAt?: string }` (presigned GET, 10 minutes, only when demo_uploaded ok).
+`POST /matches/:id/report { steamId, reason: aimbot|wallhack|griefing|other, note? }` -> 201, once per reporter per target per match. Stored in `reports`.
+Details (match-api): schemas are in packages/shared/src/schemas/match-extras.ts. `kills`, `mvp` and `demo` are always present. `mvp` is null until the match is finished, and `reason` is `most_damage` or `most_kills` (kills broke a damage tie). While a match runs, `kills` holds only rounds that have a `round_end`. The plugin skips suicides and world deaths but sends team kills. Report returns 201 `{ report: { id, matchId, steamId, reason, createdAt } }`, 409 `already_reported` on a repeat, 409 `match_not_started`, 403 `not_a_participant` (reporter must have played), 400 `cannot_report_self` or `player_not_in_match`.
+Web: kill feed per round (expandable under each timeline segment), MVP banner and summary on finished matches with per-player rating deltas, "Download demo" and "Watch in CS2" (steam://rungame/730 with playdemo is unreliable, so show the console command), report button with reason picker, share button that copies a link to `/matches/[id]/card` which is an OG image route rendering the score card.
+
+### Stats (owner: stats) — features 1 queue ETA, 20 friends leaderboard, 22 tier distribution, 23 status page
+`QueueModeStatus.estimatedSec` filled from the median wait of matches made in that mode in the last 30 minutes, null when fewer than 3.
+`GET /leaderboard/:mode/friends` -> same shape as the global one, rows limited to Steam friends plus self.
+`GET /leaderboard/:mode/distribution` -> `{ tiers: [{ tier, count, pct }], you?: { tier, percentile } }`.
+`GET /status` (public) -> `{ regions: [{ region, hosts: n, slotsTotal, slotsFree, updating: boolean }], surge: { enabled, active: n }, modes: [{ mode, available: boolean, reason? }], updatedAt }`.
+`GET /matches/live?limit=` (public, default 6, max 24) -> `{ matches: LiveMatch[] }` with `LiveMatch = { id, mode, mapId, status, startedAt, teams: [{ name, score, players: [{ steamId, displayName, avatarUrl }] }], tournament?: { id, name }, topRating? }`. Status ready or live, highest rated first.
+Web: ETA next to the wait timer, Friends tab on the leaderboard, tier distribution bar above the table with your percentile, `/status` page linked from the footer and from any "mode unavailable" state.
+
+### Notify and home (owner: notify) — features 5, 17
+Web only. Settings stored in localStorage (wrapped in try/catch): sound on match found (on by default), browser notifications (opt in via Notification.requestPermission). Play a short bundled sound file under public/sounds on match_found and server_ready. Home page: next cup per mode with a live countdown and an "Entered" state from `GET /tournaments?status=open` plus `myEntryId`, and a "Watch live" list from `GET /matches/live?limit=6` (stats owner adds this endpoint returning MatchSummary rows).
+
+Challenges details (owner: challenges): challenge matches and rematches are unrated (`match_source` = `challenge`), they count toward match history and stats but not rating. Tables carry created_at and updated_at, mode and status are text, no foreign keys. Decline by the creator means withdraw (`cancelled`). Queue cooldowns block accepting a challenge. Max 5 open challenges per player, 10 minute expiry.

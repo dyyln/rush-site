@@ -42,7 +42,8 @@ export function registerRoutes(
       .filter((x): x is TournamentStatus => STATUSES.includes(x as TournamentStatus))
     const mode = MODES.includes(req.query.mode as Mode) ? (req.query.mode as Mode) : undefined
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200)
-    return { tournaments: await service.list({ status, mode, limit }) }
+    const viewer = await authenticate(req)
+    return { tournaments: await service.list({ status, mode, limit }, viewer) }
   })
 
   app.get<IdParams>("/tournaments/:id", async (req) => {

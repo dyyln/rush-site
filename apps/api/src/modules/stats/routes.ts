@@ -25,7 +25,7 @@ export const IN_PROGRESS_STATUSES = ["starting", "ready", "live"] as const
 const HISTORY_POINTS = 200
 const RECENT_MATCHES = 20
 
-const notBanned = sql`not exists (select 1 from ${bans} where ${bans.steamId} = ${ratings.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > now()))`
+export const notBanned = sql`not exists (select 1 from ${bans} where ${bans.steamId} = ${ratings.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > now()))`
 
 export async function modeStats(ctx: AppContext): Promise<ModeStatsPayload> {
   const rows = await ctx.db

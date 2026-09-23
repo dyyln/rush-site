@@ -1,0 +1,115 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.legend {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+.reasons {
+  display: grid;
+  gap: var(--space-2);
+}
+@media (min-width: 520px) {
+  .reasons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.option:hover:not([data-disabled]) {
+  border-color: var(--color-border-strong);
+}
+.option:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+.option:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.option[data-disabled] {
+  cursor: not-allowed;
+  background: var(--color-disabled-surface);
+  border-color: var(--color-disabled-border);
+  color: var(--color-disabled-text);
+}
+.option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+.optionMain {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+.optionText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.optionName {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.optionHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.note {
+  width: 100%;
+  min-height: 88px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  resize: vertical;
+}
+.note:focus-visible {
+  border-color: var(--color-accent);
+}
+.note::placeholder {
+  color: var(--color-text-muted);
+}
+.count {
+  align-self: flex-end;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.error {
+  font-size: var(--text-sm);
+  color: var(--color-loss);
+}
+.fine {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

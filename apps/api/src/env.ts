@@ -44,6 +44,7 @@ export const EnvSchema = z.object({
   FACEIT_API_KEY: optionalString,
 
   RUSHSITE_AGENT_TOKEN: z.string().min(1).default("change-me-dev-agent-token"),
+  // Comma separated agent urls. Prefix one with region= to place it, for example eu=http://10.0.0.2:8080
   AGENT_URLS: csv,
   GSLT_TOKENS: csv,
 

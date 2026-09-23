@@ -70,6 +70,14 @@ export class MemoryTournamentStore implements TournamentStore {
     return out
   }
 
+  async findPlayerEntries(steamId: string, ids: string[]) {
+    const out: Record<string, string> = {}
+    for (const e of this.entries.values()) {
+      if (ids.includes(e.tournamentId) && e.steamIds.includes(steamId)) out[e.tournamentId] = e.id
+    }
+    return out
+  }
+
   async insertEntry(e: Omit<EntryRecord, "id" | "createdAt" | "seed" | "rating">) {
     const row: EntryRecord = {
       ...e,

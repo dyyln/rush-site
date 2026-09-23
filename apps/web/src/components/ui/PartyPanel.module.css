@@ -36,8 +36,31 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--icon-empty);
+}
+.openItem {
+  position: relative;
+}
+.slotButton {
+  width: 100%;
+  min-height: var(--target-min);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.slotButton:hover:not(:disabled),
+.slotButton[aria-expanded="true"] {
+  border-color: var(--color-accent);
+  border-style: solid;
+}
+.slotButton:hover:not(:disabled) .slot,
+.slotButton:focus-visible .slot {
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
+}
+.slotButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 .invite {
   margin-top: var(--space-4);

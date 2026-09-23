@@ -1,6 +1,7 @@
 "use client";
 
 import type { QueueStatusPayload } from "@rushsite/shared";
+import { QueueEta } from "@/components/stats/QueueEta";
 import { Throbber } from "./Throbber";
 import { Timer } from "./Timer";
 import styles from "./QueueStatus.module.css";
@@ -24,6 +25,7 @@ export function QueueStatus({ status, connection = "open", frozen }: QueueStatus
         <span className={styles.item}>
           <Throbber label="Searching" />
           <Timer since={since} frozenSec={frozen ? waitSec : undefined} />
+          <QueueEta modes={status.modes} />
         </span>
       )}
       {status.state === "cooldown" && status.cooldownUntil && (

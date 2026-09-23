@@ -6,7 +6,8 @@ import { trustAtLeast } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { BracketView, entryName } from "@/components/ui/BracketView";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
 import { useToast } from "@/components/ui/Toast";
@@ -108,9 +109,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
               {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
             </div>
           ) : (
-            <ButtonLink href="/login" size="lg">
-              Sign in to enter
-            </ButtonLink>
+            <SignInLink size="lg">Sign in to enter</SignInLink>
           ))}
       </header>
 

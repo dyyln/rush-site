@@ -14,6 +14,9 @@
   --color-disabled-text: #8e9097;
   --color-disabled-text-strong: #b6b8be;
 
+  /* Empty slot icons. Decorative, the count is also in text */
+  --icon-empty: #3a3646;
+
   /* Text */
   --color-text: #ecedef;
   --color-text-muted: #9aa0ab;

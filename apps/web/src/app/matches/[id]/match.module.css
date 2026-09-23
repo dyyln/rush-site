@@ -78,45 +78,6 @@
   min-width: var(--target-min);
   min-height: var(--target-min);
 }
-.sub {
-  font-size: var(--text-lg);
-}
-.timeline {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 var(--space-5);
-  display: flex;
-  gap: 2px;
-}
-.round {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-}
-.seg {
-  display: block;
-  height: 20px;
-  border-radius: 2px;
-}
-.seg[data-side="own"] {
-  background: var(--team-own);
-}
-.seg[data-side="enemy"] {
-  width: 100%;
-  color: var(--team-enemy);
-}
-.defs {
-  position: absolute;
-  color: var(--team-enemy);
-}
-.tick {
-  position: absolute;
-  top: 24px;
-  right: 0;
-  font-size: 10px;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
 .tables {
   display: grid;
   gap: var(--space-5);

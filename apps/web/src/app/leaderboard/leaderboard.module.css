@@ -32,3 +32,30 @@
   border: 1px solid var(--color-loss);
   border-radius: var(--radius-lg);
 }
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+.notice p {
+  margin: 0;
+}
+.note {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-info);
+  border-radius: var(--radius-md);
+  background: var(--color-info-subtle);
+  font-size: var(--text-sm);
+}
+.unranked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}

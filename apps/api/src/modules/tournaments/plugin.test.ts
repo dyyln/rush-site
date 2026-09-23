@@ -203,6 +203,13 @@ describe("sign-up", () => {
     const detail = await h.app.inject({ url: `/tournaments/${id}`, headers: { "x-steam-id": "p1" } })
     expect(detail.json().tournament.myEntryId).toBe(ok.json().entry.id)
     expect(detail.json().tournament.entries[0].name).toBe("N-p1")
+    const rows = (k?: string) =>
+      h.app
+        .inject({ url: "/tournaments", headers: k ? { "x-steam-id": k } : {} })
+        .then((r) => r.json().tournaments[0])
+    expect((await rows("p1")).myEntryId).toBe(ok.json().entry.id)
+    expect((await rows("p9")).myEntryId).toBeNull()
+    expect(await rows()).not.toHaveProperty("myEntryId")
     expect(h.emitted.at(-1)?.payload).toMatchObject({ kind: "entries_changed" })
   })
 

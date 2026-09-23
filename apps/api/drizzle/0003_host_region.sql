@@ -1,0 +1,1 @@
+ALTER TABLE "hosts" ADD COLUMN "region" text DEFAULT 'eu' NOT NULL;

@@ -9,7 +9,13 @@ import type {
   MatchStatus as SharedMatchStatus,
   MatchUpdatePayload,
   BracketView,
+  Kill,
+  MatchDemo as SharedMatchDemo,
+  MatchExtras as SharedMatchExtras,
+  MatchMvp as SharedMatchMvp,
   Mode,
+  MvpReason as SharedMvpReason,
+  ReportReason as SharedReportReason,
   TierId,
   TournamentStatus as SharedTournamentStatus,
   TournamentSummary as SharedTournamentSummary,
@@ -132,5 +138,19 @@ export type MatchStatus = SharedMatchStatus;
 export type MatchPlayer = MatchDetailPlayer;
 export type MatchTeam = MatchDetailTeam;
 export type MatchRound = SharedMatchRound;
-export type MatchDetail = SharedMatchDetail;
+export type MatchDetail = SharedMatchDetail & MatchExtras;
 export type MatchUpdate = MatchUpdatePayload;
+
+// Match extras from GET /matches/:id. Optional so older api responses still render
+export type ReportReason = SharedReportReason;
+export type MatchKill = Kill;
+export type MatchMvp = SharedMatchMvp;
+export type MvpReason = SharedMvpReason;
+export type MatchDemo = SharedMatchDemo;
+
+export type MatchExtras = Partial<SharedMatchExtras> & {
+  // Per player rating change once the match is rated. Keyed by steamId. Not in the contract yet
+  ratingDeltas?: Record<string, number>;
+  // steamIds the signed-in viewer already reported in this match
+  viewerReported?: string[];
+};

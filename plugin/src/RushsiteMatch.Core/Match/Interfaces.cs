@@ -21,6 +21,16 @@ public interface IGameServer
     string? DetectRushArena();
 }
 
+// What the plugin reads from player_death. Ids are null for bots, the world and unknown players.
+public sealed record DeathInfo(
+    string? Attacker,
+    string? Victim,
+    string? Assister,
+    string? Weapon,
+    bool Headshot,
+    int Penetrated,
+    int Tick);
+
 public interface IClock
 {
     DateTimeOffset UtcNow { get; }

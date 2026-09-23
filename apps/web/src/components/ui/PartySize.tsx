@@ -13,9 +13,9 @@ export function PersonIcon({ className, outline }: { className?: string; outline
 }
 
 type PartySizeProps = {
-  // Icons in the normal colour
+  // Icons in the text colour
   count: number;
-  // Dim icons after count, up to this total
+  // Grey icons after count, up to this total
   capacity?: number;
   // Loss coloured icons after the rest, for members over the limit
   overflow?: number;
@@ -31,7 +31,7 @@ export function PartySize({ count, capacity = count, overflow = 0, label }: Part
         <PersonIcon key={`c${i}`} />
       ))}
       {Array.from({ length: empty }, (_, i) => (
-        <PersonIcon key={`e${i}`} className={styles.empty} outline />
+        <PersonIcon key={`e${i}`} className={styles.empty} />
       ))}
       {Array.from({ length: overflow }, (_, i) => (
         <PersonIcon key={`o${i}`} className={styles.over} />

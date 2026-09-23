@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BRAND_NAME } from "@rushsite/shared";
-import { Avatar } from "@/components/ui/Avatar";
+import { SignInLink } from "@/components/ui/SignInLink";
 import { Logo } from "@/components/ui/Logo";
+import { NotifyMenu } from "@/components/notify/NotifyMenu";
 import { useSession } from "@/lib/session";
+import { UserMenu } from "./UserMenu";
 import styles from "./SiteHeader.module.css";
 
 const NAV = [
@@ -58,20 +60,15 @@ export function SiteHeader() {
               );
             })}
             <li>
+              <NotifyMenu />
+            </li>
+            <li>
               {user ? (
-                <Link
-                  href={`/profile/${user.steamId}`}
-                  className={`${styles.link} ${styles.me}`}
-                  aria-current={pathname === `/profile/${user.steamId}` ? "page" : undefined}
-                  onClick={() => setOpen(false)}
-                >
-                  <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
-                  <span>{user.displayName}</span>
-                </Link>
+                <UserMenu user={user} onNavigate={() => setOpen(false)} />
               ) : (
-                <Link href="/login" className={`${styles.link} ${styles.signIn}`} onClick={() => setOpen(false)}>
+                <SignInLink plain className={`${styles.link} ${styles.signIn}`} onClick={() => setOpen(false)}>
                   Sign in
-                </Link>
+                </SignInLink>
               )}
             </li>
           </ul>

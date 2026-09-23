@@ -61,6 +61,8 @@ export const MatchDetailSchema = z.object({
   endedAt: IsoDateSchema.nullable(),
   teams: z.array(MatchDetailTeamSchema),
   rounds: z.array(MatchRoundSchema),
+  // Challenges and rematches. No rating change
+  unrated: z.boolean().optional(),
   tournament: z
     .object({
       id: UuidSchema,

@@ -44,6 +44,8 @@ public sealed class MatchController
     private readonly Dictionary<string, int> _teamScore;
 
     private int _round;
+    // True from round_end until the next round starts. Kills in that gap belong to the round that just ended.
+    private bool _betweenRounds;
     private string? _currentArena;
     private bool _started;
     private bool _recording;
@@ -311,6 +313,7 @@ public sealed class MatchController
         Phase = MatchPhase.Live;
         _stats.Reset();
         _round = 0;
+        _betweenRounds = false;
         _sink.Enqueue(new MatchStarted());
     }
 
@@ -323,8 +326,14 @@ public sealed class MatchController
         _recording = true;
     }
 
+    public void OnRoundStart()
+    {
+        _betweenRounds = false;
+    }
+
     public void OnRoundFreezeEnd(bool isWarmup)
     {
+        _betweenRounds = false;
         if (IsRush)
         {
             if (!isWarmup) OnRushMatchLive();
@@ -337,6 +346,7 @@ public sealed class MatchController
         if (Phase != MatchPhase.Live || gameCommencing || isWarmup) return;
         RefreshSides();
         _round++;
+        _betweenRounds = true;
 
         var winnerTeam = _sides.TeamOnSide(winner);
         if (winnerTeam is not null) _teamScore[winnerTeam]++;
@@ -372,10 +382,29 @@ public sealed class MatchController
         FinishMatch("cs_win_panel_match");
     }
 
-    public void OnPlayerDeath(string? attacker, string? victim, bool headshot)
+    public void OnPlayerDeath(DeathInfo d)
     {
-        if (Phase != MatchPhase.Live || victim is null) return;
-        _stats.RecordDeath(attacker, victim, headshot);
+        if (Phase != MatchPhase.Live || d.Victim is null) return;
+        _stats.RecordDeath(d.Attacker, d.Victim, d.Headshot);
+        EmitKill(d);
+    }
+
+    // Only frags between two match players are sent. Suicides and world deaths are left out.
+    // Team kills are sent. The API can tell them apart by team.
+    private void EmitKill(DeathInfo d)
+    {
+        var attacker = d.Attacker;
+        var victim = d.Victim!;
+        if (attacker is null || attacker == victim) return;
+        if (!_cfg.IsAllowed(attacker) || !_cfg.IsAllowed(victim)) return;
+        var assister = d.Assister;
+        if (assister is not null && (assister == attacker || assister == victim || !_cfg.IsAllowed(assister))) assister = null;
+        var round = _betweenRounds ? _round : _round + 1;
+        var weapon = string.IsNullOrWhiteSpace(d.Weapon) ? "unknown" : d.Weapon.Trim();
+        _sink.Enqueue(new Kill(round, Math.Max(0, d.Tick), attacker, victim, weapon, d.Headshot, d.Penetrated > 0)
+        {
+            Assister = assister,
+        });
     }
 
     public void OnPlayerHurt(string? attacker, string? victim, int healthDamage)

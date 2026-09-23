@@ -42,6 +42,7 @@ import { toUsers, type Notifier } from "../ws/hub.js"
 import { resolveAbandon, resolveAccept, type AcceptOutcome } from "./accept.js"
 import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
+import { storeKill } from "./extras.js"
 import { demoKey } from "./storage.js"
 
 type MatchRow = typeof matches.$inferSelect
@@ -221,6 +222,40 @@ export class MatchFlow {
       await this.d.allocator.release(matchId, "hetzner", false)
       throw err
     }
+    await this.afterPostAccept(matchId, next)
+    return { matchId }
+  }
+
+  // Challenge path. Skips queue and accept, then runs the usual veto and allocation
+  async createDirectMatch(params: {
+    mode: Mode
+    teams: [{ name: string; steamIds: string[] }, { name: string; steamIds: string[] }]
+  }): Promise<{ matchId: string }> {
+    const matchId = randomUUID()
+    if (!this.d.options.allowUnresolvedModes && unresolvedConfig(params.mode).length > 0) {
+      throw new Error(`mode ${params.mode} is not configured yet`)
+    }
+    const rosters: TeamRosterJson[] = params.teams.map((t) => ({ name: t.name, steamIds: [...t.steamIds] }))
+    const next = await this.tx(async (tx) => {
+      const [m] = await tx
+        .insert(matches)
+        .values({
+          id: matchId,
+          mode: params.mode,
+          status: "allocating",
+          source: "challenge",
+          teams: rosters,
+          webhookSecret: randomToken(32),
+          password: randomPassword(),
+          createdAt: new Date(this.now()),
+        })
+        .returning()
+      await tx.insert(matchPlayers).values(
+        rosters.flatMap((t, idx) => t.steamIds.map((steamId) => ({ matchId, steamId, team: idx, accepted: true }))),
+      )
+      return this.enterPostAccept(tx, m!)
+    })
+    this.d.events?.emit("match", { event: "match_found", matchId, mode: params.mode, teams: rosters, source: "challenge" })
     await this.afterPostAccept(matchId, next)
     return { matchId }
   }
@@ -493,6 +528,11 @@ export class MatchFlow {
       if (TERMINAL.has(m.status)) await this.teardown(matchId)
       return
     }
+    // Kills are frequent so they stay out of the admin event log
+    if (event.type === "kill") {
+      if (!TERMINAL.has(m.status)) await storeKill(this.d.db, matchId, event)
+      return
+    }
     this.d.events?.record({ kind: "webhook", type: event.type, message: TERMINAL.has(m.status) ? `ignored, match is ${m.status}` : "accepted", matchId, ok: true, detail: event })
     if (TERMINAL.has(m.status)) return
     const db = this.d.db
@@ -629,6 +669,7 @@ export class MatchFlow {
                 mode: m.mode,
                 teams: [m.teams[0]!.steamIds, m.teams[1]!.steamIds],
                 scoreA: winnerIdx === 0 ? 1 : 0,
+                source: m.source,
               },
               tx,
             )
@@ -705,6 +746,7 @@ export class MatchFlow {
             scoreA: outcome.loserTeam === 0 ? 0 : 1,
             forfeiters: outcome.forfeiters,
             exclude: loserTeammates,
+            source: m.source,
           },
           tx,
         )

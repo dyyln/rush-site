@@ -17,6 +17,7 @@ import {
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
 export { adminAudit } from "../modules/admin/schema.js"
 export { badges, bracketMatches, brackets, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
+export { challenges } from "../modules/challenges/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()
@@ -37,7 +38,7 @@ export const matchStatusEnum = pgEnum("match_status", [
   "abandoned",
   "cancelled",
 ])
-export const matchSourceEnum = pgEnum("match_source", ["queue", "tournament"])
+export const matchSourceEnum = pgEnum("match_source", ["queue", "tournament", "challenge"])
 export const hostStatusEnum = pgEnum("host_status", ["online", "offline", "updating", "draining"])
 export const slotStatusEnum = pgEnum("slot_status", ["free", "reserved", "running"])
 export const gsltStatusEnum = pgEnum("gslt_status", ["free", "in_use", "invalid"])
@@ -238,6 +239,29 @@ export const matchRounds = pgTable(
   (t) => [primaryKey({ columns: [t.matchId, t.round] })],
 )
 
+// Kills from the plugin kill event. One row per victim per tick so webhook replays are ignored
+export const matchKills = pgTable(
+  "match_kills",
+  {
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    round: integer("round").notNull(),
+    tick: integer("tick").notNull(),
+    attackerSteamId: steamId("attacker_steam_id").notNull(),
+    victimSteamId: steamId("victim_steam_id").notNull(),
+    assisterSteamId: steamId("assister_steam_id"),
+    weapon: text("weapon").notNull(),
+    headshot: boolean("headshot").notNull(),
+    wallbang: boolean("wallbang").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.matchId, t.round, t.tick, t.victimSteamId] }),
+    index("match_kills_attacker_idx").on(t.attackerSteamId),
+  ],
+)
+
 // Veto state is the shared VetoState JSON
 export const vetoes = pgTable("vetoes", {
   matchId: uuid("match_id")
@@ -305,6 +329,8 @@ export const hosts = pgTable("hosts", {
   name: text("name").notNull(),
   agentUrl: text("agent_url").notNull().unique(),
   publicIp: text("public_ip"),
+  // Set from AGENT_URLS entries written as region=url
+  region: text("region").notNull().default("eu"),
   status: hostStatusEnum("status").notNull().default("offline"),
   cs2Version: text("cs2_version"),
   totalSlots: integer("total_slots").notNull().default(0),
@@ -404,20 +430,25 @@ export const bans = pgTable(
   (t) => [index("bans_user_idx").on(t.steamId)],
 )
 
-export const reports = pgTable("reports", {
-  id: id(),
-  reporterSteamId: steamId("reporter_steam_id")
-    .notNull()
-    .references(() => users.steamId),
-  reportedSteamId: steamId("reported_steam_id")
-    .notNull()
-    .references(() => users.steamId),
-  matchId: uuid("match_id"),
-  reason: text("reason").notNull(),
-  detail: text("detail"),
-  status: reportStatusEnum("status").notNull().default("open"),
-  createdAt: createdAt(),
-})
+export const reports = pgTable(
+  "reports",
+  {
+    id: id(),
+    reporterSteamId: steamId("reporter_steam_id")
+      .notNull()
+      .references(() => users.steamId),
+    reportedSteamId: steamId("reported_steam_id")
+      .notNull()
+      .references(() => users.steamId),
+    matchId: uuid("match_id"),
+    reason: text("reason").notNull(),
+    detail: text("detail"),
+    status: reportStatusEnum("status").notNull().default("open"),
+    createdAt: createdAt(),
+  },
+  // One report per reporter per target per match. Rows without a match are not limited
+  (t) => [uniqueIndex("reports_once_per_match_idx").on(t.reporterSteamId, t.reportedSteamId, t.matchId)],
+)
 
 export const cooldowns = pgTable(
   "cooldowns",

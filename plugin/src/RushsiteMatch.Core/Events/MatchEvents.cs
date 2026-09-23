@@ -31,6 +31,20 @@ public sealed record MatchEnd(
     IReadOnlyList<PlayerStats> Players,
     bool DemoUploaded) : MatchEvent("match_end");
 
+// One frag. Round is the round it happened in, counting from 1. Tick is the server tick.
+public sealed record Kill(
+    int Round,
+    int Tick,
+    string Attacker,
+    string Victim,
+    string Weapon,
+    bool Headshot,
+    bool Wallbang) : MatchEvent("kill")
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Assister { get; init; }
+}
+
 public sealed record MatchAbandoned(string Reason, IReadOnlyList<string> MissingSteamIds) : MatchEvent("match_abandoned");
 
 // Sent once the demo upload after match_end or match_abandoned finishes.

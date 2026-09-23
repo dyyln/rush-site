@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Chakra_Petch, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { BRAND_NAME } from "@rushsite/shared";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { ChallengeInbox } from "@/components/challenges/ChallengeInbox";
+import { NotifyListener } from "@/components/notify/NotifyListener";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SessionProvider } from "@/lib/session";
 import "@/styles/globals.css";
@@ -26,6 +29,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  // Makes Open Graph image URLs absolute
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3107"),
   title: { default: BRAND_NAME, template: `%s | ${BRAND_NAME}` },
   description: "Competitive 1v1 Aim, 2v2 Aim and 3v3 Rush for CS2. Queue, climb the ladder, enter cups.",
 };
@@ -46,7 +51,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SessionProvider>
           <ToastProvider>
             <SiteHeader />
+            <ChallengeInbox />
+            <NotifyListener />
             <main id="main">{children}</main>
+            <SiteFooter />
           </ToastProvider>
         </SessionProvider>
       </body>

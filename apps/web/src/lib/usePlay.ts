@@ -14,6 +14,8 @@ import type {
   VetoStatePayload,
 } from "@rushsite/shared";
 import { api } from "./api";
+import { isMock } from "./env";
+import type { MatchDetail } from "./types";
 import { getRealtime, type ConnectionState } from "./ws";
 
 export type MatchCancelled = MatchCancelledPayload;
@@ -26,6 +28,8 @@ export type MatchPhase =
   | { phase: "found"; found: MatchFoundPayload; responded: boolean }
   | { phase: "veto"; veto: VetoStatePayload }
   | { phase: "ready"; server: ServerReadyPayload; veto: VetoStatePayload | null }
+  // Server is being allocated. Seen on load, for example right after a challenge is accepted
+  | { phase: "starting"; matchId: string; mode: Mode }
   | { phase: "result"; result: MatchResultPayload };
 
 const IDLE: QueueStatusPayload = { state: "idle", partyId: null, modes: [], cooldownUntil: null };
@@ -45,7 +49,11 @@ export function usePlay(notices: Notices = {}) {
   useEffect(() => {
     rt.connect();
     const offs = [
-      rt.onState(setConnection),
+      rt.onState((s) => {
+        setConnection(s);
+        // The server only broadcasts stats on change, so take a fresh snapshot after every reconnect
+        if (s === "open") loadStats();
+      }),
       rt.on("queue_status", setQueue),
       rt.on("party_update", setParty),
       rt.on("mode_stats", setStats),
@@ -65,10 +73,28 @@ export function usePlay(notices: Notices = {}) {
     ];
     setConnection(rt.state);
     let live = true;
-    api.modeStats().then(
-      (s) => live && setStats((cur) => cur ?? s),
-      () => {},
-    );
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // Retries until it succeeds. A failed first load used to leave the cards blank for good
+    function loadStats() {
+      clearTimeout(retry);
+      api.modeStats().then(
+        (s) => live && setStats(s),
+        () => {
+          if (live) retry = setTimeout(loadStats, 5000);
+        },
+      );
+    }
+    loadStats();
+    // No WS message covers allocation, so ask once on load. Live messages win over this answer
+    if (!isMock) {
+      api.get<{ match: MatchDetail | null }>("/matches/current").then(
+        ({ match: cur }) => {
+          if (!live || !cur || (cur.status !== "allocating" && cur.status !== "starting")) return;
+          setMatch((m) => (m.phase === "none" ? { phase: "starting", matchId: cur.id, mode: cur.mode } : m));
+        },
+        () => {},
+      );
+    }
     Promise.allSettled([api.queueStatus(), api.party.get()]).then(([q, p]) => {
       if (!live) return;
       if (q.status === "fulfilled") setQueue(q.value);
@@ -77,6 +103,7 @@ export function usePlay(notices: Notices = {}) {
     });
     return () => {
       live = false;
+      clearTimeout(retry);
       offs.forEach((off) => off());
     };
   }, [rt]);

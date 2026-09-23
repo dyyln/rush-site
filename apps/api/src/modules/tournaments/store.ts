@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, lte, sql } from "drizzle-orm"
+import { and, arrayContains, asc, count, eq, inArray, lte, sql } from "drizzle-orm"
 import type { Bracket, BracketMatch, Resolution } from "./bracket.js"
 import type { CupFormat } from "./config.js"
 import { badges, bracketMatches, brackets, tournamentEntries, tournaments } from "./schema.js"
@@ -66,6 +66,8 @@ export interface TournamentStore {
   updateTournament(id: string, patch: Partial<TournamentRecord>): Promise<void>
   listEntries(tournamentId: string): Promise<EntryRecord[]>
   countEntries(tournamentIds: string[]): Promise<Record<string, number>>
+  // Entry id per tournament for one player.
+  findPlayerEntries(steamId: string, tournamentIds: string[]): Promise<Record<string, string>>
   insertEntry(e: Omit<EntryRecord, "id" | "createdAt" | "seed" | "rating">): Promise<EntryRecord>
   deleteEntries(ids: string[]): Promise<void>
   updateEntrySeeds(rows: { id: string; seed: number; rating: number }[]): Promise<void>
@@ -192,6 +194,23 @@ export class DrizzleTournamentStore implements TournamentStore {
       .where(inArray(tournamentEntries.tournamentId, tournamentIds))
       .groupBy(tournamentEntries.tournamentId)
     return Object.fromEntries(rows.map((r) => [r.id, Number(r.n)]))
+  }
+
+  async findPlayerEntries(
+    steamId: string,
+    tournamentIds: string[],
+  ): Promise<Record<string, string>> {
+    if (tournamentIds.length === 0) return {}
+    const rows = await this.db
+      .select({ id: tournamentEntries.id, tournamentId: tournamentEntries.tournamentId })
+      .from(tournamentEntries)
+      .where(
+        and(
+          inArray(tournamentEntries.tournamentId, tournamentIds),
+          arrayContains(tournamentEntries.steamIds, [steamId]),
+        ),
+      )
+    return Object.fromEntries(rows.map((r) => [r.tournamentId, r.id]))
   }
 
   async insertEntry(

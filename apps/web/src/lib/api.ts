@@ -1,13 +1,16 @@
 import type { Mode, ModeStatsPayload, PartyUpdatePayload, QueueStatusPayload } from "@rushsite/shared";
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
+import { mockSignedIn, setMockSignedIn } from "./mock-session";
 import { getRealtime } from "./ws";
 import { mockMatchDetail } from "./mock-match";
 import { MockRealtime, mockModeStats } from "./ws-mock";
+import { challengeApi } from "@/components/challenges/api";
 import type {
   Leaderboard,
   MatchDetail,
   Profile,
+  ReportReason,
   TournamentDetail,
   TournamentStatus,
   TournamentSummary,
@@ -61,12 +64,21 @@ async function mocked<T>(value: T | null, what = "Not found"): Promise<T> {
   return structuredClone(value);
 }
 
+// Only same site paths are allowed as a return target
+export function safeReturnTo(v: string | null | undefined): string {
+  return v && v.startsWith("/") && !v.startsWith("//") ? v : "/play";
+}
+
+// Where a sign in link points. Mock mode goes through /login which fakes the session
 export function steamLoginUrl(returnTo = "/play"): string {
-  if (isMock) return returnTo;
-  return buildUrl("/auth/steam", { returnTo });
+  const target = safeReturnTo(returnTo);
+  if (isMock) return `/login?returnTo=${encodeURIComponent(target)}`;
+  return buildUrl("/auth/steam", { returnTo: target });
 }
 
 export const api = {
+  challenges: challengeApi((method, path, body) => request(method, path, { body })),
+
   // Generic calls for pages without a dedicated helper
   get: <T>(path: string, query?: Query) => request<T>("GET", path, { query }),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, { body }),
@@ -76,7 +88,7 @@ export const api = {
 
   // Returns null when signed out
   async me(): Promise<User | null> {
-    if (isMock) return mocked(mock.MOCK_ME);
+    if (isMock) return mocked(typeof window !== "undefined" && !mockSignedIn() ? null : mock.MOCK_ME);
     try {
       const res = await request<{ user: User } | User>("GET", "/me");
       return "user" in res ? res.user : res;
@@ -87,7 +99,7 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    if (isMock) return;
+    if (isMock) return setMockSignedIn(false);
     await request("POST", "/auth/logout");
   },
 
@@ -107,6 +119,11 @@ export const api = {
     async leave(): Promise<void> {
       if (isMock) return;
       await request("POST", "/parties/leave");
+    },
+    // In-site invite to a registered player. Route is not in the api yet
+    async inviteUser(steamId: string): Promise<void> {
+      if (isMock) return void (await delay());
+      await request("POST", `/parties/invite/${steamId}`);
     },
     async kick(steamId: string): Promise<void> {
       if (isMock) return;
@@ -130,6 +147,12 @@ export const api = {
   async match(id: string): Promise<MatchDetail> {
     if (isMock) return mocked(/^[0-9a-f-]{36}$/i.test(id) ? mockMatchDetail(id) : null, "Match not found");
     return (await request<{ match: MatchDetail }>("GET", `/matches/${id}`)).match;
+  },
+
+  // 409 means this viewer already reported that player in this match
+  async reportPlayer(matchId: string, body: { steamId: string; reason: ReportReason; note?: string }): Promise<void> {
+    if (isMock) return void (await delay(400));
+    await request("POST", `/matches/${matchId}/report`, { body });
   },
 
   async leaderboard(mode: Mode, opts: { offset?: number; limit?: number } = {}): Promise<Leaderboard> {

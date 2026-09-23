@@ -1,10 +1,13 @@
 // Mock match pages. One live match that gains a round every few seconds, the rest finished
 import { AIM_MAPS, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode } from "@rushsite/shared";
 import { MOCK_TOURNAMENT_IDS, mockUser } from "./mock";
+import { mockMatchExtras } from "./mock-match-extras";
 import type { MatchDetail, MatchPlayer, MatchRound, MatchTeam } from "./types";
 
 export const MOCK_LIVE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a1";
 export const MOCK_DONE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000b2";
+// Finished with the viewer playing and no demo uploaded
+export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
 
 export const MOCK_ROUND_MS = 3000;
 
@@ -76,7 +79,7 @@ function players(mode: Mode, seed: number, offset: number, rounds: number, meFir
 }
 
 // meOnB puts the mock viewer on the second team to show own and enemy colours
-function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number, meOnB = false): MatchDetail {
+function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number, meOnB = false, demo = true): MatchDetail {
   const plan = playOut(mode, seed);
   const n = roundsPlayed === null ? plan.winners.length : Math.min(roundsPlayed, plan.winners.length);
   const names = mode === "aim1v1" ? [mockUser(1).displayName, mockUser(meOnB ? 0 : 11).displayName] : ["Team A", "Team B"];
@@ -99,7 +102,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
     score: score[name]!,
     players: players(mode, seed, i * 10, n, meOnB && i === 1),
   }));
-  return {
+  const base: MatchDetail = {
     id,
     mode,
     mapId,
@@ -110,6 +113,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
     teams,
     rounds,
   };
+  return { ...base, ...mockMatchExtras(base, seed, { demo }) };
 }
 
 export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
@@ -124,10 +128,11 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
     };
   }
   if (id === MOCK_DONE_MATCH_ID) return build(id, "rush3v3", RUSH_MAP.id, 7, null, now - 3 * 3_600_000);
+  if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);
   const seed = hash(id);
   const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];
   const hint = MOCK_MATCH_HINTS.get(id);
   const mode = hint?.mode ?? modes[seed % 3]!;
   const mapId = hint?.mapId ?? (mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[seed % AIM_MAPS.length]!.id);
-  return build(id, mode, mapId, seed, null, now - (seed % 72) * 3_600_000);
+  return build(id, mode, mapId, seed, null, now - (seed % 72) * 3_600_000, false, seed % 4 !== 0);
 }

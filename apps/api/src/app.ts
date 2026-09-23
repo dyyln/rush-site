@@ -8,12 +8,14 @@ import { ApiError } from "./lib/errors.js"
 import type { AdminEventKind } from "./lib/event-log.js"
 import { withLock } from "./lib/redis.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
+import challengesPlugin from "./modules/challenges/index.js"
 import { createSurgeDriver } from "./modules/match/dathost.js"
 import { registerMatchRoutes } from "./modules/match/routes.js"
 import { registerPartyRoutes } from "./modules/parties/routes.js"
 import { matchmakeAll } from "./modules/queue/loop.js"
 import { registerQueueRoutes } from "./modules/queue/routes.js"
 import type { LiveTicket } from "./modules/queue/service.js"
+import { registerStatsFeatures } from "./modules/stats/features.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { LocalHub, type Audience } from "./modules/ws/hub.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
@@ -85,7 +87,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   registerQueueRoutes(app, ctx)
   registerMatchRoutes(app, ctx)
   registerStatsRoutes(app, ctx)
+  registerStatsFeatures(app, ctx)
   registerWsRoutes(app, ctx, hub)
+  await app.register(challengesPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
 
   if (opts.plugins?.tournaments !== false) {
     const tournamentsPlugin = await optionalPlugin(app, "./modules/tournaments/index.js")

@@ -1,7 +1,11 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
 .home {
   padding-top: var(--space-8);
   max-width: 760px;
-  margin-left: 0;
 }
 .title {
   font-size: var(--text-3xl);

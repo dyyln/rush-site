@@ -112,6 +112,20 @@ export class MockRealtime extends Emitter implements Realtime {
     return true;
   }
 
+  // Challenge flows. A challenge match skips queue and accept and goes straight to the veto
+  startChallengeMatch(mode: Mode): string {
+    this.clear();
+    this.mode = mode;
+    this.queued = [];
+    this.emit("queue_status", this.snapshot());
+    this.later(1200, () => this.afterAccept(mode));
+    return MATCH_ID;
+  }
+
+  emitChallenge(payload: PayloadOf<ServerMessage, "challenge_update">) {
+    this.emit("challenge_update", payload);
+  }
+
   private emit<T extends ServerMessageType>(type: T, payload: PayloadOf<ServerMessage, T>) {
     this.dispatch({ type, payload, ts: Date.now() } as ServerMessage);
   }

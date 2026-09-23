@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { resetRealtime } from "./ws";
 import type { User } from "./types";
 
 type Session = { user: User | null; loading: boolean; refresh: () => void; signOut: () => Promise<void> };
@@ -28,8 +29,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(refresh, [refresh]);
 
   const signOut = useCallback(async () => {
-    await api.logout();
-    setUser(null);
+    try {
+      await api.logout();
+    } finally {
+      setUser(null);
+      resetRealtime();
+    }
   }, []);
 
   return <SessionContext.Provider value={{ user, loading, refresh, signOut }}>{children}</SessionContext.Provider>;

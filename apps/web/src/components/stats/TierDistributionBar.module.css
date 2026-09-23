@@ -1,0 +1,133 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+.placeholder {
+  min-height: 132px;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+}
+.title span {
+  margin-left: var(--space-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.you {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.you strong {
+  font-family: var(--font-mono);
+  color: var(--color-accent-hover);
+}
+.barArea {
+  position: relative;
+  padding-top: var(--space-5);
+}
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--color-surface-3);
+}
+.empty {
+  flex: 1;
+}
+.segment {
+  --tier-color: var(--tier-iron);
+  flex-basis: 0;
+  min-width: 3px;
+  background: var(--tier-color);
+  opacity: 0.7;
+}
+.segment[data-current="true"] {
+  opacity: 1;
+}
+.marker {
+  position: absolute;
+  top: 0;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--color-text);
+}
+.markerLabel {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+}
+.legend li {
+  --tier-color: var(--tier-iron);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.legendName {
+  color: var(--tier-color);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.legendCurrent .legendName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--tier-color);
+}
+.tiered[data-tier="iron"] { --tier-color: var(--tier-iron); }
+.tiered[data-tier="bronze"] { --tier-color: var(--tier-bronze); }
+.tiered[data-tier="silver"] { --tier-color: var(--tier-silver); }
+.tiered[data-tier="gold"] { --tier-color: var(--tier-gold); }
+.tiered[data-tier="platinum"] { --tier-color: var(--tier-platinum); }
+.tiered[data-tier="elite"] { --tier-color: var(--tier-elite); }
+.ranksLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  margin-left: auto;
+  color: var(--color-accent-hover);
+  font-size: var(--text-sm);
+}

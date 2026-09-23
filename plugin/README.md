@@ -174,9 +174,17 @@ Delivery:
 | `player_disconnected` | a whitelisted player leaves before the match ends |
 | `match_started` | aim: ready-up done. Rush: the match goes live |
 | `round_end` | every live round. `winnerTeam` is a team name, or `draw`. Rush adds `arena` |
+| `kill` | every frag between two match players in a live round, sent as it happens. See below |
 | `match_end` | as soon as the match ends. `demoUploaded` is always `false` here. The upload is reported by `demo_uploaded` |
 | `match_abandoned` | `reason` is `no_show` or `disconnected`. `missingSteamIds` lists everyone not connected |
 | `demo_uploaded` | `{ ok, bytes?, error? }`, once the demo upload after `match_end` or `match_abandoned` finishes. Not sent if recording never started |
+
+`kill` is `{ round, tick, attacker, victim, weapon, headshot, wallbang, assister? }`:
+
+- `round` counts from 1. A kill after `round_end` and before the next `round_start` or `round_freeze_end` belongs to the round that just ended, so it arrives after that round's `round_end`.
+- `tick` is `Server.TickCount`. `weapon` is the `player_death` weapon name, such as `ak47`, or `unknown`.
+- `wallbang` is true when `penetrated` is above 0. `assister` is left out unless it is another match player.
+- Suicides, world deaths and frags involving anyone off the whitelist are not sent. Team kills are sent, and do not count in the stats.
 
 Stats cover live rounds only:
 
@@ -201,7 +209,8 @@ Stats cover live rounds only:
 | `player_team` | side tracking | standard |
 | `round_freeze_end` | Rush live detection and arena detection | expected to fire. Unverified |
 | `round_end` | score, round_end webhook | expected to fire through `map_params` `FireWinCondition`. The `reason` values in Rush are unverified |
-| `player_death`, `player_hurt` | stats | standard |
+| `round_start` | opens the next round for `kill` numbering | standard |
+| `player_death`, `player_hurt` | stats and `kill` events | standard |
 | `cs_win_panel_match` | preferred match end signal | unverified in Rush. It may not fire before `mp_match_end_restart`, so score tracking is the fallback |
 | `round_announce_match_start`, `begin_new_match` | Rush live detection | unverified in Rush |
 

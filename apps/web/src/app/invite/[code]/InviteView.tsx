@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -42,9 +43,7 @@ export function InviteView({ code }: { code: string }) {
               Join party
             </Button>
           ) : (
-            <ButtonLink href={`/login?returnTo=${encodeURIComponent(`/invite/${code}`)}`} size="lg">
-              Sign in to join
-            </ButtonLink>
+            <SignInLink size="lg">Sign in to join</SignInLink>
           )}
         </div>
       </Card>

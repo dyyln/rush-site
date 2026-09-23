@@ -235,6 +235,8 @@ export function DesignGuide() {
             <TierChip rating={1729} />
             <TierChip rating={2311} size="sm" />
             <TierChip rating={940} size="sm" />
+            <TierChip unranked />
+            <TierChip unranked size="sm" />
           </Specimen>
         </Section>
 

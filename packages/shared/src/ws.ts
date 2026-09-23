@@ -5,6 +5,7 @@ import { TrustLevelSchema } from "./schemas/trust.js"
 import { VetoStateSchema } from "./schemas/veto.js"
 import { MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
+import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
 export const WsEnvelopeSchema = z.object({
@@ -26,7 +27,8 @@ export const QueueModeStatusSchema = z.object({
   // Epoch ms
   queuedAt: z.number(),
   waitSec: z.number().nonnegative(),
-  estimatedSec: z.number().nonnegative().optional(),
+  // Median recent wait for the mode. null when there are too few samples
+  estimatedSec: z.number().nonnegative().nullable().optional(),
   // Current max rating gap from the widen schedule. null means any gap
   ratingWindow: z.number().nonnegative().nullable(),
   playersInQueue: z.number().int().nonnegative().optional(),
@@ -138,6 +140,8 @@ export const TournamentSummarySchema = z.object({
   }),
   checkIn: z.literal(false),
   winnerEntryId: UuidSchema.nullable(),
+  // The signed-in viewer's entry. Only set on list rows for signed-in viewers
+  myEntryId: UuidSchema.nullable().optional(),
 })
 export type TournamentSummary = z.infer<typeof TournamentSummarySchema>
 
@@ -278,6 +282,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("match_cancelled", MatchCancelledPayloadSchema),
   msg("error", ErrorPayloadSchema),
   msg("match_update", MatchUpdatePayloadSchema),
+  msg("challenge_update", ChallengeUpdatePayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]

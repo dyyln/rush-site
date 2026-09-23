@@ -7,14 +7,17 @@ import { matches } from "../../db/schema.js"
 import { badRequest, notFound } from "../../lib/errors.js"
 import { verifySignature } from "../../lib/hmac.js"
 import { requireUser } from "../auth/session.js"
+import { buildMatchExtras } from "./extras.js"
+import { registerMatchExtrasRoutes } from "./extras-routes.js"
 import { buildMatchPage } from "./match-page.js"
 
 const AcceptBody = z.object({ accept: z.boolean() })
 const VetoBody = z.object({ mapId: z.string().min(1) })
 const Uuid = z.uuid()
 
-export function matchView(ctx: AppContext, matchId: string, viewer: string | null) {
-  return buildMatchPage(ctx, matchId, viewer)
+export async function matchView(ctx: AppContext, matchId: string, viewer: string | null) {
+  const page = await buildMatchPage(ctx, matchId, viewer)
+  return page ? { ...page, ...(await buildMatchExtras(ctx, page, viewer)) } : null
 }
 
 async function rawJsonParser(req: FastifyRequest, body: Buffer): Promise<unknown> {
@@ -38,6 +41,8 @@ export function registerMatchRoutes(app: FastifyInstance, ctx: AppContext): void
     if (!match) throw notFound("match_not_found")
     return { match }
   })
+
+  registerMatchExtrasRoutes(app, ctx)
 
   app.post("/matches/:id/accept", async (req, reply) => {
     const steamId = await requireUser(ctx.auth, req)

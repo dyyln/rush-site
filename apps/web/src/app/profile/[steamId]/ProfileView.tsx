@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { RatingSparkline } from "@/components/ui/RatingSparkline";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
@@ -111,6 +112,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
             <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
               Steam profile
             </a>
+            <ChallengeButton target={profile.user} />
           </div>
         </div>
       </header>
@@ -174,9 +176,11 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
       <span className={styles.ratingTop}>
         <span className="eyebrow">{MODE_COPY[mode].label}</span>
       </span>
-      <span className={styles.ratingValue}>{stats ? <TierChip tier={stats.tier} rating={stats.rating} /> : <span className="mono">--</span>}</span>
+      <span className={styles.ratingValue}>
+        {stats && stats.matches > 0 ? <TierChip tier={stats.tier} rating={stats.rating} /> : <TierChip unranked />}
+      </span>
       <span className={styles.ratingSub}>
-        {stats ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "No matches"}
+        {stats && stats.matches > 0 ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "\u00a0"}
       </span>
       {stats && (
         <span className={styles.ratingSpark}>

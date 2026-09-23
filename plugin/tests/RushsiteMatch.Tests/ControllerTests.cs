@@ -102,7 +102,7 @@ public class ControllerTests
         _game.ConVars["tv_delay"] = "105";
         var m = LiveRush();
         m.OnPlayerHurt(A1, B1, 100);
-        m.OnPlayerDeath(A1, B1, true);
+        m.OnPlayerDeath(new DeathInfo(A1, B1, null, "ak47", true, 0, 100));
         for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.T, false, false);
 
         var rounds = _sink.Events.OfType<RoundEnd>().ToList();

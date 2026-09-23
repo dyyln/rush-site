@@ -43,6 +43,7 @@ export type AppContext = {
   queue: QueueService
   allocator: Allocator
   flow: MatchFlow
+  storage: DemoStorage
 }
 
 export type ContextDeps = {
@@ -97,10 +98,11 @@ export function buildContext(deps: ContextDeps): AppContext {
   const cooldowns = new CooldownService(db, now)
   const allowUnresolvedModes = env.NODE_ENV !== "production" && env.ALLOW_UNRESOLVED_MODES
   const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, { allowUnresolvedModes })
+  const storage = deps.storage ?? createDemoStorage(env)
   const allocator = new Allocator(
     db,
     deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn),
-    deps.storage ?? createDemoStorage(env),
+    storage,
     { webhookBaseUrl: env.API_PUBLIC_URL, surgeWaitSec: env.SURGE_WAIT_SEC },
     log,
     deps.surgeDriver ?? null,
@@ -149,5 +151,6 @@ export function buildContext(deps: ContextDeps): AppContext {
     queue,
     allocator,
     flow,
+    storage,
   }
 }

@@ -8,9 +8,18 @@ import { Table, type Column } from "@/components/ui/Table";
 import { Throbber } from "@/components/ui/Throbber";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
+import { DemoActions } from "@/components/match/DemoActions";
+import { MatchSummary } from "@/components/match/MatchSummary";
+import { ReportButton } from "@/components/match/ReportDialog";
+import { RoundTimeline } from "@/components/match/RoundTimeline";
+import { ShareButton } from "@/components/match/ShareButton";
+import { RematchButton } from "@/components/challenges/RematchButton";
+import { buildRoster, ownTeamIndex } from "@/components/match/roster";
+import { useLiveExtras } from "@/components/match/useLiveExtras";
+import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
 import { mapName, modeLabel } from "@/lib/modes";
-import type { MatchDetail, MatchPlayer, MatchRound, MatchStatus } from "@/lib/types";
+import type { MatchDetail, MatchPlayer, MatchStatus } from "@/lib/types";
 import { useMatch } from "@/lib/useMatch";
 import { useSession } from "@/lib/session";
 import styles from "./match.module.css";
@@ -28,9 +37,12 @@ const STATUS: Record<MatchStatus, { label: string; tone: "win" | "neutral" | "lo
 };
 
 const CONNECTABLE: MatchStatus[] = ["starting", "ready", "live"];
+// Participants can report once the match is under way
+const REPORTABLE: MatchStatus[] = ["live", "finished", "abandoned"];
 
 export function MatchView({ id }: { id: string }) {
-  const { match, error } = useMatch(id);
+  const { match: base, error } = useMatch(id);
+  const match = useLiveExtras(base);
   if (error) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
@@ -55,10 +67,10 @@ function MatchBody({ m }: { m: MatchDetail }) {
   const { user } = useSession();
   const status = STATUS[m.status];
   const [a, b] = m.teams;
-  // The viewer's team is own. A neutral viewer sees the first team as own
-  const mine = m.teams.findIndex((t) => t.players.some((p) => p.steamId === user?.steamId));
-  const ownIndex = mine === -1 ? 0 : mine;
+  const ownIndex = ownTeamIndex(m, user?.steamId);
   const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
+  const roster = buildRoster(m, ownIndex);
+  const finished = m.status === "finished";
   return (
     <div className="container page">
       <header className={styles.header}>
@@ -68,6 +80,7 @@ function MatchBody({ m }: { m: MatchDetail }) {
             {status.label}
           </Badge>
           <span className="eyebrow">{modeLabel(m.mode)}</span>
+          {m.unrated && <Badge tone="info">Unrated</Badge>}
           {m.mapId && <span className="mono muted">{mapName(m.mode, m.mapId)}</span>}
         </div>
         {m.tournament && (
@@ -79,7 +92,21 @@ function MatchBody({ m }: { m: MatchDetail }) {
             </span>
           </p>
         )}
+        <div className={actionStyles.actions}>
+          {finished && (
+            <>
+              <RematchButton matchId={m.id} mode={m.mode} participants={m.teams.flatMap((t) => t.players.map((pl) => pl.steamId))} />
+              <DemoActions matchId={m.id} demo={m.demo} />
+            </>
+          )}
+          <ShareButton matchId={m.id} />
+          {user && roster.has(user.steamId) && REPORTABLE.includes(m.status) && (
+            <ReportButton matchId={m.id} roster={roster} viewer={user.steamId} serverReported={m.viewerReported} />
+          )}
+        </div>
       </header>
+
+      {finished && <MatchSummary m={m} roster={roster} ownIndex={ownIndex} viewer={user?.steamId} />}
 
       {m.connect && CONNECTABLE.includes(m.status) && (
         <Card tone="accent" eyebrow="You are in this match" title="Connect">
@@ -102,7 +129,17 @@ function MatchBody({ m }: { m: MatchDetail }) {
         </section>
       )}
 
-      {a && b && <Timeline rounds={m.rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={m.mode === "rush3v3"} />}
+      {a && b && (
+        <RoundTimeline
+          rounds={m.rounds}
+          teamA={a.name}
+          teamB={b.name}
+          sideA={sideOf(0)}
+          rush={m.mode === "rush3v3"}
+          kills={m.kills}
+          roster={roster}
+        />
+      )}
 
       <div className={styles.tables}>
         {m.teams.map((t, i) => (
@@ -136,66 +173,6 @@ function TeamScore({ team, side }: { team: MatchDetail["teams"][number]; side: T
         ))}
       </span>
     </div>
-  );
-}
-
-function Timeline({
-  rounds,
-  teamA,
-  teamB,
-  sideA,
-  rush,
-}: {
-  rounds: MatchRound[];
-  teamA: string;
-  teamB: string;
-  sideA: TeamSide;
-  rush: boolean;
-}) {
-  if (rounds.length === 0) return <p className="muted">No rounds yet.</p>;
-  let lastTick = -99;
-  return (
-    <section aria-labelledby="rounds-heading" className="stack">
-      <h2 id="rounds-heading" className={styles.sub}>
-        Rounds
-      </h2>
-      <svg width="0" height="0" className={styles.defs} aria-hidden="true" focusable="false">
-        <defs>
-          <pattern id="team-enemy-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="6" height="6" fill="currentColor" opacity="0.45" />
-            <rect width="3" height="6" fill="currentColor" />
-          </pattern>
-        </defs>
-      </svg>
-      <ol className={styles.timeline}>
-        {rounds.map((r, i) => {
-          const next = rounds[i + 1];
-          // Label the score where a streak ends, spaced out so labels do not collide
-          const streakEnd = (!next || next.winnerTeam !== r.winnerTeam) && (!next || r.round - lastTick >= 3);
-          if (streakEnd) lastTick = r.round;
-          const side: TeamSide = r.winnerTeam === teamA ? sideA : sideA === "own" ? "enemy" : "own";
-          const score = `${r.score[teamA] ?? 0}:${r.score[teamB] ?? 0}`;
-          const label = `Round ${r.round}, ${r.winnerTeam}, ${score}${rush && r.arena ? `, ${r.arena}` : ""}`;
-          return (
-            <li key={r.round} className={styles.round} title={label}>
-              {side === "own" ? (
-                <span className={styles.seg} data-side="own" />
-              ) : (
-                <svg className={styles.seg} data-side="enemy" aria-hidden="true" focusable="false">
-                  <rect width="100%" height="100%" fill="url(#team-enemy-hatch)" />
-                </svg>
-              )}
-              <span className="visually-hidden">{label}</span>
-              {streakEnd && (
-                <span className={`${styles.tick} mono`} aria-hidden="true">
-                  {score}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </section>
   );
 }
 

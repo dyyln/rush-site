@@ -2,13 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { MODE_CONFIGS, MODES, type Mode, type ServerReadyPayload } from "@rushsite/shared";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
+import { InvitePopover } from "@/components/party/InvitePopover";
+import { FriendsChallenge } from "@/components/challenges/FriendsChallenge";
+import { RematchButton } from "@/components/challenges/RematchButton";
 import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
+import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
+import { modeUnavailable, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { Throbber } from "@/components/ui/Throbber";
+import { SignInLink } from "@/components/ui/SignInLink";
 import { StatTile } from "@/components/ui/StatTile";
 import { TierChip } from "@/components/ui/TierChip";
 import { Timer } from "@/components/ui/Timer";
@@ -39,6 +45,17 @@ export function PlayView() {
 
   useEffect(() => setOrigin(window.location.origin), []);
 
+  const service = useServiceStatus();
+
+  // Drop modes the status page reports as unavailable from the selection
+  useEffect(() => {
+    if (!service) return;
+    setSelected((sel) => {
+      const next = sel.filter((m) => !modeUnavailable(service, m));
+      return next.length === sel.length ? sel : next;
+    });
+  }, [service]);
+
   const queuedModes = useMemo(() => play.queue.modes.map((m) => m.mode), [play.queue.modes]);
   const queued = play.queue.state === "queued" && queuedModes.length > 0;
   const partySize = Math.max(1, play.party?.members.length ?? 1);
@@ -56,13 +73,19 @@ export function PlayView() {
       const change = r.ratingChanges.find((c) => c.steamId === user?.steamId);
       toast.push({
         title: r.status === "abandoned" ? "Match abandoned" : `${modeLabel(r.mode)} match finished`,
-        body: change ? (
-          <span className={styles.change}>
-            <TierChip tier={change.tierAfter} rating={change.after} size="sm" />
-            <span className={`mono ${change.after >= change.before ? styles.up : styles.down}`}>{signed(change.after - change.before)}</span>
-          </span>
-        ) : undefined,
+        body: (
+          <>
+            {change && (
+              <span className={styles.change}>
+                <TierChip tier={change.tierAfter} rating={change.after} size="sm" />
+                <span className={`mono ${change.after >= change.before ? styles.up : styles.down}`}>{signed(change.after - change.before)}</span>
+              </span>
+            )}
+            {r.status === "completed" && <RematchButton matchId={r.matchId} mode={r.mode} />}
+          </>
+        ),
         tone: r.status === "abandoned" ? "error" : "success",
+        durationMs: r.status === "completed" ? 20_000 : undefined,
       });
     }
   }, [play.match, toast, user?.steamId]);
@@ -70,6 +93,8 @@ export function PlayView() {
   function disabledReason(mode: Mode): string | null {
     const size = MODE_CONFIGS[mode].teamSize;
     if (partySize > size) return `Party of ${partySize} is too big for ${MODE_COPY[mode].players}`;
+    const down = modeUnavailable(service, mode);
+    if (down) return `${MODE_COPY[mode].label} unavailable: ${down}`;
     return null;
   }
 
@@ -109,7 +134,7 @@ export function PlayView() {
         <Card title="Sign in to play" tone="raised">
           <p className="muted">Sign in with Steam to queue.</p>
           <div className={styles.signIn}>
-            <ButtonLink href="/login">Sign in with Steam</ButtonLink>
+            <SignInLink />
           </div>
         </Card>
       </div>
@@ -117,6 +142,7 @@ export function PlayView() {
   }
 
   const found = play.match.phase === "found" ? play.match : null;
+  const inviteUrl = play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null;
 
   return (
     <div className="container page">
@@ -142,6 +168,7 @@ export function PlayView() {
           )}
 
           {play.match.phase === "ready" && <ServerReady server={play.match.server} mode={play.match.veto?.mode ?? null} />}
+          {play.match.phase === "starting" && <ServerReady server={null} mode={play.match.mode} />}
 
           {!inMatch && (
             <>
@@ -173,7 +200,8 @@ export function PlayView() {
                               {copy.name}{" "}
                               <span className={styles.format}>
                                 <PartySize
-                                  count={MODE_CONFIGS[mode].teamSize}
+                                  count={Math.min(partySize, MODE_CONFIGS[mode].teamSize)}
+                                  capacity={MODE_CONFIGS[mode].teamSize}
                                   overflow={Math.max(0, partySize - MODE_CONFIGS[mode].teamSize)}
                                   label={reason ? `${copy.players}. ${reason}` : copy.players}
                                 />
@@ -203,6 +231,7 @@ export function PlayView() {
                   })}
                 </ul>
               </fieldset>
+              <ModeAvailabilityHint status={service} />
 
               {me && <YourStats profile={me} />}
 
@@ -241,8 +270,9 @@ export function PlayView() {
             <PartyPanel
               party={play.party}
               mySteamId={user.steamId}
+              me={{ steamId: user.steamId, displayName: user.displayName, avatarUrl: user.avatarUrl }}
               maxSize={MAX_PARTY}
-              inviteUrl={play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null}
+              inviteUrl={inviteUrl}
               onCreate={createParty}
               onLeave={play.party && play.party.members.length > 1 ? leaveParty : undefined}
               onKick={async (id) => {
@@ -254,8 +284,21 @@ export function PlayView() {
               }}
               locked={queued || inMatch}
               steamFriendsUrl="steam://open/friends"
+              renderInvite={(close, anchor) => (
+                <InvitePopover
+                  inviteUrl={inviteUrl}
+                  ensureInvite={async () => {
+                    const p = await api.party.create();
+                    play.setParty(p);
+                    return p.inviteCode ? `${window.location.origin}/invite/${p.inviteCode}` : null;
+                  }}
+                  onClose={close}
+                  returnFocus={anchor}
+                />
+              )}
             />
           )}
+          {user && <FriendsChallenge />}
         </aside>
       </div>
 
@@ -302,8 +345,17 @@ export function PlayView() {
   );
 }
 
-function ServerReady({ server, mode }: { server: ServerReadyPayload; mode: Mode | null }) {
+function ServerReady({ server, mode }: { server: ServerReadyPayload | null; mode: Mode | null }) {
   const [copied, setCopied] = useState(false);
+  if (!server) {
+    return (
+      <Card tone="accent" eyebrow="Starting server" title={mode ? modeLabel(mode) : "Your match"}>
+        <p className="muted" aria-live="polite">
+          <Throbber /> Starting your server. Connect details appear here when it is ready.
+        </p>
+      </Card>
+    );
+  }
   // Older payloads only had the connect string
   const password = server.password || /password\s+(\S+)/.exec(server.connect)?.[1];
   const steamUrl = `steam://connect/${server.ip}:${server.port}${password ? `/${encodeURIComponent(password)}` : ""}`;
@@ -346,12 +398,16 @@ function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
   if (!profile) return <span className={styles.standing}>{"\u00a0"}</span>;
   const s = profile.modes.find((m) => m.mode === mode);
   if (!s || s.matches === 0) {
-    return <span className={`${styles.standing} ${styles.unranked}`}>Unranked</span>;
+    return (
+      <span className={styles.standing}>
+        <TierChip unranked size="sm" link={false} />
+      </span>
+    );
   }
   return (
     <span className={styles.standing}>
-      <TierChip tier={s.tier} rating={s.rating} size="sm" />
-      <span className={`${styles.rank} mono`}>{s.leaderboardRank ? `#${s.leaderboardRank}` : "Unranked"}</span>
+      <TierChip tier={s.tier} rating={s.rating} size="sm" link={false} />
+      {s.leaderboardRank && <span className={`${styles.rank} mono`}>#{s.leaderboardRank}</span>}
     </span>
   );
 }

@@ -8,6 +8,34 @@
       "when": 1790166815403,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790168520557,
+      "tag": "0001_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790168777096,
+      "tag": "0002_match_extras",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790169153311,
+      "tag": "0003_host_region",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790169226403,
+      "tag": "0004_challenge_source",
+      "breakpoints": true
     }
   ]
 }

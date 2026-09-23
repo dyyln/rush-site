@@ -116,10 +116,16 @@ export class TournamentService {
     }
   }
 
-  async list(filter: { status?: TournamentStatus[]; mode?: Mode; limit?: number }) {
+  async list(
+    filter: { status?: TournamentStatus[]; mode?: Mode; limit?: number },
+    viewer: string | null = null,
+  ): Promise<TournamentSummary[]> {
     const rows = await this.d.store.listTournaments(filter)
-    const counts = await this.d.store.countEntries(rows.map((r) => r.id))
-    return rows.map((r) => this.summary(r, counts[r.id] ?? 0))
+    const ids = rows.map((r) => r.id)
+    const counts = await this.d.store.countEntries(ids)
+    if (!viewer) return rows.map((r) => this.summary(r, counts[r.id] ?? 0))
+    const mine = await this.d.store.findPlayerEntries(viewer, ids)
+    return rows.map((r) => ({ ...this.summary(r, counts[r.id] ?? 0), myEntryId: mine[r.id] ?? null }))
   }
 
   async detail(id: string, viewer: string | null): Promise<TournamentDetail> {

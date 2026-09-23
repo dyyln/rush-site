@@ -49,6 +49,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         RegisterEventHandler<EventPlayerConnectFull>(OnPlayerConnectFull);
         RegisterEventHandler<EventPlayerDisconnect>(OnPlayerDisconnect);
         RegisterEventHandler<EventPlayerTeam>(OnPlayerTeam);
+        RegisterEventHandler<EventRoundStart>(OnRoundStart);
         RegisterEventHandler<EventRoundFreezeEnd>(OnRoundFreezeEnd);
         RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
         RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
@@ -207,6 +208,12 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         return _match.OnJoinTeamRequest(id, SideExtensions.FromTeamNum(team)) ? HookResult.Continue : HookResult.Handled;
     }
 
+    private HookResult OnRoundStart(EventRoundStart ev, GameEventInfo info)
+    {
+        _match?.OnRoundStart();
+        return HookResult.Continue;
+    }
+
     private HookResult OnRoundFreezeEnd(EventRoundFreezeEnd ev, GameEventInfo info)
     {
         // Rush moves spawns during the round start. Read positions on the next frame.
@@ -225,7 +232,14 @@ public sealed class RushsiteMatchPlugin : BasePlugin
 
     private HookResult OnPlayerDeath(EventPlayerDeath ev, GameEventInfo info)
     {
-        _match?.OnPlayerDeath(Sid(ev.Attacker), Sid(ev.Userid), ev.Headshot);
+        _match?.OnPlayerDeath(new DeathInfo(
+            Sid(ev.Attacker),
+            Sid(ev.Userid),
+            Sid(ev.Assister),
+            ev.Weapon,
+            ev.Headshot,
+            ev.Penetrated,
+            Server.TickCount));
         return HookResult.Continue;
     }
 

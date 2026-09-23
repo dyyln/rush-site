@@ -40,6 +40,18 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     missingSteamIds: z.array(SteamId64Schema),
   }),
   z.object({
+    type: z.literal("kill"),
+    // Round the kill happened in, counting from 1
+    round: z.number().int().positive(),
+    tick: z.number().int().nonnegative(),
+    attacker: SteamId64Schema,
+    victim: SteamId64Schema,
+    weapon: z.string().min(1).max(64),
+    headshot: z.boolean(),
+    wallbang: z.boolean(),
+    assister: SteamId64Schema.optional(),
+  }),
+  z.object({
     type: z.literal("demo_uploaded"),
     ok: z.boolean(),
     bytes: z.number().int().nonnegative().optional(),

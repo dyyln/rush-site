@@ -15,6 +15,13 @@ import { gsltTokens, hosts, serverSlots, type TeamRosterJson } from "../../db/sc
 import { AgentError, type AgentApi } from "./agent.js"
 import type { DemoStorage } from "./storage.js"
 
+// AGENT_URLS entries are a url or region=url. Region defaults to eu
+export function parseAgentEntry(entry: string): { url: string; region: string } {
+  const m = /^([a-z][a-z0-9-]*)=(.+)$/i.exec(entry.trim())
+  if (m && !m[1]!.includes(":")) return { region: m[1]!.toLowerCase(), url: m[2]!.trim() }
+  return { region: "eu", url: entry.trim() }
+}
+
 export type Reservation = { hostId: string; agentUrl: string; slotId: string; gsltId: string; gslt: string }
 
 export type StartParams = {
@@ -124,11 +131,12 @@ export class Allocator {
 
   // Polls every agent and mirrors capacity into hosts and server_slots
   async syncHosts(agentUrls: string[]): Promise<void> {
-    for (const url of agentUrls) {
+    for (const entry of agentUrls) {
+      const { url, region } = parseAgentEntry(entry)
       const [host] = await this.db
         .insert(hosts)
-        .values({ name: new URL(url).host, agentUrl: url })
-        .onConflictDoUpdate({ target: hosts.agentUrl, set: { agentUrl: url } })
+        .values({ name: new URL(url).host, agentUrl: url, region })
+        .onConflictDoUpdate({ target: hosts.agentUrl, set: { agentUrl: url, region } })
         .returning()
       try {
         const h = await this.agent.health(url)

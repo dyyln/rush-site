@@ -93,6 +93,12 @@ function isKnownType(type: string): boolean {
 
 let singleton: Realtime | null = null;
 
+// Drops the socket so the next connect uses the new session cookie
+export function resetRealtime() {
+  singleton?.close();
+  singleton = null;
+}
+
 export function getRealtime(): Realtime {
   singleton ??= isMock ? new MockRealtime() : new RealtimeClient(wsUrl);
   return singleton;

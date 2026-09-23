@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import type { DemoUpload } from "@rushsite/shared"
 import type { Env } from "../../env.js"
@@ -9,6 +9,8 @@ export interface DemoStorage {
   readonly enabled: boolean
   presignUpload(matchId: string): Promise<DemoUpload>
   upload(key: string, body: DemoBody): Promise<void>
+  // Presigned GET for players downloading the demo
+  presignDownload?(key: string, expiresInSec: number): Promise<string>
 }
 
 // Upload URL lives long enough for a full match plus upload time
@@ -39,6 +41,16 @@ export class S3DemoStorage implements DemoStorage {
     const cmd = new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key })
     const presignedPutUrl = await getSignedUrl(this.client, cmd, { expiresIn: PUT_EXPIRY_SEC })
     return { bucket: this.env.S3_BUCKET, key, presignedPutUrl }
+  }
+
+  async presignDownload(key: string, expiresInSec: number): Promise<string> {
+    const file = key.split("/").pop() ?? "demo.dem"
+    const cmd = new GetObjectCommand({
+      Bucket: this.env.S3_BUCKET,
+      Key: key,
+      ResponseContentDisposition: `attachment; filename="${file}"`,
+    })
+    return getSignedUrl(this.client, cmd, { expiresIn: expiresInSec })
   }
 
   async upload(key: string, body: DemoBody): Promise<void> {

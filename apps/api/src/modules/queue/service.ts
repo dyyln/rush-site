@@ -51,7 +51,14 @@ export function toMmTicket(t: LiveTicket, mode: Mode): MmTicket {
   return { id: t.id, size: t.steamIds.length, rating: t.ratings[mode] ?? 1500, enqueuedAt: t.enqueuedAt, region: t.region }
 }
 
+export type EtaSource = (mode: Mode) => Promise<number | null>
+// Returns the reason a mode cannot queue, or null when it can
+export type AvailabilitySource = (mode: Mode) => Promise<string | null>
+
 export class QueueService {
+  private eta: EtaSource | null = null
+  private availability: AvailabilitySource | null = null
+
   constructor(
     private readonly db: Db,
     private readonly redis: Redis,
@@ -68,6 +75,16 @@ export class QueueService {
     })
   }
 
+  // Supplies QueueModeStatus.estimatedSec. The stats module installs it
+  setEtaSource(source: EtaSource | null): void {
+    this.eta = source
+  }
+
+  // Blocks joins for modes the status page reports as unavailable. The stats module installs it
+  setAvailabilitySource(source: AvailabilitySource | null): void {
+    this.availability = source
+  }
+
   // Joins one or more modes. Joining again while queued adds modes and keeps the original queue time
   async join(steamId: string, modes: Mode[]): Promise<LiveTicket> {
     const wanted = [...new Set(modes)]
@@ -75,6 +92,12 @@ export class QueueService {
     if (!this.opts.allowUnresolvedModes) {
       const blocked = wanted.filter((m) => unresolvedConfig(m).length > 0)
       if (blocked.length > 0) throw new ApiError(503, "mode_unavailable", `not configured yet: ${blocked.join(",")}`)
+    }
+    if (this.availability) {
+      for (const m of wanted) {
+        const reason = await this.availability(m)
+        if (reason) throw new ApiError(503, "mode_unavailable", `${m}: ${reason}`)
+      }
     }
     const party = await this.parties.ensure(steamId)
     if (party.leaderSteamId !== steamId) throw forbidden("not_leader", "only the party leader can queue")
@@ -311,6 +334,7 @@ export class QueueService {
           waitSec: Math.floor(waitSec),
           ratingWindow: maxRatingDiffAfter(waitSec),
           playersInQueue: await this.playersInQueue(mode),
+          estimatedSec: this.eta ? await this.eta(mode) : null,
         })
       }
       return { state: "queued", partyId: ticket.partyId, modes, cooldownUntil: null }

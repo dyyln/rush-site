@@ -92,7 +92,9 @@
   display: inline-flex;
   vertical-align: middle;
   margin-left: var(--space-2);
-  color: var(--color-accent-hover);
+}
+.disabled .format > span {
+  color: var(--color-disabled-text);
 }
 .check {
   flex: none;

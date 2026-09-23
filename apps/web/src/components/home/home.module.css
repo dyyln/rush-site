@@ -1,0 +1,238 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+}
+.more:hover {
+  color: var(--color-accent-hover);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.error p {
+  margin: 0;
+}
+
+.cups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.cup {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.cup:hover:not(.cupEmpty) {
+  border-color: var(--color-border-strong);
+}
+.cup:focus-within {
+  border-color: var(--color-accent);
+}
+.cupEmpty p {
+  margin: 0;
+}
+
+.cupTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cupMode {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.cupName {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.cupLink {
+  color: var(--color-text);
+  text-decoration: none;
+}
+.cupLink:focus-visible {
+  outline: none;
+}
+/* Whole card is the click target */
+.cupLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.cupLink:hover {
+  color: var(--color-accent-hover);
+}
+
+.countdownLabel {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.countdown {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  line-height: var(--leading-tight);
+}
+
+.cupMeta {
+  margin: auto 0 0;
+  padding-top: var(--space-2);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.live {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+.liveRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.liveRow:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-2);
+}
+.liveRow:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.liveMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+
+.liveMode {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.liveMap {
+  color: var(--color-text-muted);
+}
+
+.liveScore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.liveTeamA,
+.liveTeamB {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+.liveTeamA {
+  color: var(--team-own);
+}
+.liveTeamB {
+  text-align: right;
+  color: var(--team-enemy);
+}
+
+.liveNums {
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.liveDash {
+  margin: 0 var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.liveCup {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+  .cups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .live {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.live li {
+  display: flex;
+}
+.live li > .liveRow {
+  flex: 1;
+}

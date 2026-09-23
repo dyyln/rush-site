@@ -37,3 +37,26 @@
 .chip[data-tier="gold"] { --tier-color: var(--tier-gold); }
 .chip[data-tier="platinum"] { --tier-color: var(--tier-platinum); }
 .chip[data-tier="elite"] { --tier-color: var(--tier-elite); }
+.chip[data-tier="unranked"] {
+  --tier-color: var(--color-text-muted);
+  border-style: dashed;
+}
+.link {
+  position: relative;
+  display: inline-flex;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+/* Grows the hit area to the 44px touch target */
+.link::after {
+  content: "";
+  position: absolute;
+  inset: -12px -4px;
+}
+.link:hover .chip {
+  background: var(--color-surface-2);
+}
+.link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

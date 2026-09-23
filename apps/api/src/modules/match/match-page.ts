@@ -74,6 +74,7 @@ export async function buildMatchPage(
         }),
     })),
     rounds: rounds.map(roundView),
+    ...(m.source === "challenge" ? { unrated: true } : {}),
   }
 
   if (m.tournamentId) {
