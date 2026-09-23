@@ -62,8 +62,9 @@ await driver.stop(matchId)                            // stops and deletes the c
 4. Uploads `cfg/match.json` (the `PluginMatchConfig` shape), `cfg/rushsite/matches/<matchId>/mode.cfg` (`exec <execCfg>`) and
    `cfg/server.cfg` (`exec rushsite_base.cfg`, `sv_password`, team names, `tv_enable 1`, `exec rushsite/matches/<matchId>/mode.cfg`).
    The mode.cfg path is the same as on the Hetzner agent, so the plugin re-execs it at match start the same way.
-   The template must ship the agent's cfgs from `agent/internal/match/cfgs/` in its `cfg/` dir. That DatHost's file upload
-   creates the nested dir is not yet checked against the real API.
+   The template must ship the agent's cfgs from `agent/internal/match/cfgs/` in its `cfg/` dir, and an empty
+   `cfg/rushsite/matches/` dir. Checked 23 Sep 2026: the file upload creates one missing leaf directory but returns 404
+   when the parent is missing too, so the template carries `cfg/rushsite/matches/.keep`.
    The plugin already falls back to `cfg/match.json` when `RUSHSITE_MATCH_JSON` is unset.
 5. `POST /start`, then polls `GET /game-servers/{clone}` until `on && !booting`.
 6. If the mode has no DatHost preset (Rush is 0/6) the server is booted as `custom`, then the driver sends
@@ -127,7 +128,8 @@ so the api must call `fetchDemo` before `stop`.
 5. Upload `cfg/rushsite_base.cfg` (kept in this package under `cfg/`) with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
    `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload every mode cfg
    from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`) to `cfg/`.
-   `gamemode_rush.cfg` is Valve's and the game runs it by itself.
+   `gamemode_rush.cfg` is Valve's and the game runs it by itself. Also create `cfg/rushsite/matches/` (upload a `.keep`
+   file into it), because the per match `mode.cfg` upload needs the parent to exist.
 6. Start the template, join it, check the plugin loads (`css_plugins list` in the console), and do the Rush check at the top of this README.
 7. Stop the template (this refreshes the duplicate cache) or call `POST /game-servers/{id}/sync-files`.
 8. Copy the server id from the control panel URL or `GET /game-servers` into `DATHOST_TEMPLATE_SERVER_ID`.
