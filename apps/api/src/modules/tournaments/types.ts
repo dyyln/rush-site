@@ -45,7 +45,10 @@ export interface WsMessage<T = unknown> {
   ts: number
 }
 
-export type EmitAudience = { kind: "broadcast" } | { kind: "users"; steamIds: string[] }
+export type EmitAudience =
+  | { kind: "broadcast" }
+  | { kind: "users"; steamIds: string[] }
+  | { kind: "tournament"; tournamentId: string }
 
 export interface PartyInfo {
   partyId: string
@@ -65,7 +68,7 @@ export interface TournamentsPluginOptions {
   // Returns the signed in user's SteamID64 or null.
   authenticate(request: FastifyRequest): Promise<string | null>
   getTrustLevels(steamIds: string[]): Promise<Record<string, TrustLevel>>
-  // Current rating per player for the mode. Missing players get the default rating.
+  // Current rating per player for the mode. Leave out players with no rating there.
   getRatings(steamIds: string[], mode: Mode): Promise<Record<string, number>>
   // Needed for 2v2 and 3v3 cups. The party leader enters the whole party.
   getParty(steamId: string): Promise<PartyInfo | null>

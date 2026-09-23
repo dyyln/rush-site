@@ -109,7 +109,8 @@ export type TournamentStatus = SharedTournamentStatus;
 export type TournamentSummary = SharedTournamentSummary;
 export type CupCadence = TournamentSummary["cadence"];
 
-export type EntryPlayer = { steamId: string; displayName: string; avatarUrl: string | null };
+// rating and tier are being added to shared EntryPlayerSchema
+export type EntryPlayer = { steamId: string; displayName: string; avatarUrl: string | null; rating?: number; tier?: TierId };
 
 export type EntryView = {
   id: string;
@@ -130,8 +131,12 @@ export type BracketMatchStatus = BracketMatch["status"];
 export type TournamentDetail = TournamentSummary & {
   entries: EntryView[];
   bracket: Bracket | null;
+  // Matches the ETag of GET /tournaments/:id/bracket
+  bracketVersion: number;
   myEntryId: string | null;
 };
+
+export type TournamentBracket = { tournamentId: string; version: number; bracket: Bracket | null };
 
 // Match page types come from @rushsite/shared
 export type MatchStatus = SharedMatchStatus;

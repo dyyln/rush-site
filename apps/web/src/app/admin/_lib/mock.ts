@@ -492,6 +492,7 @@ export const mockAdmin = {
           abandoned: m.status === "abandoned" && r() > 0.5,
           kills: m.players[0]?.kills ?? null,
           deaths: m.players[0]?.deaths ?? null,
+          headshots: m.players[0]?.headshots ?? null,
           score: m.score,
           mapId: m.mapId,
           createdAt: m.createdAt,

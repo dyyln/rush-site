@@ -136,9 +136,15 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
-.steamLink {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target-min);
+.subtitle {
   font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}
+.friendActions {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+}
+.friendActions button {
+  padding: 0 var(--space-2);
 }

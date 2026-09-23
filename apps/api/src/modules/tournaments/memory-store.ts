@@ -31,6 +31,7 @@ export class MemoryTournamentStore implements TournamentStore {
       completedAt: null,
       cancelReason: null,
       winnerEntryId: null,
+      bracketVersion: 0,
     })
     return id
   }
@@ -103,6 +104,10 @@ export class MemoryTournamentStore implements TournamentStore {
 
   async saveBracket(tournamentId: string, stored: StoredBracket) {
     this.brackets.set(tournamentId, structuredClone(stored))
+    const t = this.tournaments.get(tournamentId)
+    if (!t) return 0
+    t.bracketVersion += 1
+    return t.bracketVersion
   }
 
   async loadBracket(tournamentId: string) {

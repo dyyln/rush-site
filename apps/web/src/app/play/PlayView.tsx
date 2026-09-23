@@ -7,11 +7,12 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
 import { InvitePopover } from "@/components/party/InvitePopover";
-import { FriendsChallenge } from "@/components/challenges/FriendsChallenge";
+import { FriendsCard } from "@/components/friends/FriendsCard";
 import { RematchButton } from "@/components/challenges/RematchButton";
 import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
+import { ModeCardWarning } from "@/components/stats/ModeCardWarning";
 import { modeUnavailable, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { Throbber } from "@/components/ui/Throbber";
 import { SignInLink } from "@/components/ui/SignInLink";
@@ -21,7 +22,7 @@ import { Timer } from "@/components/ui/Timer";
 import { useToast } from "@/components/ui/Toast";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { api } from "@/lib/api";
-import { pct, signed } from "@/lib/format";
+import { formatStat, signed } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
@@ -143,6 +144,11 @@ export function PlayView() {
 
   const found = play.match.phase === "found" ? play.match : null;
   const inviteUrl = play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null;
+  async function ensureInvite(): Promise<string | null> {
+    const p = await api.party.create();
+    play.setParty(p);
+    return p.inviteCode ? `${window.location.origin}/invite/${p.inviteCode}` : null;
+  }
 
   return (
     <div className="container page">
@@ -207,15 +213,19 @@ export function PlayView() {
                                 />
                               </span>
                             </span>
-                            <span className={styles.check} aria-hidden="true">
-                              {q ? (
-                                <Throbber />
-                              ) : (
-                                <svg viewBox="0 0 16 16" width="14" height="14">
-                                  <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </span>
+                            {modeUnavailable(service, mode) && !q ? (
+                              <ModeCardWarning />
+                            ) : (
+                              <span className={styles.check} aria-hidden="true">
+                                {q ? (
+                                  <Throbber />
+                                ) : (
+                                  <svg viewBox="0 0 16 16" width="14" height="14">
+                                    <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </span>
+                            )}
                           </span>
                           <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
                             {copy.blurb}
@@ -278,27 +288,40 @@ export function PlayView() {
               onKick={async (id) => {
                 try {
                   await api.party.kick(id);
+                  play.setParty((p) => p && { ...p, members: p.members.filter((m) => m.steamId !== id) });
                 } catch {
                   toast.push({ title: "Could not remove player", tone: "error" });
                 }
               }}
+              onMakeLeader={async (id) => {
+                try {
+                  await api.party.setLeader(id);
+                  play.setParty((p) => p && { ...p, leaderSteamId: id });
+                } catch {
+                  toast.push({ title: "Could not change the leader", tone: "error" });
+                }
+              }}
+              onRotateInvite={async () => {
+                try {
+                  const next = await api.party.rotateInvite();
+                  play.setParty((p) => p && { ...p, inviteCode: next.inviteCode });
+                } catch {
+                  toast.push({ title: "Could not make a new link", tone: "error" });
+                }
+              }}
               locked={queued || inMatch}
-              steamFriendsUrl="steam://open/friends"
               renderInvite={(close, anchor) => (
                 <InvitePopover
                   inviteUrl={inviteUrl}
-                  ensureInvite={async () => {
-                    const p = await api.party.create();
-                    play.setParty(p);
-                    return p.inviteCode ? `${window.location.origin}/invite/${p.inviteCode}` : null;
-                  }}
+                  ensureInvite={ensureInvite}
+                  onParty={play.setParty}
                   onClose={close}
                   returnFocus={anchor}
                 />
               )}
             />
           )}
-          {user && <FriendsChallenge />}
+          {user && <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} />}
         </aside>
       </div>
 
@@ -425,9 +448,9 @@ function YourStats({ profile }: { profile: Profile }) {
       <h2 id="your-stats" className="visually-hidden">
         Your stats
       </h2>
-      <StatTile size="sm" label="Win rate" value={pct(matches ? wins / matches : 0)} />
-      <StatTile size="sm" label="Headshot" value={pct(weighted((m) => m.headshotPct))} />
-      <StatTile size="sm" label="K/D" value={weighted((m) => m.kd).toFixed(2)} />
+      <StatTile size="sm" label="Win rate" value={formatStat(matches ? wins / matches : null, "pct", matches)} />
+      <StatTile size="sm" label="Headshot" value={formatStat(weighted((m) => m.headshotPct), "pct", matches)} />
+      <StatTile size="sm" label="K/D" value={formatStat(weighted((m) => m.kd), "kd", matches)} />
       <StatTile size="sm" label="Matches" value={matches} />
       <div className={styles.form}>
         <p className={styles.formLabel}>Last 5</p>

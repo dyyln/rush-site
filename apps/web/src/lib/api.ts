@@ -6,11 +6,13 @@ import { getRealtime } from "./ws";
 import { mockMatchDetail } from "./mock-match";
 import { MockRealtime, mockModeStats } from "./ws-mock";
 import { challengeApi } from "@/components/challenges/api";
+import { friendsApi } from "@/components/friends/api";
 import type {
   Leaderboard,
   MatchDetail,
   Profile,
   ReportReason,
+  TournamentBracket,
   TournamentDetail,
   TournamentStatus,
   TournamentSummary,
@@ -28,6 +30,15 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+export type InvitePreview = {
+  partyId: string;
+  leader: { steamId: string; displayName: string; avatarUrl: string | null };
+  size: number;
+  capacity: number;
+  full: boolean;
+  isMember: boolean;
+};
 
 export type Query = Record<string, string | number | undefined>;
 
@@ -78,6 +89,7 @@ export function steamLoginUrl(returnTo = "/play"): string {
 
 export const api = {
   challenges: challengeApi((method, path, body) => request(method, path, { body })),
+  friends: friendsApi((method, path, body) => request(method, path, { body })),
 
   // Generic calls for pages without a dedicated helper
   get: <T>(path: string, query?: Query) => request<T>("GET", path, { query }),
@@ -120,14 +132,31 @@ export const api = {
       if (isMock) return;
       await request("POST", "/parties/leave");
     },
-    // In-site invite to a registered player. Route is not in the api yet
-    async inviteUser(steamId: string): Promise<void> {
-      if (isMock) return void (await delay());
-      await request("POST", `/parties/invite/${steamId}`);
+    // In-site invite to a friend. Creates the party when needed
+    async inviteUser(steamId: string): Promise<PartyUpdatePayload> {
+      return (await api.friends.invite(steamId)).party;
     },
     async kick(steamId: string): Promise<void> {
       if (isMock) return;
       await request("DELETE", `/parties/members/${steamId}`);
+    },
+    async setLeader(steamId: string): Promise<void> {
+      if (isMock) return;
+      await request("POST", "/parties/leader", { body: { steamId } });
+    },
+    // New invite code. The old link stops working
+    async rotateInvite(): Promise<PartyUpdatePayload> {
+      if (isMock) return mocked({ ...mock.mockParty(1), inviteCode: Math.random().toString(36).slice(2, 10).toUpperCase() });
+      return request("POST", "/parties/invite");
+    },
+    // Public. Throws invite_not_found for bad, rotated or closed links
+    async preview(inviteCode: string): Promise<InvitePreview> {
+      if (isMock) {
+        const p = mock.mockParty(2);
+        if (inviteCode !== p.inviteCode) return mocked<InvitePreview>(null, "invite_not_found");
+        return mocked({ partyId: p.partyId!, leader: p.members[0]!, size: 2, capacity: 3, full: false, isMember: false });
+      }
+      return request("GET", `/parties/join/${encodeURIComponent(inviteCode)}`);
     },
   },
 
@@ -182,6 +211,20 @@ export const api = {
     async detail(id: string): Promise<TournamentDetail> {
       if (isMock) return mocked(mock.mockTournamentDetail(id), "Tournament not found");
       return (await request<{ tournament: TournamentDetail }>("GET", `/tournaments/${id}`)).tournament;
+    },
+    // Returns null when the bracket is still at knownVersion
+    async bracket(id: string, knownVersion?: number): Promise<TournamentBracket | null> {
+      if (isMock) {
+        const d = await mocked(mock.mockTournamentDetail(id), "Tournament not found");
+        if (knownVersion === d.bracketVersion) return null;
+        return { tournamentId: id, version: d.bracketVersion, bracket: d.bracket };
+      }
+      const headers: Record<string, string> = { accept: "application/json" };
+      if (knownVersion !== undefined) headers["if-none-match"] = `"${knownVersion}"`;
+      const res = await fetch(buildUrl(`/tournaments/${id}/bracket`), { credentials: "include", headers, cache: "no-cache" });
+      if (res.status === 304) return null;
+      if (!res.ok) throw new ApiError(res.status, "http_error", res.statusText);
+      return (await res.json()) as TournamentBracket;
     },
     async enter(id: string): Promise<void> {
       if (isMock) return void (await delay());

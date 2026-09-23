@@ -4,6 +4,7 @@ import { BRAND_NAME } from "@rushsite/shared";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { ChallengeInbox } from "@/components/challenges/ChallengeInbox";
+import { InviteInbox } from "@/components/friends/InviteInbox";
 import { NotifyListener } from "@/components/notify/NotifyListener";
 import { ToastProvider } from "@/components/ui/Toast";
 import { SessionProvider } from "@/lib/session";
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             <SiteHeader />
             <ChallengeInbox />
+            <InviteInbox />
             <NotifyListener />
             <main id="main">{children}</main>
             <SiteFooter />

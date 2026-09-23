@@ -1,5 +1,5 @@
 import type { PartyUpdatePayload } from "@rushsite/shared"
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { parties, partyMembers } from "../../db/schema.js"
 import { randomToken } from "../../lib/hmac.js"
@@ -11,6 +11,15 @@ import { toUsers, type Notifier } from "../ws/hub.js"
 export const MAX_PARTY_SIZE = 3
 
 export type PartyInfo = { partyId: string; leaderSteamId: string; memberSteamIds: string[]; inviteToken: string }
+
+export type InvitePreview = {
+  partyId: string
+  leader: { steamId: string; displayName: string; avatarUrl: string | null }
+  size: number
+  capacity: number
+  full: boolean
+  isMember: boolean
+}
 
 export type PartyChangeHook = (partyId: string, reason: string) => Promise<void>
 
@@ -32,17 +41,17 @@ export class PartyService {
     for (const h of this.hooks) await h(partyId, reason)
   }
 
-  async get(partyId: string): Promise<PartyInfo | null> {
-    const [p] = await this.db
+  async get(partyId: string, db: Db = this.db): Promise<PartyInfo | null> {
+    const [p] = await db
       .select()
       .from(parties)
       .where(and(eq(parties.id, partyId), isNull(parties.disbandedAt)))
     if (!p) return null
-    const members = await this.db
+    const members = await db
       .select({ steamId: partyMembers.steamId })
       .from(partyMembers)
       .where(eq(partyMembers.partyId, partyId))
-      .orderBy(asc(partyMembers.joinedAt))
+      .orderBy(asc(partyMembers.joinedAt), asc(partyMembers.steamId))
     return {
       partyId: p.id,
       leaderSteamId: p.leaderSteamId,
@@ -51,12 +60,49 @@ export class PartyService {
     }
   }
 
-  async partyOf(steamId: string): Promise<PartyInfo | null> {
-    const [m] = await this.db
+  private async partyIdOf(steamId: string, db: Db = this.db): Promise<string | null> {
+    const [m] = await db
       .select({ partyId: partyMembers.partyId })
       .from(partyMembers)
       .where(eq(partyMembers.steamId, steamId))
-    return m ? this.get(m.partyId) : null
+    return m?.partyId ?? null
+  }
+
+  async partyOf(steamId: string): Promise<PartyInfo | null> {
+    const id = await this.partyIdOf(steamId)
+    return id ? this.get(id) : null
+  }
+
+  // Runs membership changes one at a time per party. Rows are locked in id order so two parties never deadlock
+  private locked<T>(partyIds: string[], fn: (tx: Db) => Promise<T>): Promise<T> {
+    const ids = [...new Set(partyIds)].sort()
+    return this.db.transaction(async (raw) => {
+      const tx = raw as unknown as Db
+      await tx.select({ id: parties.id }).from(parties).where(inArray(parties.id, ids)).orderBy(asc(parties.id)).for("update")
+      return fn(tx)
+    })
+  }
+
+  // Removes one member inside a locked transaction. Promotes the earliest joiner or disbands when empty
+  private async removeMember(tx: Db, partyId: string, steamId: string): Promise<boolean> {
+    const party = await this.get(partyId, tx)
+    if (!party || !party.memberSteamIds.includes(steamId)) return false
+    await tx.delete(partyMembers).where(and(eq(partyMembers.partyId, partyId), eq(partyMembers.steamId, steamId)))
+    const rest = party.memberSteamIds.filter((m) => m !== steamId)
+    if (rest.length === 0) {
+      await tx.update(parties).set({ disbandedAt: new Date() }).where(eq(parties.id, partyId))
+    } else if (party.leaderSteamId === steamId) {
+      await tx.update(parties).set({ leaderSteamId: rest[0]! }).where(eq(parties.id, partyId))
+    }
+    return true
+  }
+
+  // Tells the queue and the remaining members after a member left
+  private async afterRemoval(partyId: string, steamId: string, reason: string, silentSelf: boolean): Promise<void> {
+    await this.changed(partyId, reason)
+    const rest = await this.get(partyId)
+    if (rest) await this.publish(rest)
+    if (!silentSelf) toUsers(this.notifier, [steamId], "party_update", emptyParty())
   }
 
   // Returns the player's party, creating a solo one if needed
@@ -65,12 +111,20 @@ export class PartyService {
   }
 
   private async createFresh(steamId: string): Promise<PartyInfo> {
-    const [p] = await this.db
-      .insert(parties)
-      .values({ leaderSteamId: steamId, inviteToken: randomToken(12) })
-      .returning()
-    await this.db.insert(partyMembers).values({ partyId: p!.id, steamId })
-    const info = { partyId: p!.id, leaderSteamId: steamId, memberSteamIds: [steamId], inviteToken: p!.inviteToken }
+    let info: PartyInfo
+    try {
+      info = await this.db.transaction(async (raw) => {
+        const tx = raw as unknown as Db
+        const [p] = await tx.insert(parties).values({ leaderSteamId: steamId, inviteToken: randomToken(12) }).returning()
+        await tx.insert(partyMembers).values({ partyId: p!.id, steamId })
+        return { partyId: p!.id, leaderSteamId: steamId, memberSteamIds: [steamId], inviteToken: p!.inviteToken }
+      })
+    } catch (err) {
+      // A parallel request already put this player in a party
+      const current = isUniqueViolation(err) ? await this.partyOf(steamId) : null
+      if (!current) throw err
+      return current
+    }
     await this.publish(info)
     return info
   }
@@ -85,69 +139,107 @@ export class PartyService {
 
   async rotateInvite(steamId: string): Promise<PartyInfo> {
     const party = await this.ensure(steamId)
-    if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
-    const token = randomToken(12)
-    await this.db.update(parties).set({ inviteToken: token }).where(eq(parties.id, party.partyId))
-    const info = { ...party, inviteToken: token }
+    const info = await this.locked([party.partyId], async (tx) => {
+      const fresh = await this.get(party.partyId, tx)
+      if (!fresh || !fresh.memberSteamIds.includes(steamId)) throw conflict("party_changed")
+      if (fresh.leaderSteamId !== steamId) throw forbidden("not_leader")
+      const token = randomToken(12)
+      await tx.update(parties).set({ inviteToken: token }).where(eq(parties.id, party.partyId))
+      return { ...fresh, inviteToken: token }
+    })
     await this.publish(info)
     return info
+  }
+
+  // Public view of an invite link so the invite page can say who invited and whether there is room
+  async preview(token: string, viewer: string | null): Promise<InvitePreview> {
+    const [target] = await this.db
+      .select({ id: parties.id })
+      .from(parties)
+      .where(and(eq(parties.inviteToken, token), isNull(parties.disbandedAt)))
+    const party = target ? await this.get(target.id) : null
+    if (!party) throw notFound("invite_not_found")
+    const card = (await this.users.cards([party.leaderSteamId])).get(party.leaderSteamId)
+    return {
+      partyId: party.partyId,
+      leader: { steamId: party.leaderSteamId, displayName: card?.displayName ?? party.leaderSteamId, avatarUrl: card?.avatarUrl ?? null },
+      size: party.memberSteamIds.length,
+      capacity: MAX_PARTY_SIZE,
+      full: party.memberSteamIds.length >= MAX_PARTY_SIZE,
+      isMember: !!viewer && party.memberSteamIds.includes(viewer),
+    }
   }
 
   async join(steamId: string, token: string): Promise<PartyInfo> {
     const [target] = await this.db
-      .select()
+      .select({ id: parties.id })
       .from(parties)
       .where(and(eq(parties.inviteToken, token), isNull(parties.disbandedAt)))
     if (!target) throw notFound("invite_not_found")
-    const party = (await this.get(target.id))!
-    if (party.memberSteamIds.includes(steamId)) return party
-    if (party.memberSteamIds.length >= MAX_PARTY_SIZE) throw conflict("party_full")
-    const current = await this.partyOf(steamId)
-    if (current) await this.leave(steamId, { silentSelf: true })
-    await this.db.insert(partyMembers).values({ partyId: party.partyId, steamId })
-    await this.changed(party.partyId, "member_joined")
-    const info = (await this.get(party.partyId))!
-    await this.publish(info)
-    return info
+    const currentId = await this.partyIdOf(steamId)
+    if (currentId === target.id) return (await this.get(target.id))!
+    let moved: { from: string | null; party: PartyInfo }
+    try {
+      moved = await this.locked(currentId ? [target.id, currentId] : [target.id], async (tx) => {
+        // Re-read under the lock. The code may have rotated or the party filled up meanwhile
+        const party = await this.get(target.id, tx)
+        if (!party || party.inviteToken !== token) throw notFound("invite_not_found")
+        if (party.memberSteamIds.includes(steamId)) return { from: null, party }
+        if (party.memberSteamIds.length >= MAX_PARTY_SIZE) throw conflict("party_full")
+        if ((await this.partyIdOf(steamId, tx)) !== currentId) throw conflict("party_changed")
+        if (currentId) await this.removeMember(tx, currentId, steamId)
+        await tx.insert(partyMembers).values({ partyId: party.partyId, steamId })
+        return { from: currentId, party: (await this.get(party.partyId, tx))! }
+      })
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict("party_changed")
+      throw err
+    }
+    if (moved.from) await this.afterRemoval(moved.from, steamId, "member_left", true)
+    await this.changed(moved.party.partyId, "member_joined")
+    await this.publish(moved.party)
+    return moved.party
   }
 
   async leave(steamId: string, opts: { silentSelf?: boolean } = {}): Promise<void> {
-    const party = await this.partyOf(steamId)
-    if (!party) return
-    await this.changed(party.partyId, "member_left")
-    await this.db
-      .delete(partyMembers)
-      .where(and(eq(partyMembers.partyId, party.partyId), eq(partyMembers.steamId, steamId)))
-    const rest = party.memberSteamIds.filter((m) => m !== steamId)
-    if (rest.length === 0) {
-      await this.db.update(parties).set({ disbandedAt: new Date() }).where(eq(parties.id, party.partyId))
-    } else {
-      if (party.leaderSteamId === steamId) {
-        await this.db.update(parties).set({ leaderSteamId: rest[0]! }).where(eq(parties.id, party.partyId))
-      }
-      await this.publish((await this.get(party.partyId))!)
+    const partyId = await this.partyIdOf(steamId)
+    if (!partyId) {
+      if (!opts.silentSelf) toUsers(this.notifier, [steamId], "party_update", emptyParty())
+      return
     }
-    if (!opts.silentSelf) toUsers(this.notifier, [steamId], "party_update", emptyParty())
+    const removed = await this.locked([partyId], (tx) => this.removeMember(tx, partyId, steamId))
+    // Someone else moved this player first. Their change already notified everyone
+    if (!removed) return
+    await this.afterRemoval(partyId, steamId, "member_left", !!opts.silentSelf)
   }
 
   async setLeader(steamId: string, target: string): Promise<PartyInfo> {
-    const party = await this.partyOf(steamId)
-    if (!party) throw notFound("no_party")
-    if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
-    if (!party.memberSteamIds.includes(target)) throw badRequest("not_member")
-    await this.db.update(parties).set({ leaderSteamId: target }).where(eq(parties.id, party.partyId))
-    const info = { ...party, leaderSteamId: target }
+    const partyId = await this.partyIdOf(steamId)
+    if (!partyId) throw notFound("no_party")
+    const info = await this.locked([partyId], async (tx) => {
+      const party = await this.get(partyId, tx)
+      if (!party || !party.memberSteamIds.includes(steamId)) throw conflict("party_changed")
+      if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
+      if (!party.memberSteamIds.includes(target)) throw badRequest("not_member")
+      await tx.update(parties).set({ leaderSteamId: target }).where(eq(parties.id, partyId))
+      return { ...party, leaderSteamId: target }
+    })
     await this.publish(info)
     return info
   }
 
   async kick(steamId: string, target: string): Promise<PartyInfo> {
-    const party = await this.partyOf(steamId)
-    if (!party) throw notFound("no_party")
-    if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
-    if (target === steamId || !party.memberSteamIds.includes(target)) throw badRequest("not_member")
-    await this.leave(target)
-    return (await this.get(party.partyId))!
+    const partyId = await this.partyIdOf(steamId)
+    if (!partyId) throw notFound("no_party")
+    await this.locked([partyId], async (tx) => {
+      const party = await this.get(partyId, tx)
+      if (!party || !party.memberSteamIds.includes(steamId)) throw conflict("party_changed")
+      if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
+      if (target === steamId || !party.memberSteamIds.includes(target)) throw badRequest("not_member")
+      await this.removeMember(tx, partyId, target)
+    })
+    await this.afterRemoval(partyId, target, "member_kicked", false)
+    return (await this.get(partyId))!
   }
 
   async payload(info: PartyInfo | null): Promise<PartyUpdatePayload> {
@@ -172,4 +264,11 @@ export class PartyService {
 
 export function emptyParty(): PartyUpdatePayload {
   return { partyId: null, leaderSteamId: null, members: [], inviteCode: null }
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  for (let e = err as { code?: string; cause?: unknown } | undefined; e; e = e.cause as typeof e) {
+    if (e.code === "23505") return true
+  }
+  return false
 }

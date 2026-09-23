@@ -6,6 +6,7 @@ import { VetoStateSchema } from "./schemas/veto.js"
 import { MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
+import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema } from "./schemas/friends.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
 export const WsEnvelopeSchema = z.object({
@@ -43,6 +44,8 @@ export const QueueStatusPayloadSchema = z.object({
   modes: z.array(QueueModeStatusSchema).refine((m) => uniqueModes(m.map((x) => x.mode)), "duplicate mode"),
   // Epoch ms, set when state is cooldown
   cooldownUntil: z.number().nullable(),
+  // True only on the periodic refresh. A slow socket may drop these, never a state change
+  refresh: z.boolean().optional(),
 })
 export type QueueStatusPayload = z.infer<typeof QueueStatusPayloadSchema>
 
@@ -149,6 +152,9 @@ export const EntryPlayerSchema = z.object({
   steamId: SteamId64Schema,
   displayName: z.string(),
   avatarUrl: z.string().nullable(),
+  // Rating and tier in the cup's mode. null and unranked when the player has no rating there
+  rating: z.number().nullable(),
+  tier: z.union([TierIdSchema, z.literal("unranked")]),
 })
 export type EntryPlayer = z.infer<typeof EntryPlayerSchema>
 
@@ -181,7 +187,8 @@ export const BracketMatchSchema = z.object({
   bSeed: z.number().int().positive().nullable(),
   aResolved: z.boolean(),
   bResolved: z.boolean(),
-  status: z.enum(["pending", "ready", "live", "done"]),
+  // provisioning means a server is being requested for the next game
+  status: z.enum(["pending", "ready", "provisioning", "live", "done"]),
   games: z.array(z.object({ matchId: UuidSchema, winner: BracketSideSchema })),
   liveMatchId: UuidSchema.nullable(),
   winner: UuidSchema.nullable(),
@@ -201,6 +208,8 @@ export type BracketView = z.infer<typeof BracketSchema>
 export const TournamentDetailSchema = TournamentSummarySchema.extend({
   entries: z.array(TournamentEntrySchema),
   bracket: BracketSchema.nullable(),
+  // Same value as the bracket ETag
+  bracketVersion: z.number().int().nonnegative(),
   myEntryId: UuidSchema.nullable(),
 })
 export type TournamentDetail = z.infer<typeof TournamentDetailSchema>
@@ -216,12 +225,20 @@ export const TournamentUpdatePayloadSchema = z.object({
     "completed",
   ]),
   tournament: TournamentSummarySchema,
-  // Present on started, match_live, match_updated and completed
-  bracket: BracketSchema.optional(),
+  // Bumped on every bracket change. Viewers refetch GET /tournaments/:id/bracket when it moves
+  bracketVersion: z.number().int().nonnegative(),
   // The bracket match that changed, on match_live and match_updated
   bracketMatchId: z.string().optional(),
 })
 export type TournamentUpdatePayload = z.infer<typeof TournamentUpdatePayloadSchema>
+
+// GET /tournaments/:id/bracket. The ETag header carries the same version
+export const TournamentBracketResponseSchema = z.object({
+  tournamentId: UuidSchema,
+  version: z.number().int().nonnegative(),
+  bracket: BracketSchema.nullable(),
+})
+export type TournamentBracketResponse = z.infer<typeof TournamentBracketResponseSchema>
 
 export const ModeStatsSchema = z.object({
   mode: ModeSchema,
@@ -283,6 +300,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("error", ErrorPayloadSchema),
   msg("match_update", MatchUpdatePayloadSchema),
   msg("challenge_update", ChallengeUpdatePayloadSchema),
+  msg("friend_update", FriendUpdatePayloadSchema),
+  msg("party_invite", PartyInvitePayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]
@@ -319,6 +338,13 @@ export type SubscribeMatchPayload = z.infer<typeof SubscribeMatchPayloadSchema>
 export const UnsubscribeMatchPayloadSchema = z.object({ matchId: UuidSchema })
 export type UnsubscribeMatchPayload = z.infer<typeof UnsubscribeMatchPayloadSchema>
 
+// match_live, match_updated and entries_changed go only to subscribers of that tournament
+export const SubscribeTournamentPayloadSchema = z.object({ tournamentId: UuidSchema })
+export type SubscribeTournamentPayload = z.infer<typeof SubscribeTournamentPayloadSchema>
+
+export const UnsubscribeTournamentPayloadSchema = z.object({ tournamentId: UuidSchema })
+export type UnsubscribeTournamentPayload = z.infer<typeof UnsubscribeTournamentPayloadSchema>
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   msg("accept_match", AcceptMatchPayloadSchema),
   msg("veto_vote", VetoVotePayloadSchema),
@@ -326,6 +352,8 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   msg("queue_leave", QueueLeavePayloadSchema),
   msg("subscribe_match", SubscribeMatchPayloadSchema),
   msg("unsubscribe_match", UnsubscribeMatchPayloadSchema),
+  msg("subscribe_tournament", SubscribeTournamentPayloadSchema),
+  msg("unsubscribe_tournament", UnsubscribeTournamentPayloadSchema),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 export type ClientMessageType = ClientMessage["type"]

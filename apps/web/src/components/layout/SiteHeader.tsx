@@ -7,6 +7,7 @@ import { BRAND_NAME } from "@rushsite/shared";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Logo } from "@/components/ui/Logo";
 import { NotifyMenu } from "@/components/notify/NotifyMenu";
+import { FriendsMenuBadge, FriendsNav } from "@/components/friends/FriendsNav";
 import { useSession } from "@/lib/session";
 import { UserMenu } from "./UserMenu";
 import styles from "./SiteHeader.module.css";
@@ -41,6 +42,7 @@ export function SiteHeader() {
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
             <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
+          <FriendsMenuBadge />
         </button>
         <nav id="site-nav" aria-label="Main" className={`${styles.nav} ${open ? styles.navOpen : ""}`}>
           <ul>
@@ -59,6 +61,11 @@ export function SiteHeader() {
                 </li>
               );
             })}
+            {user && (
+              <li>
+                <FriendsNav onNavigate={() => setOpen(false)} />
+              </li>
+            )}
             <li>
               <NotifyMenu />
             </li>

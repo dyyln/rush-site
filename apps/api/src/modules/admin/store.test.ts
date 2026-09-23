@@ -56,7 +56,7 @@ beforeAll(async () => {
     { id: M2, mode: "aim1v1", status: "live", teams, webhookSecret: "s", serverIp: "203.0.113.5", serverPort: 27016, connect: "connect x", createdAt: hourAgo },
   ])
   await db.insert(matchPlayers).values([
-    { matchId: M1, steamId: A, team: 0, won: true, kills: 16, deaths: 10 },
+    { matchId: M1, steamId: A, team: 0, won: true, kills: 16, deaths: 10, headshots: 7 },
     { matchId: M1, steamId: B, team: 1, won: false, kills: 10, deaths: 16 },
   ])
   await db.insert(bans).values([
@@ -102,7 +102,7 @@ describe("DrizzleAdminStore", () => {
     expect(a!.trust).toMatchObject({ level: "verified", locked: false })
     expect(a!.trustSignals[0]).toMatchObject({ source: "steam_bans", clean: true, data: { vac: 0 } })
     expect(a!.ratings[0]).toMatchObject({ mode: "aim1v1", rating: 1612, wins: 8 })
-    expect(a!.recentMatches[0]).toMatchObject({ id: M1, won: true, kills: 16 })
+    expect(a!.recentMatches[0]).toMatchObject({ id: M1, won: true, kills: 16, headshots: 7 })
     expect(a!.reports).toEqual({ received: 1, open: 1 })
     expect(a!.flags).toEqual({ total: 1, open: 1 })
     expect(a!.cooldowns).toHaveLength(1)

@@ -290,14 +290,15 @@ function mockEntries(t: TournamentSummary): EntryView[] {
   return Array.from({ length: t.entrantCount }, (_, i) => {
     const players = Array.from({ length: size }, (_, j) => {
       const u = mockUser(i * size + j + 1);
-      return { steamId: u.steamId, displayName: u.displayName, avatarUrl: null };
+      const rating = Math.round(2250 - i * 40 - r() * 160);
+      return { steamId: u.steamId, displayName: u.displayName, avatarUrl: null, rating, tier: tierForRating(rating).id };
     });
     return {
       id: `${t.id.slice(0, 24)}${String(i).padStart(12, "0")}`,
       captainSteamId: players[0]!.steamId,
       steamIds: players.map((p) => p.steamId),
       seed: t.status === "open" ? null : i + 1,
-      rating: Math.round(2200 - i * 40 - r() * 30),
+      rating: Math.round(players.reduce((n, p) => n + p.rating, 0) / players.length),
       registeredAt: new Date(MOCK_NOW - (i + 1) * 3_600_000).toISOString(),
       name: size === 1 ? players[0]!.displayName : `Team ${players[0]!.displayName}`,
       players,
@@ -372,6 +373,19 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
   return { size, rounds, matches };
 }
 
+// Bumped by the mock realtime client to simulate bracket changes
+const mockBracketVersions = new Map<string, number>();
+
+export function mockBracketVersion(id: string): number {
+  return mockBracketVersions.get(id) ?? 1;
+}
+
+export function bumpMockBracketVersion(id: string): number {
+  const v = mockBracketVersion(id) + 1;
+  mockBracketVersions.set(id, v);
+  return v;
+}
+
 export function mockTournamentDetail(id: string): TournamentDetail | null {
   const t = MOCK_TOURNAMENTS.find((x) => x.id === id);
   if (!t) return null;
@@ -383,6 +397,7 @@ export function mockTournamentDetail(id: string): TournamentDetail | null {
     winnerEntryId: t.status === "completed" ? final?.winner ?? null : null,
     entries,
     bracket,
+    bracketVersion: mockBracketVersion(id),
     myEntryId: null,
   };
 }

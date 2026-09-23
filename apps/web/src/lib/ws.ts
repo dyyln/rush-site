@@ -7,12 +7,18 @@ export type { AdminEvent, ConnectionState, Realtime } from "./ws-core";
 
 const BASE_DELAY_MS = 500;
 const MAX_DELAY_MS = 15_000;
+// Spreads a mass reconnect after a deploy over a few seconds
+const RECONNECT_JITTER_MS = 3_000;
+
+// Replayed after every reconnect because the server forgets them with the socket
+type Subscription = { type: ClientMessageType; payload: unknown };
 
 export class RealtimeClient extends Emitter implements Realtime {
   private ws: WebSocket | null = null;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
+  private readonly subscriptions = new Map<string, Subscription>();
   state: ConnectionState = "closed";
 
   constructor(private readonly url: string) {
@@ -27,6 +33,7 @@ export class RealtimeClient extends Emitter implements Realtime {
     this.ws = ws;
     ws.onopen = () => {
       this.attempt = 0;
+      for (const sub of this.subscriptions.values()) this.write(sub.type, sub.payload);
       this.setState("open");
     };
     ws.onmessage = (ev) => this.handleMessage(ev.data);
@@ -47,9 +54,23 @@ export class RealtimeClient extends Emitter implements Realtime {
   }
 
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean {
+    this.track(type, payload);
+    return this.write(type, payload);
+  }
+
+  private write(type: string, payload: unknown): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
     this.ws.send(JSON.stringify({ type, payload, ts: Date.now() }));
     return true;
+  }
+
+  // Remembers subscribe_* messages so they survive a reconnect. unsubscribe_* forgets them
+  private track(type: string, payload: unknown) {
+    const m = /^(un)?subscribe_(.+)$/.exec(type);
+    if (!m) return;
+    const key = `${m[2]}:${JSON.stringify(payload)}`;
+    if (m[1]) this.subscriptions.delete(key);
+    else this.subscriptions.set(key, { type: type as ClientMessageType, payload });
   }
 
   private handleMessage(raw: unknown) {
@@ -70,20 +91,24 @@ export class RealtimeClient extends Emitter implements Realtime {
     }
   }
 
-  // Exponential backoff with full jitter
+  // Exponential backoff with full jitter, plus up to 3 s more so a restarted server is not hit all at once
   private scheduleReconnect() {
-    const cap = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** this.attempt);
-    this.attempt++;
     this.timer = setTimeout(() => {
       this.timer = null;
       this.connect();
-    }, Math.random() * cap);
+    }, reconnectDelay(this.attempt));
+    this.attempt++;
   }
 
   private setState(s: ConnectionState) {
     this.state = s;
     this.emitState(s);
   }
+}
+
+export function reconnectDelay(attempt: number, random: () => number = Math.random): number {
+  const cap = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** attempt);
+  return random() * cap + random() * RECONNECT_JITTER_MS;
 }
 
 const KNOWN = new Set(ServerMessageSchema.options.map((o) => o.shape.type.value as string));

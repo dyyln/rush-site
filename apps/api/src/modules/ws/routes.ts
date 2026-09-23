@@ -2,8 +2,9 @@ import { ClientMessageSchema, type ClientMessage } from "@rushsite/shared"
 import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from "fastify"
 import type { WebSocket } from "ws"
 import type { AppContext } from "../../context.js"
+import { realtimeMetrics, sendChecked } from "../../lib/backpressure.js"
 import { ApiError } from "../../lib/errors.js"
-import { MAX_MATCH_SUBSCRIPTIONS, type LocalHub } from "./hub.js"
+import { MAX_MATCH_SUBSCRIPTIONS, MAX_TOURNAMENT_SUBSCRIPTIONS, type LocalHub } from "./hub.js"
 
 type AuthedRequest = FastifyRequest & { wsSteamId?: string }
 
@@ -27,6 +28,8 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
     // Subscriptions are handled on the socket itself
     case "subscribe_match":
     case "unsubscribe_match":
+    case "subscribe_tournament":
+    case "unsubscribe_tournament":
       return
   }
 }
@@ -34,7 +37,9 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
 export type ClientSocket = {
   readonly readyState: number
   readonly OPEN: number
+  readonly bufferedAmount?: number
   send(data: string): void
+  close?(code?: number, reason?: string): void
   ping(): void
   terminate(): void
   on(event: "message", fn: (data: { toString(): string }) => void): unknown
@@ -52,13 +57,18 @@ export function attachSocket(
   // Spectators register under a private key so they get match and broadcast messages only
   const hubKey = steamId ?? `anon:${Math.random().toString(36).slice(2)}`
   hub.add(hubKey, socket, !!steamId && ctx.isAdmin(steamId))
-  const send = (type: string, payload: unknown) => {
-    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type, payload, ts: Date.now() }))
+  const send = (type: string, payload: unknown, ts = Date.now()) => {
+    sendChecked(socket, { type, payload }, JSON.stringify({ type, payload, ts }))
   }
   let alive = true
+  const heartbeat = () => {
+    if (steamId) void ctx.presence.heartbeat(steamId).catch((err) => log.warn({ err, steamId }, "presence heartbeat failed"))
+  }
   socket.on("pong", () => {
     alive = true
+    heartbeat()
   })
+  heartbeat()
   const ping = setInterval(() => {
     if (!alive) {
       socket.terminate()
@@ -90,6 +100,18 @@ export function attachSocket(
         }
         return
       }
+      if (parsed.type === "subscribe_tournament" || parsed.type === "unsubscribe_tournament") {
+        const { tournamentId } = parsed.payload
+        if (parsed.type === "unsubscribe_tournament") hub.unsubscribeTournament(socket, tournamentId)
+        else if (!hub.subscribeTournament(socket, tournamentId)) {
+          send("error", {
+            code: "too_many_subscriptions",
+            message: `at most ${MAX_TOURNAMENT_SUBSCRIPTIONS} tournaments per connection`,
+            for: parsed.type,
+          })
+        }
+        return
+      }
     } catch {
       send("error", { code: "invalid_json", message: "message is not valid JSON" })
       return
@@ -112,13 +134,36 @@ export function attachSocket(
   })
 
   // Initial snapshot so a reconnecting client catches up
-  if (steamId) {
-    void (async () => {
-      send("party_update", await ctx.parties.payload(await ctx.parties.partyOf(steamId)))
-      send("queue_status", await ctx.queue.status(steamId))
-      await ctx.flow.resendState(steamId)
-    })().catch((err) => log.warn({ err, steamId }, "ws snapshot failed"))
+  if (steamId) void sendSnapshot(ctx, steamId, send).catch((err) => log.warn({ err, steamId }, "ws snapshot failed"))
+}
+
+// Serves the Redis snapshot. Postgres is only read when it is missing
+async function sendSnapshot(
+  ctx: AppContext,
+  steamId: string,
+  send: (type: string, payload: unknown, ts?: number) => void,
+): Promise<void> {
+  const snap = await ctx.snapshots.read(steamId).catch(() => null)
+  if (snap) {
+    realtimeMetrics.snapshotHits++
+    for (const m of [snap.party, snap.queue, snap.match]) if (m) send(m.type, m.payload, m.ts)
+    return
   }
+  realtimeMetrics.snapshotMisses++
+  const ts = Date.now()
+  const party = await ctx.parties.payload(await ctx.parties.partyOf(steamId))
+  const queue = await ctx.queue.status(steamId)
+  send("party_update", party, ts)
+  send("queue_status", queue, ts)
+  // Live messages written meanwhile win. resendState then fills the match phase through the notifier
+  await ctx.snapshots
+    .update(
+      steamId,
+      { party: { type: "party_update", payload: party, ts }, queue: { type: "queue_status", payload: queue, ts }, match: null },
+      { onlyMissing: true },
+    )
+    .catch(() => undefined)
+  await ctx.flow.resendState(steamId)
 }
 
 export function registerWsRoutes(app: FastifyInstance, ctx: AppContext, hub: LocalHub): void {

@@ -21,11 +21,12 @@ export interface TournamentRecord {
   completedAt: Date | null
   cancelReason: string | null
   winnerEntryId: string | null
+  bracketVersion: number
 }
 
 export type NewTournament = Omit<
   TournamentRecord,
-  "id" | "status" | "startedAt" | "completedAt" | "cancelReason" | "winnerEntryId"
+  "id" | "status" | "startedAt" | "completedAt" | "cancelReason" | "winnerEntryId" | "bracketVersion"
 >
 
 export interface EntryRecord {
@@ -49,6 +50,8 @@ export interface BadgeRecord {
 export interface StoredBracket {
   bracket: Bracket
   provisionAttempts: Record<string, number>
+  // Epoch ms when each provisioning match was claimed.
+  provisioningAt: Record<string, number>
 }
 
 export interface TournamentFilter {
@@ -71,7 +74,8 @@ export interface TournamentStore {
   insertEntry(e: Omit<EntryRecord, "id" | "createdAt" | "seed" | "rating">): Promise<EntryRecord>
   deleteEntries(ids: string[]): Promise<void>
   updateEntrySeeds(rows: { id: string; seed: number; rating: number }[]): Promise<void>
-  saveBracket(tournamentId: string, stored: StoredBracket): Promise<void>
+  // Also bumps the tournament's bracket version and returns the new one.
+  saveBracket(tournamentId: string, stored: StoredBracket): Promise<number>
   loadBracket(tournamentId: string): Promise<StoredBracket | null>
   findTournamentByLiveMatch(matchId: string): Promise<string | null>
   insertBadges(rows: BadgeRecord[]): Promise<void>
@@ -104,6 +108,7 @@ function toTournament(r: TRow): TournamentRecord {
     completedAt: r.completedAt,
     cancelReason: r.cancelReason,
     winnerEntryId: r.winnerEntryId,
+    bracketVersion: r.bracketVersion,
   }
 }
 
@@ -235,7 +240,7 @@ export class DrizzleTournamentStore implements TournamentStore {
     }
   }
 
-  async saveBracket(tournamentId: string, stored: StoredBracket): Promise<void> {
+  async saveBracket(tournamentId: string, stored: StoredBracket): Promise<number> {
     const { bracket } = stored
     const [b] = await this.db
       .insert(brackets)
@@ -262,6 +267,8 @@ export class DrizzleTournamentStore implements TournamentStore {
       games: m.games,
       liveMatchId: m.liveMatchId,
       provisionAttempts: stored.provisionAttempts[m.id] ?? 0,
+      provisioningAt:
+        stored.provisioningAt[m.id] !== undefined ? new Date(stored.provisioningAt[m.id]!) : null,
       winnerEntryId: m.winner,
       resolution: m.resolution,
       updatedAt: new Date(),
@@ -283,11 +290,18 @@ export class DrizzleTournamentStore implements TournamentStore {
           games: ex("games"),
           liveMatchId: ex("live_match_id"),
           provisionAttempts: ex("provision_attempts"),
+          provisioningAt: ex("provisioning_at"),
           winnerEntryId: ex("winner_entry_id"),
           resolution: ex("resolution"),
           updatedAt: ex("updated_at"),
         },
       })
+    const [v] = await this.db
+      .update(tournaments)
+      .set({ bracketVersion: sql`${tournaments.bracketVersion} + 1` })
+      .where(eq(tournaments.id, tournamentId))
+      .returning({ version: tournaments.bracketVersion })
+    return v?.version ?? 0
   }
 
   async loadBracket(tournamentId: string): Promise<StoredBracket | null> {
@@ -301,6 +315,9 @@ export class DrizzleTournamentStore implements TournamentStore {
     return {
       bracket: { size: b.size, rounds: b.rounds, matches: rows.map(toMatch) },
       provisionAttempts: Object.fromEntries(rows.map((r) => [r.key, r.provisionAttempts])),
+      provisioningAt: Object.fromEntries(
+        rows.flatMap((r) => (r.provisioningAt ? [[r.key, r.provisioningAt.getTime()]] : [])),
+      ),
     }
   }
 

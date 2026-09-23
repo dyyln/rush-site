@@ -233,6 +233,15 @@ describe("schemas", () => {
     expect(() => ClientMessageSchema.parse({ type: "subscribe_match", payload: {}, ts: 1 })).toThrow()
   })
 
+  it("parses tournament subscriptions", () => {
+    for (const type of ["subscribe_tournament", "unsubscribe_tournament"] as const) {
+      expect(ClientMessageSchema.parse({ type, payload: { tournamentId: MID }, ts: 1 }).type).toBe(type)
+    }
+    expect(() =>
+      ClientMessageSchema.parse({ type: "subscribe_tournament", payload: { tournamentId: "x" }, ts: 1 }),
+    ).toThrow()
+  })
+
   it("veto state round trips", () => {
     const s = createVeto({
       pool: ["a", "b", "c", "d", "e"],

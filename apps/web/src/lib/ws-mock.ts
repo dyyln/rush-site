@@ -15,7 +15,7 @@ import {
 } from "@rushsite/shared";
 import { hasLadderVeto } from "./modes";
 import { mockMatchDetail } from "./mock-match";
-import { MOCK_ME, mockSteamId } from "./mock";
+import { MOCK_ME, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockSteamId, mockTournamentDetail } from "./mock";
 import { Emitter, type ClientPayload, type ConnectionState, type Realtime } from "./ws-core";
 
 type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]> = Extract<U, { type: T }>["payload"];
@@ -87,6 +87,29 @@ export class MockRealtime extends Emitter implements Realtime {
     this.matchSubs.delete(matchId);
   }
 
+  private tournamentSubs = new Map<string, ReturnType<typeof setInterval>>();
+
+  // Running mock cups report a bracket change every few seconds so the page refetches
+  private subscribeTournament(tournamentId: string) {
+    const t = MOCK_TOURNAMENTS.find((x) => x.id === tournamentId);
+    if (!t || t.status !== "running" || this.tournamentSubs.has(tournamentId)) return;
+    const timer = setInterval(() => {
+      const live = mockTournamentDetail(tournamentId)?.bracket?.matches.find((m) => m.status === "live");
+      this.emit("tournament_update", {
+        kind: "match_updated",
+        tournament: t,
+        bracketVersion: bumpMockBracketVersion(tournamentId),
+        ...(live ? { bracketMatchId: live.id } : {}),
+      });
+    }, 8000);
+    this.tournamentSubs.set(tournamentId, timer);
+  }
+
+  private unsubscribeTournament(tournamentId: string) {
+    clearInterval(this.tournamentSubs.get(tournamentId));
+    this.tournamentSubs.delete(tournamentId);
+  }
+
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean {
     const msg = { type, payload } as ClientMessage;
     switch (msg.type) {
@@ -108,6 +131,12 @@ export class MockRealtime extends Emitter implements Realtime {
       case "unsubscribe_match":
         this.unsubscribe(msg.payload.matchId);
         break;
+      case "subscribe_tournament":
+        this.subscribeTournament(msg.payload.tournamentId);
+        break;
+      case "unsubscribe_tournament":
+        this.unsubscribeTournament(msg.payload.tournamentId);
+        break;
     }
     return true;
   }
@@ -124,6 +153,11 @@ export class MockRealtime extends Emitter implements Realtime {
 
   emitChallenge(payload: PayloadOf<ServerMessage, "challenge_update">) {
     this.emit("challenge_update", payload);
+  }
+
+  // Friends and party invite notices from the friends mock
+  emitFriends<T extends "friend_update" | "party_invite">(type: T, payload: PayloadOf<ServerMessage, T>) {
+    this.dispatch({ type, payload, ts: Date.now() } as ServerMessage);
   }
 
   private emit<T extends ServerMessageType>(type: T, payload: PayloadOf<ServerMessage, T>) {

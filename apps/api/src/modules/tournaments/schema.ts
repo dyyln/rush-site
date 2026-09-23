@@ -35,6 +35,8 @@ export const tournaments = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
     winnerEntryId: uuid("winner_entry_id"),
+    // Bumped on every bracket write. Served as the bracket ETag.
+    bracketVersion: integer("bracket_version").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -100,6 +102,8 @@ export const bracketMatches = pgTable(
     liveMatchId: uuid("live_match_id"),
     // Failed provisioning attempts for the next game.
     provisionAttempts: integer("provision_attempts").notNull().default(0),
+    // Set while a server is being requested. Stale claims are released.
+    provisioningAt: timestamp("provisioning_at", { withTimezone: true }),
     winnerEntryId: uuid("winner_entry_id"),
     // played, bye, walkover, forfeit, double_forfeit, void
     resolution: text("resolution"),

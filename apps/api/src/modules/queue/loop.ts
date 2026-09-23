@@ -19,7 +19,6 @@ export async function matchmakeMode(
   const teamSize = getModeConfig(mode).teamSize
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     const all = await queue.waiting(mode)
-    if (pass === 0) await queue.refreshCount(mode, all)
     const tickets = all.filter((t) => !excluded.has(t.id))
     const byId = new Map<string, LiveTicket>(tickets.map((t) => [t.id, t]))
     const proposals = findMatches(
@@ -47,8 +46,20 @@ export async function matchmakeMode(
   return created
 }
 
-export async function matchmakeAll(queue: QueueService, flow: MatchFlow, now: number, log?: FastifyBaseLogger): Promise<string[]> {
+// The first mode rotates each tick so a player queued for several modes is not always taken by the same one
+export function modeOrder(tick: number): Mode[] {
+  const start = ((tick % MODES.length) + MODES.length) % MODES.length
+  return [...MODES.slice(start), ...MODES.slice(0, start)]
+}
+
+export async function matchmakeAll(
+  queue: QueueService,
+  flow: MatchFlow,
+  now: number,
+  log?: FastifyBaseLogger,
+  tick = 0,
+): Promise<string[]> {
   const out: string[] = []
-  for (const mode of MODES) out.push(...(await matchmakeMode(mode, queue, flow, now, log)))
+  for (const mode of modeOrder(tick)) out.push(...(await matchmakeMode(mode, queue, flow, now, log)))
   return out
 }

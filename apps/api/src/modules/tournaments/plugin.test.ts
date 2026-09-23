@@ -6,6 +6,7 @@ import tournamentsPlugin from "./index.js"
 import { MemoryTournamentStore } from "./memory-store.js"
 import type { TournamentService } from "./service.js"
 import type {
+  EmitAudience,
   MatchResult,
   MatchResultHandler,
   PartyInfo,
@@ -27,6 +28,9 @@ async function harness(cups: CupDefinition[]) {
   const ratings: Record<string, number> = {}
   const parties: PartyInfo[] = []
   const failStart = { value: false }
+  const audiences: (EmitAudience | undefined)[] = []
+  // Test hook that runs inside startMatch.
+  const onStart: { fn?: (p: StartMatchParams) => Promise<void> } = {}
   let handler: MatchResultHandler | undefined
   let service: TournamentService | undefined
   let seq = 0
@@ -42,6 +46,7 @@ async function harness(cups: CupDefinition[]) {
     scheduler: false,
     now: () => clock.now,
     startMatch: async (p) => {
+      await onStart.fn?.(p)
       if (failStart.value) throw new Error("no free slots")
       const matchId = `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`
       started.push({ ...p, matchId })
@@ -50,10 +55,14 @@ async function harness(cups: CupDefinition[]) {
     onMatchResult: (h) => {
       handler = h
     },
-    emit: (m) => emitted.push(m),
+    emit: (m, audience) => {
+      emitted.push(m)
+      audiences.push(audience)
+    },
     authenticate: async (req) => (req.headers["x-steam-id"] as string | undefined) ?? null,
     getTrustLevels: async (ids) => Object.fromEntries(ids.map((id) => [id, trust[id] ?? "new"])),
-    getRatings: async (ids) => Object.fromEntries(ids.map((id) => [id, ratings[id] ?? 1500])),
+    getRatings: async (ids) =>
+      Object.fromEntries(ids.filter((id) => id in ratings).map((id) => [id, ratings[id]!])),
     getProfiles: async (ids) =>
       Object.fromEntries(
         ids.filter((id) => id !== "p5").map((id) => [id, { displayName: `N-${id}`, avatarUrl: `https://a/${id}` }]),
@@ -72,6 +81,8 @@ async function harness(cups: CupDefinition[]) {
     ratings,
     parties,
     failStart,
+    audiences,
+    onStart,
     tick: () => (service as TournamentService).tick(),
     result: (r: MatchResult) => (handler as MatchResultHandler)(r),
     enter: (id: string, steamId?: string) =>
@@ -197,7 +208,9 @@ describe("sign-up", () => {
     expect(ok.json().entry.steamIds).toEqual(["p1"])
     expect(ok.json().entry).toMatchObject({
       name: "N-p1",
-      players: [{ steamId: "p1", displayName: "N-p1", avatarUrl: "https://a/p1" }],
+      players: [
+        { steamId: "p1", displayName: "N-p1", avatarUrl: "https://a/p1", rating: null, tier: "unranked" },
+      ],
     })
     expect((await h.enter(id, "p1")).json().error).toBe("already_entered")
     const detail = await h.app.inject({ url: `/tournaments/${id}`, headers: { "x-steam-id": "p1" } })
@@ -292,12 +305,21 @@ describe("running a cup", () => {
     const t = await fiveEntrants()
     await h.startNow(t.startsAt)
     expect(h.only().status).toBe("running")
-    expect(h.emitted.some((e) => e.payload.kind === "started" && e.payload.bracket)).toBe(true)
+    const startedAt = h.emitted.findIndex((e) => e.payload.kind === "started")
+    expect(h.emitted[startedAt]?.payload).not.toHaveProperty("bracket")
+    expect(h.emitted[startedAt]?.payload.bracketVersion).toBeGreaterThan(0)
+    expect(h.audiences[startedAt]).toEqual({ kind: "broadcast" })
+    const liveAt = h.emitted.findIndex((e) => e.payload.kind === "match_live")
+    expect(h.audiences[liveAt]).toEqual({ kind: "tournament", tournamentId: t.id })
     const seeds = [...h.store.entries.values()].sort((a, b) => (a.seed ?? 0) - (b.seed ?? 0))
     expect(seeds.map((e) => e.captainSteamId)).toEqual(["p1", "p2", "p3", "p4", "p5"])
     const shown = (await h.app.inject({ url: `/tournaments/${t.id}` })).json().tournament.entries
     // p5 has no profile and falls back to the SteamID.
-    expect(shown.find((e: { captainSteamId: string }) => e.captainSteamId === "p5").name).toBe("p5")
+    type Shown = { captainSteamId: string; name: string; players: { rating: number; tier: string }[] }
+    const byCaptain = (id: string) => shown.find((e: Shown) => e.captainSteamId === id) as Shown
+    expect(byCaptain("p5").name).toBe("p5")
+    expect(byCaptain("p1").players[0]).toMatchObject({ rating: 1900, tier: "platinum" })
+    expect(byCaptain("p5").players[0]).toMatchObject({ rating: 1500, tier: "silver" })
 
     // 4 v 5 in round one and 2 v 3 in round two are provisioned straight away.
     expect(h.started.map((s) => s.source.bracketMatchId).sort()).toEqual(["r1m1", "r2m1"])
@@ -395,5 +417,97 @@ describe("running a cup", () => {
     await h.startNow(t.startsAt)
     expect(h.store.entries.size).toBe(4)
     expect(bracket()?.size).toBe(4)
+  })
+
+  it("requests servers outside the row lock, four at a time", async () => {
+    h = await harness([cup("daily-aim1v1")])
+    await h.tick()
+    const t = h.only()
+    for (let i = 1; i <= 16; i++) verify(`p${i}`)
+    for (let i = 1; i <= 16; i++) await h.enter(t.id, `p${i}`)
+    let inFlight = 0
+    let peak = 0
+    h.onStart.fn = async () => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      // Deadlocks if startMatch runs while the tournament row is locked.
+      await h.store.locked(t.id, async () => undefined)
+      expect(bm(`r1m0`).status === "provisioning" || bm("r1m0").status === "live").toBe(true)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+    }
+    await h.startNow(t.startsAt)
+    expect(h.started).toHaveLength(8)
+    expect(peak).toBe(4)
+    expect(bracket()?.matches.filter((m) => m.status === "live")).toHaveLength(8)
+  })
+
+  it("releases a stale provisioning claim", async () => {
+    const t = await fiveEntrants()
+    h.failStart.value = true
+    await h.startNow(t.startsAt)
+    // Simulate a process that died after claiming r1m1.
+    const stored = h.store.brackets.get(t.id)!
+    stored.bracket.matches.find((m) => m.id === "r1m1")!.status = "provisioning"
+    stored.provisioningAt.r1m1 = h.clock.now.getTime()
+    h.failStart.value = false
+    await h.tick()
+    expect(bm("r1m1").status).toBe("provisioning")
+    h.clock.now = new Date(h.clock.now.getTime() + 6 * 60_000)
+    await h.tick()
+    expect(bm("r1m1").status).toBe("live")
+  })
+})
+
+describe("bracket endpoint", () => {
+  it("serves the bracket with a version ETag and 304s", async () => {
+    h = await harness([cup("daily-aim1v1")])
+    await h.tick()
+    const t = h.only()
+    verify("p1", "p2")
+    await h.enter(t.id, "p1")
+    await h.enter(t.id, "p2")
+    const before = await h.app.inject({ url: `/tournaments/${t.id}/bracket` })
+    expect(before.statusCode).toBe(200)
+    expect(before.headers.etag).toBe('"0"')
+    expect(before.json()).toEqual({ tournamentId: t.id, version: 0, bracket: null })
+
+    await h.startNow(t.startsAt)
+    const v = h.only().bracketVersion
+    expect(v).toBeGreaterThan(0)
+    const detail = await h.app.inject({ url: `/tournaments/${t.id}` })
+    expect(detail.json().tournament.bracketVersion).toBe(v)
+
+    const res = await h.app.inject({ url: `/tournaments/${t.id}/bracket` })
+    expect(res.headers.etag).toBe(`"${v}"`)
+    expect(res.json().bracket.matches).toHaveLength(1)
+    const same = await h.app.inject({
+      url: `/tournaments/${t.id}/bracket`,
+      headers: { "if-none-match": `W/"${v}"` },
+    })
+    expect(same.statusCode).toBe(304)
+    expect(same.body).toBe("")
+
+    await win("r1m0", "A")
+    const moved = await h.app.inject({
+      url: `/tournaments/${t.id}/bracket`,
+      headers: { "if-none-match": `"${v}"` },
+    })
+    expect(moved.statusCode).toBe(200)
+    expect(moved.json().version).toBeGreaterThan(v)
+    const last = h.emitted.at(-1)?.payload
+    expect(last?.bracketVersion).toBe(moved.json().version)
+    expect((await h.app.inject({ url: "/tournaments/nope/bracket" })).statusCode).toBe(404)
+  })
+
+  it("sends entry changes to subscribers only", async () => {
+    h = await harness([cup("daily-aim1v1")])
+    await h.tick()
+    const t = h.only()
+    verify("p1")
+    await h.enter(t.id, "p1")
+    expect(h.emitted.at(-1)?.payload.kind).toBe("entries_changed")
+    expect(h.audiences.at(-1)).toEqual({ kind: "tournament", tournamentId: t.id })
+    expect(h.audiences[0]).toEqual({ kind: "broadcast" })
   })
 })

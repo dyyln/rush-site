@@ -9,6 +9,16 @@ const STATUSES: TournamentStatus[] = ["open", "running", "completed", "cancelled
 type IdParams = { Params: { id: string } }
 type ListQuery = { Querystring: { status?: string; mode?: string; limit?: string } }
 
+// Takes the first version out of an If-None-Match header such as "3" or W/"3".
+function parseIfNoneMatch(header: string | undefined): number | null {
+  if (!header) return null
+  for (const part of header.split(",")) {
+    const m = /^\s*(?:W\/)?"(\d+)"\s*$/.exec(part)
+    if (m) return Number(m[1])
+  }
+  return null
+}
+
 export function registerRoutes(
   app: FastifyInstance,
   service: TournamentService,
@@ -50,6 +60,15 @@ export function registerRoutes(
     checkId(req.params.id)
     const viewer = await authenticate(req)
     return { tournament: await service.detail(req.params.id, viewer) }
+  })
+
+  app.get<IdParams>("/tournaments/:id/bracket", async (req, reply) => {
+    checkId(req.params.id)
+    const known = parseIfNoneMatch(req.headers["if-none-match"])
+    const res = await service.bracket(req.params.id, known)
+    reply.header("etag", `"${res.version}"`).header("cache-control", "no-cache")
+    if (res.bracket === undefined) return reply.code(304).send()
+    return { tournamentId: req.params.id, version: res.version, bracket: res.bracket }
   })
 
   app.post<IdParams>("/tournaments/:id/enter", async (req, reply) => {

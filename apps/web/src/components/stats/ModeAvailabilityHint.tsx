@@ -1,25 +1,33 @@
-import Link from "next/link";
 import type { ServiceStatus } from "@rushsite/shared";
+import { ButtonLink } from "@/components/ui/Button";
 import { MODE_COPY } from "@/lib/modes";
 import { unavailableText } from "./copy";
+import { WarningIcon } from "./WarningIcon";
 import styles from "./ModeAvailabilityHint.module.css";
 
-// Lists modes that cannot queue right now with a link to the status page
+// Notice card for modes that cannot queue right now
 export function ModeAvailabilityHint({ status }: { status: ServiceStatus | null }) {
   const down = status?.modes.filter((m) => !m.available) ?? [];
-  if (down.length === 0) return null;
+  if (!status || down.length === 0) return null;
+  const allSame = down.length === status.modes.length && down.every((m) => m.reason === down[0]!.reason);
+  const lines = allSame
+    ? [{ key: "all", text: `All modes unavailable: ${unavailableText(down[0]!.reason).toLowerCase()}` }]
+    : down.map((m) => ({ key: m.mode, text: `${MODE_COPY[m.mode].label}: ${unavailableText(m.reason)}` }));
   return (
-    <p className={styles.hint} role="status">
-      {down.map((m, i) => (
-        <span key={m.mode}>
-          {i > 0 && ". "}
-          {MODE_COPY[m.mode].label} unavailable: {unavailableText(m.reason).toLowerCase()}
-        </span>
-      ))}
-      .{" "}
-      <Link href="/status" className={styles.link}>
-        Server status
-      </Link>
-    </p>
+    <div className={styles.card} role="status">
+      <ul className={styles.lines}>
+        {lines.map((l) => (
+          <li key={l.key} className={styles.line}>
+            <WarningIcon className={styles.icon} />
+            <span>{l.text}</span>
+          </li>
+        ))}
+      </ul>
+      <div>
+        <ButtonLink href="/status" variant="secondary">
+          Server status
+        </ButtonLink>
+      </div>
+    </div>
   );
 }

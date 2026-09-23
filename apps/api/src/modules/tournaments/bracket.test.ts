@@ -5,6 +5,8 @@ import {
   BracketError,
   buildBracket,
   cancelGame,
+  claimGame,
+  releaseGame,
   forfeit,
   isComplete,
   nextPowerOfTwo,
@@ -171,6 +173,20 @@ describe("advancement", () => {
     b = cancelGame(b, "r1m0", "g1")
     expect(m(b, "r1m0").status).toBe("ready")
     expect(m(b, "r1m0").liveMatchId).toBeNull()
+  })
+
+  it("claims and releases a match while a server is requested", () => {
+    let b = buildBracket(entries(2), RULE)
+    b = claimGame(b, "r1m0")
+    expect(m(b, "r1m0").status).toBe("provisioning")
+    expect(playableMatches(b)).toHaveLength(0)
+    expect(() => claimGame(b, "r1m0")).toThrow(BracketError)
+    const released = releaseGame(b, "r1m0")
+    expect(m(released, "r1m0").status).toBe("ready")
+    expect(releaseGame(released, "r1m0")).toBe(released)
+    const live = startGame(b, "r1m0", "g1")
+    expect(m(live, "r1m0").status).toBe("live")
+    expect(m(live, "r1m0").liveMatchId).toBe("g1")
   })
 
   it("reports placements", () => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Bracket, BracketMatch, EntryView } from "@/lib/types";
 import { Badge } from "./Badge";
+import { TeamCard, type TeamCardPlayer } from "./TeamCard";
 import { TeamMarker, type TeamSide } from "./TeamMarker";
 import { cx } from "./cx";
 import styles from "./BracketView.module.css";
@@ -22,6 +23,10 @@ export function roundName(round: number, rounds: number): string {
 export function entryName(e: EntryView | undefined): string {
   if (!e) return "TBD";
   return e.name ?? e.players?.map((p) => p.displayName).join(", ") ?? e.captainSteamId;
+}
+
+export function entryPlayers(e: EntryView): TeamCardPlayer[] {
+  return e.players ?? e.steamIds.map((steamId) => ({ steamId, displayName: steamId, avatarUrl: null }));
 }
 
 export function BracketView({ bracket, entries, highlightEntryId }: BracketViewProps) {
@@ -70,13 +75,13 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
     { id: match.b, seed: match.bSeed, score: bWins, resolved: match.bResolved },
   ];
   const href = matchLink(match);
-  const Box = href ? Link : "div";
   return (
-    <Box href={href ?? ""} className={cx(styles.match, match.status === "live" && styles.live, href && styles.linked)}>
+    <div className={cx(styles.match, match.status === "live" && styles.live)}>
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;
         const lost = match.status === "done" && !!match.winner && !won;
-        const label = s.id ? entryName(byId.get(s.id)) : match.round === 1 && s.resolved ? "Bye" : "TBD";
+        const entry = s.id ? byId.get(s.id) : undefined;
+        const label = s.id ? entryName(entry) : match.round === 1 && s.resolved ? "Bye" : "TBD";
         return (
           <div
             key={i}
@@ -86,7 +91,13 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
               <TeamMarker side={sideOf(i)} />
               <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
             </span>
-            <span className={styles.entry}>{label}</span>
+            {entry ? (
+              <TeamCard title={label} players={entryPlayers(entry)} meanRating={entry.rating} className={styles.entryTrigger}>
+                <span className={styles.entry}>{label}</span>
+              </TeamCard>
+            ) : (
+              <span className={styles.entry}>{label}</span>
+            )}
             <span className={cx(styles.score, "mono")}>
               {match.status === "done" && match.resolution === "played" ? s.score : ""}
               {won && <span className="visually-hidden"> winner</span>}
@@ -94,14 +105,19 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
           </div>
         );
       })}
-      {match.status === "live" && (
-        <span className={styles.liveTag}>
-          <Badge tone="win">Live</Badge>
-        </span>
+      {(href || (match.resolution && match.resolution !== "played")) && (
+        <div className={styles.footer}>
+          {match.status === "live" && <Badge tone="win">Live</Badge>}
+          {match.resolution && match.resolution !== "played" && (
+            <span className={styles.resolution}>{match.resolution.replace("_", " ")}</span>
+          )}
+          {href && (
+            <Link href={href} className={styles.matchLink}>
+              {match.status === "live" ? "Watch" : "Match"}
+            </Link>
+          )}
+        </div>
       )}
-      {match.resolution && match.resolution !== "played" && (
-        <span className={styles.resolution}>{match.resolution.replace("_", " ")}</span>
-      )}
-    </Box>
+    </div>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trustAtLeast } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { BracketView, entryName } from "@/components/ui/BracketView";
+import { BracketView, entryName, entryPlayers } from "@/components/ui/BracketView";
+import { TeamCard } from "@/components/ui/TeamCard";
 import { Button } from "@/components/ui/Button";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
@@ -16,22 +17,83 @@ import { dateTime } from "@/lib/format";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
-import type { TournamentDetail } from "@/lib/types";
+import type { TournamentBracket, TournamentDetail } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { getRealtime } from "@/lib/ws";
 import styles from "./detail.module.css";
 
-export function TournamentDetailView({ id }: { id: string }) {
-  const data = useAsync(() => api.tournaments.detail(id), [id]);
-  const { reload } = data;
+// Bracket changes only refetch the bracket, by version. Other changes reload the page data
+function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload: () => void): TournamentBracket | null {
+  const [live, setLive] = useState<TournamentBracket | null>(null);
+  const version = useRef<number | undefined>(undefined);
+  const inFlight = useRef(false);
+  const again = useRef(false);
+
+  useEffect(() => {
+    setLive(null);
+    version.current = undefined;
+  }, [id]);
+
+  useEffect(() => {
+    if (detail && (version.current === undefined || detail.bracketVersion > version.current)) {
+      version.current = detail.bracketVersion;
+    }
+  }, [detail]);
+
+  const refresh = useCallback(async () => {
+    if (inFlight.current) {
+      again.current = true;
+      return;
+    }
+    inFlight.current = true;
+    try {
+      do {
+        again.current = false;
+        const next = await api.tournaments.bracket(id, version.current).catch(() => null);
+        if (next && next.tournamentId === id && (version.current === undefined || next.version > version.current)) {
+          version.current = next.version;
+          setLive(next);
+        }
+      } while (again.current);
+    } finally {
+      inFlight.current = false;
+    }
+  }, [id]);
 
   useEffect(() => {
     const rt = getRealtime();
     rt.connect();
-    return rt.on("tournament_update", (p) => {
-      if (p.tournament.id === id) reload();
-    });
-  }, [id, reload]);
+    const subscribe = () => rt.send("subscribe_tournament", { tournamentId: id });
+    subscribe();
+    const offs = [
+      // Resubscribe after a reconnect and catch up on anything missed
+      rt.onState((s) => {
+        if (s !== "open") return;
+        subscribe();
+        void refresh();
+      }),
+      rt.on("tournament_update", (p) => {
+        if (p.tournament.id !== id) return;
+        if (p.kind === "match_live" || p.kind === "match_updated") {
+          if (p.bracketVersion !== version.current) void refresh();
+        } else {
+          reload();
+        }
+      }),
+    ];
+    return () => {
+      offs.forEach((off) => off());
+      rt.send("unsubscribe_tournament", { tournamentId: id });
+    };
+  }, [id, reload, refresh]);
+
+  return live && detail && live.version > detail.bracketVersion ? live : null;
+}
+
+export function TournamentDetailView({ id }: { id: string }) {
+  const data = useAsync(() => api.tournaments.detail(id), [id]);
+  const { reload } = data;
+  const live = useLiveBracket(id, data.data, reload);
 
   if (data.status === "loading") {
     return (
@@ -52,7 +114,8 @@ export function TournamentDetailView({ id }: { id: string }) {
       </div>
     );
   }
-  return <Detail t={data.data} reload={reload} />;
+  const t = live ? { ...data.data, bracket: live.bracket, bracketVersion: live.version } : data.data;
+  return <Detail t={t} reload={reload} />;
 }
 
 function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
@@ -135,8 +198,10 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
             <ol className={styles.entrants}>
               {t.entries.map((e) => (
                 <li key={e.id} className={styles.entrant}>
-                  <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
-                  <span className={styles.entrantName}>{entryName(e)}</span>
+                  <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
+                    <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
+                    <span className={styles.entrantName}>{entryName(e)}</span>
+                  </TeamCard>
                   {e.rating !== null && <span className="mono muted">{e.rating}</span>}
                 </li>
               ))}

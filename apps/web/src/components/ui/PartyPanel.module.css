@@ -18,8 +18,18 @@
 .member > button {
   margin-left: auto;
 }
+.actions {
+  margin-left: auto;
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+/* Member rows with actions wrap them under the name when the panel is narrow */
+.member:has(.actions) {
+  flex-wrap: wrap;
+}
 .name {
-  flex: 1;
+  flex: 1 1 6rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,10 +84,11 @@
 }
 .inviteRow {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .inviteInput {
-  flex: 1;
+  flex: 1 1 12rem;
   min-width: 0;
   min-height: var(--target-min);
   padding: 0 var(--space-3);

@@ -157,7 +157,7 @@ table {
 .grid-2 {
   display: grid;
   gap: var(--space-5);
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 @media (min-width: 900px) {
   .grid-2 {

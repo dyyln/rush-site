@@ -6,6 +6,7 @@ import { Avatar } from "./Avatar";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
+import { Modal } from "./Modal";
 import { PartySize } from "./PartySize";
 import styles from "./PartyPanel.module.css";
 
@@ -22,25 +23,63 @@ type PartyPanelProps = {
   inviteUrl?: string | null;
   onCreate?: () => void | Promise<void>;
   onLeave?: () => void;
-  onKick?: (steamId: string) => void;
+  onKick?: (steamId: string) => void | Promise<void>;
+  onMakeLeader?: (steamId: string) => void | Promise<void>;
+  // Issues a new invite code so the old link stops working
+  onRotateInvite?: () => void | Promise<void>;
   // Locks changes while queued or in a match
   locked?: boolean;
-  steamFriendsUrl?: string;
   // Renders the invite popover for an empty slot
   renderInvite?: (close: () => void, anchor: HTMLElement | null) => ReactNode;
 };
 
-export function PartyPanel({ party, mySteamId, me, maxSize = 3, inviteUrl, onCreate, onLeave, onKick, locked, steamFriendsUrl, renderInvite }: PartyPanelProps) {
+export function PartyPanel({
+  party,
+  mySteamId,
+  me,
+  maxSize = 3,
+  inviteUrl,
+  onCreate,
+  onLeave,
+  onKick,
+  onMakeLeader,
+  onRotateInvite,
+  locked,
+  renderInvite,
+}: PartyPanelProps) {
   const [copied, setCopied] = useState(false);
   const [inviteSlot, setInviteSlot] = useState<number | null>(null);
   const slotRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [kickTarget, setKickTarget] = useState<{ steamId: string; displayName: string } | null>(null);
+  const [notice, setNotice] = useState("");
   // No party yet means a party of one led by the viewer
   const solo = !party?.partyId || (party.members.length === 0 && !!me);
   const members = party && party.members.length > 0 ? party.members : me ? [me] : [];
   const leaderSteamId = party?.leaderSteamId ?? (solo ? mySteamId : null);
   const isLeader = leaderSteamId === mySteamId;
   const open = Math.max(0, maxSize - Math.max(members.length, 1));
+
+  // Runs one action at a time and keeps its button spinning
+  async function run(key: string, fn: () => void | Promise<void>) {
+    setBusy(key);
+    try {
+      await fn();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function confirmKick(rotate: boolean) {
+    const target = kickTarget;
+    if (!target || !onKick) return;
+    await run(rotate ? "kick-rotate" : "kick", async () => {
+      await onKick(target.steamId);
+      if (rotate && onRotateInvite) await onRotateInvite();
+    });
+    setKickTarget(null);
+  }
 
   async function copy() {
     if (!inviteUrl) return;
@@ -80,10 +119,30 @@ export function PartyPanel({ party, mySteamId, me, maxSize = 3, inviteUrl, onCre
               {m.steamId === mySteamId && <span className="muted"> (you)</span>}
             </span>
             {m.steamId === leaderSteamId && <Badge tone="accent">Leader</Badge>}
-            {isLeader && m.steamId !== mySteamId && onKick && (
-              <Button variant="ghost" onClick={() => onKick(m.steamId)} disabled={locked} aria-label={`Remove ${m.displayName}`}>
-                Remove
-              </Button>
+            {isLeader && m.steamId !== mySteamId && (onMakeLeader || onKick) && (
+              <span className={styles.actions}>
+                {onMakeLeader && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => run(`lead:${m.steamId}`, () => onMakeLeader(m.steamId))}
+                    loading={busy === `lead:${m.steamId}`}
+                    disabled={locked || (busy !== null && busy !== `lead:${m.steamId}`)}
+                    aria-label={`Make ${m.displayName} leader`}
+                  >
+                    Make leader
+                  </Button>
+                )}
+                {onKick && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setKickTarget({ steamId: m.steamId, displayName: m.displayName })}
+                    disabled={locked || busy !== null}
+                    aria-label={`Remove ${m.displayName}`}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </span>
             )}
           </li>
         ))}
@@ -130,9 +189,27 @@ export function PartyPanel({ party, mySteamId, me, maxSize = 3, inviteUrl, onCre
             onFocus={(e) => e.currentTarget.select()}
           />
           {inviteUrl ? (
-            <Button variant="secondary" onClick={copy} disabled={locked}>
-              {copied ? "Copied" : "Copy"}
-            </Button>
+            <>
+              <Button variant="secondary" onClick={copy} disabled={locked}>
+                {copied ? "Copied" : "Copy"}
+              </Button>
+              {isLeader && onRotateInvite && (
+                <Button
+                  variant="ghost"
+                  loading={busy === "rotate"}
+                  disabled={locked || (busy !== null && busy !== "rotate")}
+                  title="Make a new link. The old one stops working"
+                  onClick={() =>
+                    run("rotate", async () => {
+                      await onRotateInvite();
+                      setNotice("New invite link made. The old link no longer works");
+                    })
+                  }
+                >
+                  New link
+                </Button>
+              )}
+            </>
           ) : (
             onCreate && (
               <Button
@@ -154,14 +231,37 @@ export function PartyPanel({ party, mySteamId, me, maxSize = 3, inviteUrl, onCre
           )}
         </div>
         <p className={styles.live} aria-live="polite">
-          {copied ? "Invite link copied" : ""}
+          {copied ? "Invite link copied" : notice}
         </p>
-        {steamFriendsUrl && (
-          <a className={styles.friends} href={steamFriendsUrl} target="_blank" rel="noreferrer">
-            Invite from Steam friends
-          </a>
-        )}
       </div>
+
+      <Modal
+        open={kickTarget !== null}
+        title="Remove player"
+        onClose={() => busy === null && setKickTarget(null)}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setKickTarget(null)} disabled={busy !== null}>
+              Cancel
+            </Button>
+            {onRotateInvite && (
+              <Button variant="secondary" onClick={() => confirmKick(true)} loading={busy === "kick-rotate"} disabled={busy === "kick"}>
+                Remove and new link
+              </Button>
+            )}
+            <Button variant="danger" onClick={() => confirmKick(false)} loading={busy === "kick"} disabled={busy === "kick-rotate"}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Remove <strong>{kickTarget?.displayName}</strong> from the party?
+        </p>
+        <p className="muted">
+          They can rejoin with the current invite link. Choose Remove and new link to stop that.
+        </p>
+      </Modal>
     </Card>
   );
 }

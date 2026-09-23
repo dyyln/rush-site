@@ -39,6 +39,7 @@
 }
 
 .menuButton {
+  position: relative;
   margin-left: auto;
   width: var(--target-min);
   height: var(--target-min);

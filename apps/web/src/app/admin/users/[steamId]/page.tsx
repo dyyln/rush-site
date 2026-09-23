@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/Select";
 import { Table, type Column } from "@/components/ui/Table";
 import { TierChip } from "@/components/ui/TierChip";
 import { useToast } from "@/components/ui/Toast";
+import { formatStat } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { MODE_COPY, mapName } from "@/lib/modes";
 import { adminApi, errorMessage, isNotFound } from "../../_lib/client";
@@ -250,6 +251,7 @@ const ratingColumns: Column<UserDetailView["ratings"][number]>[] = [
   { key: "rd", header: "RD", numeric: true, hideOnMobile: true, cell: (r) => Math.round(r.rd) },
   { key: "played", header: "Matches", numeric: true, cell: (r) => r.matchesPlayed },
   { key: "wl", header: "W / L", numeric: true, hideOnMobile: true, cell: (r) => `${r.wins} / ${r.losses}` },
+  { key: "winrate", header: "Win %", numeric: true, cell: (r) => formatStat(r.wins / r.matchesPlayed, "pct", r.matchesPlayed) },
 ];
 
 function matchColumns(now: number): Column<RecentMatch>[] {
@@ -289,10 +291,17 @@ function matchColumns(now: number): Column<RecentMatch>[] {
     },
     {
       key: "kd",
-      header: "K / D",
+      header: "K/D",
       numeric: true,
       hideOnMobile: true,
-      cell: (m) => <span className={styles.nowrap}>{m.kills === null ? "--" : `${m.kills} / ${m.deaths ?? 0}`}</span>,
+      cell: (m) => formatStat(m.kills === null ? null : m.kills / Math.max(1, m.deaths ?? 0), "kd"),
+    },
+    {
+      key: "hs",
+      header: "HS %",
+      numeric: true,
+      hideOnMobile: true,
+      cell: (m) => formatStat(m.kills && m.headshots !== null ? m.headshots / m.kills : null, "pct"),
     },
     { key: "when", header: "When", numeric: true, cell: (m) => <span className={styles.nowrap}>{ago(m.createdAt, now)}</span> },
   ];

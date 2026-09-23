@@ -8,13 +8,14 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChallengeButton } from "@/components/challenges/ChallengeButton";
+import { FriendButton } from "@/components/friends/FriendButton";
 import { RatingSparkline } from "@/components/ui/RatingSparkline";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
 import { TierChip } from "@/components/ui/TierChip";
 import { api, ApiError } from "@/lib/api";
-import { pct, shortDate, signed, winRate } from "@/lib/format";
+import { formatStat, pct, shortDate, signed, winRate } from "@/lib/format";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
 import type { BadgeKind, MatchSummary, ModeStats, Profile, TrustLevel } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
@@ -112,6 +113,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
             <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
               Steam profile
             </a>
+            <FriendButton target={profile.user} />
             <ChallengeButton target={profile.user} />
           </div>
         </div>
@@ -199,9 +201,9 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
     <div className="stack">
       <div className={styles.tiles}>
         <StatTile label="Rating" value={stats.rating} sub={`${signed(delta)} over ${stats.history.length} matches`} trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"} />
-        <StatTile label="Win rate" value={pct(winRate(stats.wins, stats.matches))} sub={`${stats.wins}W ${stats.losses}L`} />
-        <StatTile label="Headshot" value={pct(stats.headshotPct)} />
-        <StatTile label="K/D" value={stats.kd.toFixed(2)} sub={`${stats.matches} matches`} />
+        <StatTile label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
+        <StatTile label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
+        <StatTile label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
       </div>
       <div className="grid-2">
         <Card title="Rating history">
@@ -220,7 +222,7 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
                     <span className={styles.bar} aria-hidden="true">
                       <span style={{ width: pct(wr) }} />
                     </span>
-                    <span className="mono">{pct(wr)}</span>
+                    <span className="mono">{formatStat(wr, "pct", m.matches)}</span>
                     <span className="muted mono">{m.matches}</span>
                   </li>
                 );

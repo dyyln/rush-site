@@ -1,9 +1,7 @@
 // REST client for challenges. Mock mode runs the flows in memory
 import type { Challenge, CreateChallengeBody, CreateChallengeResponse } from "@rushsite/shared";
 import { isMock } from "@/lib/env";
-import { mockAccept, mockCreate, mockDecline, mockFriends, mockGet, mockMine, type Friend } from "./mock";
-
-export type { Friend };
+import { mockAccept, mockCreate, mockDecline, mockGet, mockMine } from "./mock";
 
 type Request = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
@@ -36,11 +34,6 @@ export function challengeApi(request: Request) {
     async mine(): Promise<Challenge[]> {
       if (isMock) return mocked(mockMine);
       return (await request<{ challenges: Challenge[] }>("GET", "/challenges/mine")).challenges;
-    },
-    // Steam friends from the parties module. Only registered friends can be challenged
-    async friends(): Promise<{ available: boolean; reason?: string; friends: Friend[] }> {
-      if (isMock) return mocked(() => ({ available: true, friends: mockFriends() }));
-      return request("GET", "/friends");
     },
   };
 }

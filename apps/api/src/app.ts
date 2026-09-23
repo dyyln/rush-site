@@ -4,15 +4,18 @@ import websocket from "@fastify/websocket"
 import { MODES, type Mode, type TrustLevel } from "@rushsite/shared"
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify"
 import { buildContext, type AppContext, type ContextDeps } from "./context.js"
+import { realtimeMetrics } from "./lib/backpressure.js"
 import { ApiError } from "./lib/errors.js"
 import type { AdminEventKind } from "./lib/event-log.js"
 import { withLock } from "./lib/redis.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
 import challengesPlugin from "./modules/challenges/index.js"
+import friendsPlugin from "./modules/friends/index.js"
 import { createSurgeDriver } from "./modules/match/dathost.js"
 import { registerMatchRoutes } from "./modules/match/routes.js"
 import { registerPartyRoutes } from "./modules/parties/routes.js"
 import { matchmakeAll } from "./modules/queue/loop.js"
+import { LoopMetrics } from "./modules/queue/metrics.js"
 import { registerQueueRoutes } from "./modules/queue/routes.js"
 import type { LiveTicket } from "./modules/queue/service.js"
 import { registerStatsFeatures } from "./modules/stats/features.js"
@@ -52,9 +55,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   const ctx = buildContext({ ...opts, log: app.log })
   if (opts.surgeDriver === undefined) ctx.allocator.setSurgeDriver(createSurgeDriver(opts.env, ctx.db, app.log))
   const hub = opts.hub ?? new LocalHub()
+  const loopMetrics = new LoopMetrics(app.log)
 
   await app.register(cookie, { secret: opts.env.SESSION_SECRET })
-  await app.register(cors, { origin: [opts.env.PUBLIC_URL], credentials: true })
+  // The default method list leaves out DELETE, which kick, unfriend and cancel routes use
+  await app.register(cors, { origin: [opts.env.PUBLIC_URL], credentials: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] })
   await app.register(websocket, { options: { maxPayload: 64 * 1024 } })
 
   app.setErrorHandler((err, req, reply) => {
@@ -79,7 +84,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
 
   app.get("/health", async () => {
     await ctx.redis.ping()
-    return { ok: true }
+    return {
+      ok: true,
+      ws: { users: hub.connectedUsers(), ...realtimeMetrics },
+      loops: loopMetrics.snapshot(["matchmaker", "refresh"]),
+    }
   })
 
   registerAuthRoutes(app, ctx)
@@ -90,6 +99,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   registerStatsFeatures(app, ctx)
   registerWsRoutes(app, ctx, hub)
   await app.register(challengesPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
+  await app.register(friendsPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
 
   if (opts.plugins?.tournaments !== false) {
     const tournamentsPlugin = await optionalPlugin(app, "./modules/tournaments/index.js")
@@ -120,7 +130,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
     if (adminPlugin) await app.register(adminPlugin as Parameters<FastifyInstance["register"]>[0], adminOptions(ctx))
   }
 
-  if (!opts.env.DISABLE_LOOPS) startLoops(app, ctx)
+  if (!opts.env.DISABLE_LOOPS) startLoops(app, ctx, loopMetrics)
   return { app, ctx, hub }
 }
 
@@ -196,15 +206,16 @@ export function adminOptions(ctx: AppContext) {
 }
 
 // Background loops. Redis locks keep one instance doing each job
-function startLoops(app: FastifyInstance, ctx: AppContext): void {
+function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics): void {
   const timers: NodeJS.Timeout[] = []
-  const loop = (name: string, everyMs: number, fn: () => Promise<unknown>) => {
+  const loop = (name: string, everyMs: number, fn: (lockTtlMs: number) => Promise<unknown>, lockTtlMs?: number) => {
     let running = false
+    const ttl = lockTtlMs ?? Math.max(everyMs * 5, 10_000)
     const run = async () => {
       if (running) return
       running = true
       try {
-        await withLock(ctx.redis, `lock:${name}`, Math.max(everyMs * 5, 10_000), fn)
+        await withLock(ctx.redis, `lock:${name}`, ttl, () => fn(ttl))
       } catch (err) {
         app.log.error({ err, loop: name }, "loop failed")
         ctx.events.record({ kind: "error", type: `loop_${name}`, message: (err as Error).message })
@@ -217,12 +228,20 @@ function startLoops(app: FastifyInstance, ctx: AppContext): void {
   }
   app.addHook("onReady", async () => {
     await ctx.allocator.seedGslt(ctx.env.GSLT_TOKENS)
-    let broadcasts = 0
-    loop("matchmaker", ctx.env.MATCHMAKER_INTERVAL_MS, async () => {
-      await matchmakeAll(ctx.queue, ctx.flow, ctx.now(), app.log)
-      if (++broadcasts % 3 === 0) await ctx.queue.broadcastQueued()
-    })
-    loop("match_tick", ctx.env.MATCH_TICK_INTERVAL_MS, () => ctx.flow.tick())
+    let tick = 0
+    loop("matchmaker", ctx.env.MATCHMAKER_INTERVAL_MS, (ttl) =>
+      metrics.time("matchmaker", ttl, () => matchmakeAll(ctx.queue, ctx.flow, ctx.now(), app.log, tick++), (ids) => ({
+        created: ids.length,
+      })),
+    )
+    // Its own loop and lock so a slow refresh never holds up matching
+    loop("queue_refresh", ctx.env.MATCHMAKER_INTERVAL_MS * 3, (ttl) =>
+      metrics.time("refresh", ttl, () => ctx.queue.refreshQueued(), (r) => ({ ...r })),
+    )
+    // Timers touch only Postgres. Agent and DatHost calls live in the allocation loop
+    loop("match_tick", ctx.env.MATCH_TICK_INTERVAL_MS, () => ctx.flow.timersTick())
+    // A pass can wait on a 15 s agent call, so the lock outlives it
+    loop("match_alloc", ctx.env.ALLOCATION_TICK_INTERVAL_MS, () => ctx.flow.allocationTick(ctx.env.ALLOCATION_CONCURRENCY), 30_000)
     loop("hosts", 30_000, () => ctx.allocator.syncHosts(ctx.env.AGENT_URLS))
     // Every instance holds the last value it saw so only changes go out. The lock picks one sender
     let lastStats = ""

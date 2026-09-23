@@ -1,0 +1,287 @@
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--target-min);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.who {
+  display: flex;
+  flex: 1 1 12rem;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.names {
+  display: grid;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.name:hover {
+  color: var(--color-accent-hover);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin-left: auto;
+}
+
+/* Tighter buttons so the three quick actions fit one line at 375px. Height stays at the touch minimum */
+.actions > button,
+.actions > a {
+  padding-inline: var(--space-2);
+}
+
+.presenceLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.presenceText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-weight: 500;
+  color: var(--color-accent);
+}
+
+.watch:hover {
+  color: var(--color-accent-hover);
+}
+
+.avatar {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-3);
+  font-size: 12px;
+}
+
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.initials {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.dot {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-surface-1);
+  border-radius: 50%;
+}
+
+.online {
+  background: var(--color-win);
+}
+
+.queue {
+  background: var(--color-accent);
+}
+
+.match {
+  background: var(--team-enemy);
+}
+
+.offline {
+  background: var(--color-disabled-text);
+}
+
+.subtitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.sectionTitle {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.count {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-loss);
+  font-size: var(--text-sm);
+}
+
+/* Header link with the pending badge. Text shows in the mobile menu, icon only on desktop */
+.navLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.navLink:hover,
+.navLink[aria-current="page"] {
+  color: var(--color-text);
+  background: var(--color-surface-1);
+}
+
+.navLink:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.navBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+/* Count on the collapsed mobile menu button */
+.menuBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+
+@media (min-width: 768px) {
+  .navText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .navLink {
+    justify-content: center;
+    padding: 0;
+  }
+  .navLink .navBadge {
+    position: absolute;
+    top: 2px;
+    right: -4px;
+  }
+}
+
+.toastActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.addForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.addForm input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.addForm input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.profileActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

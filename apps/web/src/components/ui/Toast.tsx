@@ -8,7 +8,7 @@ export type ToastTone = "info" | "success" | "error";
 export type ToastInput = { title: string; body?: ReactNode; tone?: ToastTone; durationMs?: number };
 type ToastItem = ToastInput & { id: number; tone: ToastTone };
 
-type ToastApi = { push: (t: ToastInput) => void; dismiss: (id: number) => void };
+type ToastApi = { push: (t: ToastInput) => number; dismiss: (id: number) => void };
 
 const ToastContext = createContext<ToastApi | null>(null);
 
@@ -26,6 +26,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setItems((list) => [...list.slice(-3), { ...t, id, tone: t.tone ?? "info" }]);
       const ms = t.durationMs ?? 5000;
       if (ms > 0) setTimeout(() => dismiss(id), ms);
+      return id;
     },
     [dismiss],
   );

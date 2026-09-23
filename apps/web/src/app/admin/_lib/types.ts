@@ -134,6 +134,7 @@ export type UserDetailView = {
     abandoned: boolean;
     kills: number | null;
     deaths: number | null;
+    headshots: number | null;
     score: Record<string, number> | null;
     mapId: string | null;
     createdAt: string;

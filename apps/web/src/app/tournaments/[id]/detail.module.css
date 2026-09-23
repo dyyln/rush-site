@@ -50,3 +50,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.entrantTrigger {
+  flex: 1;
+  min-width: 0;
+}

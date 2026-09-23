@@ -79,6 +79,9 @@ export const EnvSchema = z.object({
 
   MATCHMAKER_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   MATCH_TICK_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
+  // Server starts and teardowns run in their own loop so agent calls never delay the timers
+  ALLOCATION_TICK_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
+  ALLOCATION_CONCURRENCY: z.coerce.number().int().positive().default(4),
   // Give up allocating a server after this long and requeue everyone
   ALLOCATION_TIMEOUT_SEC: z.coerce.number().int().positive().default(120),
   // Backstop for players who never connect when the plugin does not report it

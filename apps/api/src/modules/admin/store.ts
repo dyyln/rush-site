@@ -304,6 +304,7 @@ export class DrizzleAdminStore implements AdminStore {
         abandoned: p.abandoned,
         kills: p.kills,
         deaths: p.deaths,
+        headshots: p.headshots,
         score: m.score,
         mapId: m.mapId,
         createdAt: isoReq(m.createdAt),

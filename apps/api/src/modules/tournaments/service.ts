@@ -4,11 +4,13 @@ import {
   type Side,
   buildBracket,
   cancelGame,
+  claimGame,
   forfeit,
   isComplete,
   placements,
   playableMatches,
   recordGame,
+  releaseGame,
   seedEntries,
   startGame,
 } from "./bracket.js"
@@ -19,7 +21,7 @@ import type {
   TournamentRecord,
   TournamentStore,
 } from "./store.js"
-import { trustAtLeast } from "@rushsite/shared"
+import { tierForRating, trustAtLeast } from "@rushsite/shared"
 import {
   type BadgeKind,
   type EmitAudience,
@@ -71,13 +73,27 @@ export interface ServiceDeps {
 }
 
 const DEFAULT_RATING = 1500
+export const PROVISION_CONCURRENCY = 4
+export const STALE_CLAIM_MS = 5 * 60_000
+// Everything else goes to every socket.
+const SUBSCRIBER_KINDS = new Set<TournamentUpdateKind>(["match_live", "match_updated", "entries_changed"])
 
-function toEntryView(e: EntryRecord, profiles: Record<string, ProfileInfo>): EntryView {
-  const players = e.steamIds.map((steamId) => ({
-    steamId,
-    displayName: profiles[steamId]?.displayName ?? steamId,
-    avatarUrl: profiles[steamId]?.avatarUrl ?? null,
-  }))
+interface PlayerInfo {
+  profiles: Record<string, ProfileInfo>
+  ratings: Record<string, number>
+}
+
+function toEntryView(e: EntryRecord, { profiles, ratings }: PlayerInfo): EntryView {
+  const players = e.steamIds.map((steamId) => {
+    const rating = ratings[steamId] ?? null
+    return {
+      steamId,
+      displayName: profiles[steamId]?.displayName ?? steamId,
+      avatarUrl: profiles[steamId]?.avatarUrl ?? null,
+      rating,
+      tier: rating === null ? ("unranked" as const) : tierForRating(rating).id,
+    }
+  })
   return {
     name: profiles[e.captainSteamId]?.displayName ?? e.captainSteamId,
     players,
@@ -133,14 +149,28 @@ export class TournamentService {
     if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
     const entries = await this.d.store.listEntries(id)
     const stored = await this.d.store.loadBracket(id)
-    const profiles = await this.profiles(entries.flatMap((e) => e.steamIds))
+    const profiles = await this.playerInfo(entries.flatMap((e) => e.steamIds), t.mode)
     const mine = viewer ? entries.find((e) => e.steamIds.includes(viewer)) : undefined
     return {
       ...this.summary(t, entries.length),
       entries: entries.map((e) => toEntryView(e, profiles)),
       bracket: stored?.bracket ?? null,
+      bracketVersion: t.bracketVersion,
       myEntryId: mine?.id ?? null,
     }
+  }
+
+  // Returns only the version when it matches what the client already has.
+  async bracket(
+    id: string,
+    knownVersion: number | null,
+  ): Promise<{ version: number; bracket?: Bracket | null }> {
+    // Version is read before the bracket so the bracket is never older than the version.
+    const t = await this.d.store.getTournament(id)
+    if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+    if (knownVersion === t.bracketVersion) return { version: t.bracketVersion }
+    const stored = await this.d.store.loadBracket(id)
+    return { version: t.bracketVersion, bracket: stored?.bracket ?? null }
   }
 
   // Sign-up
@@ -190,7 +220,7 @@ export class TournamentService {
       return s.insertEntry({ tournamentId, captainSteamId: steamId, steamIds: members })
     })
     await this.announce(tournamentId, "entries_changed")
-    return toEntryView(entry, await this.profiles(entry.steamIds))
+    return toEntryView(entry, await this.playerInfo(entry.steamIds, t.mode))
   }
 
   async withdraw(tournamentId: string, steamId: string): Promise<void> {
@@ -218,15 +248,19 @@ export class TournamentService {
     }
   }
 
-  // Profiles are display only. A lookup failure falls back to SteamIDs.
-  private async profiles(steamIds: string[]): Promise<Record<string, ProfileInfo>> {
-    if (steamIds.length === 0) return {}
-    try {
-      return await this.d.getProfiles(steamIds)
-    } catch (err) {
-      this.d.log.warn({ err }, "profile lookup failed")
-      return {}
-    }
+  // Display only. A failed lookup falls back to SteamIDs and unranked.
+  private async playerInfo(steamIds: string[], mode: Mode): Promise<PlayerInfo> {
+    if (steamIds.length === 0) return { profiles: {}, ratings: {} }
+    const safe = <T>(p: Promise<Record<string, T>>, what: string) =>
+      p.catch((err) => {
+        this.d.log.warn({ err }, `${what} lookup failed`)
+        return {} as Record<string, T>
+      })
+    const [profiles, ratings] = await Promise.all([
+      safe(this.d.getProfiles(steamIds), "profile"),
+      safe(this.d.getRatings(steamIds, mode), "rating"),
+    ])
+    return { profiles, ratings }
   }
 
   private async untrusted(steamIds: string[], min: TrustLevel): Promise<string[]> {
@@ -325,7 +359,7 @@ export class TournamentService {
       const seeded = seedEntries(seedInput)
       await s.updateEntrySeeds(seeded.map((e, i) => ({ id: e.id, seed: i + 1, rating: e.rating })))
       const bracket = buildBracket(seedInput, t.format.bestOf)
-      await s.saveBracket(tournamentId, { bracket, provisionAttempts: {} })
+      await s.saveBracket(tournamentId, { bracket, provisionAttempts: {}, provisioningAt: {} })
       await s.updateTournament(tournamentId, { status: "running", startedAt: now })
       return "started" as const
     })
@@ -334,18 +368,31 @@ export class TournamentService {
     if (outcome === "started") await this.provision(tournamentId)
   }
 
-  // Starts a server for every bracket match waiting on its next game.
+  // Claims every bracket match waiting on its next game under the row lock, then
+  // requests servers after commit so slow allocation never holds the lock.
   async provision(tournamentId: string): Promise<void> {
-    const started: string[] = []
-    await this.d.store.locked(tournamentId, async (s) => {
+    const claims = await this.d.store.locked(tournamentId, async (s) => {
       const t = await s.getTournament(tournamentId)
       const stored = await s.loadBracket(tournamentId)
-      if (!t || t.status !== "running" || !stored) return
-      const ready = playableMatches(stored.bracket)
-      if (ready.length === 0) return
-      const entries = new Map((await s.listEntries(tournamentId)).map((e) => [e.id, e]))
+      if (!t || t.status !== "running" || !stored) return []
+      const nowMs = this.d.now().getTime()
       let { bracket } = stored
-      const attempts = { ...stored.provisionAttempts }
+      const at = { ...stored.provisioningAt }
+      let changed = false
+
+      // A claim this old belongs to a process that died mid request.
+      for (const m of bracket.matches) {
+        if (m.status !== "provisioning") continue
+        if (nowMs - (at[m.id] ?? 0) < STALE_CLAIM_MS) continue
+        this.d.log.warn({ tournamentId, match: m.id }, "releasing stale provisioning claim")
+        bracket = releaseGame(bracket, m.id)
+        delete at[m.id]
+        changed = true
+      }
+
+      const ready = playableMatches(bracket)
+      const entries = new Map((await s.listEntries(tournamentId)).map((e) => [e.id, e]))
+      const out: Claim[] = []
       for (const m of ready) {
         const a = entries.get(m.a as string)
         const b = entries.get(m.b as string)
@@ -353,8 +400,13 @@ export class TournamentService {
           this.d.log.error({ tournamentId, match: m.id }, "bracket entry missing")
           continue
         }
-        try {
-          const { matchId } = await this.d.startMatch({
+        bracket = claimGame(bracket, m.id)
+        at[m.id] = nowMs
+        changed = true
+        out.push({
+          bracketMatchId: m.id,
+          claimedAt: nowMs,
+          params: {
             mode: t.mode,
             teams: [
               { name: TEAM_NAMES.a, steamIds: a.steamIds },
@@ -367,21 +419,49 @@ export class TournamentService {
               gameNumber: m.games.length + 1,
               bestOf: m.bestOf,
             },
-          })
-          bracket = startGame(bracket, m.id, matchId)
-          attempts[m.id] = 0
-          started.push(m.id)
-        } catch (err) {
-          attempts[m.id] = (attempts[m.id] ?? 0) + 1
-          this.d.log.warn(
-            { err, tournamentId, match: m.id, attempts: attempts[m.id] },
-            "tournament match provisioning failed, retrying next tick",
-          )
-        }
+          },
+        })
       }
-      await s.saveBracket(tournamentId, { bracket, provisionAttempts: attempts })
+      if (changed) await s.saveBracket(tournamentId, { ...stored, bracket, provisioningAt: at })
+      return out
     })
-    for (const id of started) await this.announce(tournamentId, "match_live", id)
+    await runLimited(claims, PROVISION_CONCURRENCY, (c) => this.startClaim(tournamentId, c))
+  }
+
+  private async startClaim(tournamentId: string, c: Claim): Promise<void> {
+    let matchId: string | null = null
+    try {
+      matchId = (await this.d.startMatch(c.params)).matchId
+    } catch (err) {
+      this.d.log.warn(
+        { err, tournamentId, match: c.bracketMatchId },
+        "tournament match provisioning failed, retrying next tick",
+      )
+    }
+    const live = await this.d.store.locked(tournamentId, async (s) => {
+      const stored = await s.loadBracket(tournamentId)
+      const m = stored?.bracket.matches.find((x) => x.id === c.bracketMatchId)
+      if (!stored || !m || m.status !== "provisioning" || stored.provisioningAt[m.id] !== c.claimedAt) {
+        if (matchId) {
+          this.d.log.error({ tournamentId, match: c.bracketMatchId, matchId }, "claim lost, match left orphaned")
+        }
+        return false
+      }
+      const provisioningAt = { ...stored.provisioningAt }
+      delete provisioningAt[m.id]
+      const attempts = { ...stored.provisionAttempts }
+      let bracket: Bracket
+      if (matchId) {
+        bracket = startGame(stored.bracket, m.id, matchId)
+        attempts[m.id] = 0
+      } else {
+        bracket = releaseGame(stored.bracket, m.id)
+        attempts[m.id] = (attempts[m.id] ?? 0) + 1
+      }
+      await s.saveBracket(tournamentId, { bracket, provisionAttempts: attempts, provisioningAt })
+      return matchId !== null
+    })
+    if (live) await this.announce(tournamentId, "match_live", c.bracketMatchId)
   }
 
   // Results
@@ -472,17 +552,35 @@ export class TournamentService {
       const payload: TournamentUpdatePayload = {
         kind,
         tournament: this.summary(t, counts[tournamentId] ?? 0),
-      }
-      if (kind !== "entries_changed" && kind !== "cancelled" && kind !== "created") {
-        const stored = await this.d.store.loadBracket(tournamentId)
-        if (stored) payload.bracket = stored.bracket
+        bracketVersion: t.bracketVersion,
       }
       if (bracketMatchId) payload.bracketMatchId = bracketMatchId
-      this.d.emit({ type: "tournament_update", payload, ts: Date.now() }, { kind: "broadcast" })
+      const audience: EmitAudience = SUBSCRIBER_KINDS.has(kind)
+        ? { kind: "tournament", tournamentId }
+        : { kind: "broadcast" }
+      this.d.emit({ type: "tournament_update", payload, ts: Date.now() }, audience)
     } catch (err) {
       this.d.log.error({ err, tournamentId, kind }, "tournament_update emit failed")
     }
   }
+}
+
+interface Claim {
+  bracketMatchId: string
+  claimedAt: number
+  params: StartMatchParams
+}
+
+// Runs fn over items with at most limit calls in flight.
+async function runLimited<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const item = items[next++] as T
+      await fn(item)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
 }
 
 function mean(xs: number[]): number {

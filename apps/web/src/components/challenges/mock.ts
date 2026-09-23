@@ -4,15 +4,6 @@ import { MOCK_ME, mockUser, mockUserBySteamId, mockUuid } from "@/lib/mock";
 import { getRealtime } from "@/lib/ws";
 import { MockRealtime } from "@/lib/ws-mock";
 
-export type Friend = {
-  steamId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  personaState: number;
-  inGame: string | null;
-  registered: boolean;
-};
-
 const store = new Map<string, Challenge>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -130,18 +121,4 @@ export function mockMine(): Challenge[] {
   return [...store.values()]
     .filter((c) => c.status === "open" && (c.createdBy.steamId === MOCK_ME.steamId || c.target?.steamId === MOCK_ME.steamId))
     .map((c) => structuredClone(c));
-}
-
-export function mockFriends(): Friend[] {
-  return [2, 5, 9, 14, 21].map((i, n) => {
-    const u = mockUser(i);
-    return {
-      steamId: u.steamId,
-      displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      personaState: n < 3 ? 1 : 0,
-      inGame: n === 1 ? "730" : null,
-      registered: n !== 4,
-    };
-  });
 }

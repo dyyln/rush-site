@@ -13,11 +13,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
 export { adminAudit } from "../modules/admin/schema.js"
 export { badges, bracketMatches, brackets, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
 export { challenges } from "../modules/challenges/schema.js"
+export { friendRequests, friendships, partyInvites } from "../modules/friends/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()
@@ -147,7 +149,12 @@ export const queueTickets = pgTable(
     enqueuedAt: ts("enqueued_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("queue_tickets_status_idx").on(t.status), index("queue_tickets_party_idx").on(t.partyId)],
+  (t) => [
+    index("queue_tickets_status_idx").on(t.status),
+    index("queue_tickets_party_idx").on(t.partyId),
+    uniqueIndex("queue_tickets_party_waiting_uq").on(t.partyId).where(sql`${t.status} = 'waiting'`),
+    index("queue_tickets_matched_mode_idx").on(t.matchedMode, t.updatedAt).where(sql`${t.status} = 'matched'`),
+  ],
 )
 
 export type TeamRosterJson = { name: string; steamIds: string[] }
@@ -193,7 +200,11 @@ export const matches = pgTable(
     ratingApplied: boolean("rating_applied").notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [index("matches_status_idx").on(t.status), index("matches_created_idx").on(t.createdAt)],
+  (t) => [
+    index("matches_status_idx").on(t.status),
+    index("matches_created_idx").on(t.createdAt),
+    index("matches_unreleased_ended_idx").on(t.endedAt).where(sql`${t.serverReleasedAt} is null`),
+  ],
 )
 
 export const matchPlayers = pgTable(
@@ -263,16 +274,20 @@ export const matchKills = pgTable(
 )
 
 // Veto state is the shared VetoState JSON
-export const vetoes = pgTable("vetoes", {
-  matchId: uuid("match_id")
-    .primaryKey()
-    .references(() => matches.id, { onDelete: "cascade" }),
-  format: text("format").notNull(),
-  state: jsonb("state").notNull(),
-  stepDeadline: ts("step_deadline"),
-  done: boolean("done").notNull().default(false),
-  updatedAt: ts("updated_at").notNull().defaultNow(),
-})
+export const vetoes = pgTable(
+  "vetoes",
+  {
+    matchId: uuid("match_id")
+      .primaryKey()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    format: text("format").notNull(),
+    state: jsonb("state").notNull(),
+    stepDeadline: ts("step_deadline"),
+    done: boolean("done").notNull().default(false),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("vetoes_open_deadline_idx").on(t.stepDeadline).where(sql`${t.done} = false`)],
+)
 
 export const ratings = pgTable(
   "ratings",

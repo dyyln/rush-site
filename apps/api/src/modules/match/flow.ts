@@ -24,11 +24,11 @@ import {
   type VetoState,
   type VetoStatePayload,
 } from "@rushsite/shared"
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "../../db/client.js"
-import { demos, matchPlayers, matchRounds, matches, vetoes, type TeamRosterJson } from "../../db/schema.js"
+import { cooldowns, demos, matchPlayers, matchRounds, matches, vetoes, type TeamRosterJson } from "../../db/schema.js"
 import type { Rng } from "../../lib/clock.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { EventLog } from "../../lib/event-log.js"
@@ -89,11 +89,25 @@ export const SERVER_CRASHED = "server_crashed"
 
 const TERMINAL = new Set(["finished", "abandoned", "cancelled"])
 
+export const ALLOCATION_CONCURRENCY = 4
+
+// Runs fn over items with at most limit calls in flight
+async function eachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]!)
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+}
+
 // Match lifecycle from match found to result. Postgres rows are the state, row locks serialise changes
 export class MatchFlow {
   private readonly listeners: ResultListener[] = []
+  private readonly playerHooks: ((steamIds: string[]) => Promise<void>)[] = []
+  private readonly matchHooks: ((m: MatchRow) => Promise<void>)[] = []
   private readonly now: () => number
   private readonly rng: Rng
+  private lastCooldownSweep: number | null = null
 
   constructor(private readonly d: FlowDeps) {
     this.now = d.now ?? Date.now
@@ -102,6 +116,24 @@ export class MatchFlow {
 
   onResult(listener: ResultListener): void {
     this.listeners.push(listener)
+  }
+
+  // Runs when players enter a match. Presence uses it
+  onPlayersChanged(hook: (steamIds: string[]) => Promise<void>): void {
+    this.playerHooks.push(hook)
+  }
+
+  private async playersChanged(steamIds: string[]): Promise<void> {
+    for (const h of this.playerHooks) await h(steamIds).catch(() => undefined)
+  }
+
+  // Runs on server ready, match start and every round end with the fresh row
+  onMatchChanged(hook: (m: MatchRow) => Promise<void>): void {
+    this.matchHooks.push(hook)
+  }
+
+  private async matchChanged(m: MatchRow): Promise<void> {
+    for (const h of this.matchHooks) await h(m).catch(() => undefined)
   }
 
   private async emitResult(result: MatchResultEvent): Promise<void> {
@@ -170,6 +202,7 @@ export class MatchFlow {
     const total = rosters.reduce((s, r) => s + r.steamIds.length, 0)
     this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, mode, acceptDeadline: deadline, accepted: 0, required: total })
     this.d.events?.emit("match", { event: "match_found", matchId, mode, teams: rosters })
+    await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { ok: true, matchId }
   }
 
@@ -223,6 +256,7 @@ export class MatchFlow {
       throw err
     }
     await this.afterPostAccept(matchId, next)
+    await this.playersChanged(params.teams.flatMap((t) => t.steamIds))
     return { matchId }
   }
 
@@ -257,6 +291,7 @@ export class MatchFlow {
     })
     this.d.events?.emit("match", { event: "match_found", matchId, mode: params.mode, teams: rosters, source: "challenge" })
     await this.afterPostAccept(matchId, next)
+    await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { matchId }
   }
 
@@ -296,7 +331,7 @@ export class MatchFlow {
     return null
   }
 
-  private async afterAccept(m: MatchRow, outcome: AcceptOutcome, post: PostAccept | null): Promise<void> {
+  private async afterAccept(m: MatchRow, outcome: AcceptOutcome, post: PostAccept | null, allocateNow = true): Promise<void> {
     const everyone = this.allSteamIds(m)
     const deadline = m.acceptDeadline?.getTime() ?? this.now()
     if (outcome.kind === "pending") {
@@ -311,7 +346,7 @@ export class MatchFlow {
         accepted: everyone.length,
         required: everyone.length,
       })
-      if (post) await this.afterPostAccept(m.id, post)
+      if (post) await this.afterPostAccept(m.id, post, allocateNow)
       return
     }
     const reason = outcome.reason === "declined" ? "decline" : "accept_timeout"
@@ -378,11 +413,12 @@ export class MatchFlow {
     return { kind: "veto", state, stepDeadline }
   }
 
-  private async afterPostAccept(matchId: string, post: PostAccept): Promise<void> {
+  // allocateNow false leaves the server start to the allocation loop
+  private async afterPostAccept(matchId: string, post: PostAccept, allocateNow = true): Promise<void> {
     if (post.kind === "veto") {
       const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
       if (m) this.sendVeto(m, post.state, post.stepDeadline)
-    } else {
+    } else if (allocateNow) {
       await this.tryAllocate(matchId)
     }
   }
@@ -488,7 +524,8 @@ export class MatchFlow {
   }
 
   // Ends a match that never produced a result. Queue players can go back in the queue
-  async cancelMatch(matchId: string, reason: string, opts: { requeue: boolean }): Promise<boolean> {
+  // deferRelease leaves the server stop to the allocation loop teardown
+  async cancelMatch(matchId: string, reason: string, opts: { requeue: boolean; deferRelease?: boolean }): Promise<boolean> {
     const r = await this.tx(async (tx) => {
       const m = await this.lock(tx, matchId)
       if (!m || TERMINAL.has(m.status)) return null
@@ -499,8 +536,10 @@ export class MatchFlow {
       return { m, players: await this.players(tx, matchId) }
     })
     if (!r) return false
-    await this.d.allocator.release(matchId, r.m.driver, true)
-    await this.d.db.update(matches).set({ serverReleasedAt: new Date(this.now()) }).where(eq(matches.id, matchId))
+    if (!opts.deferRelease) {
+      await this.d.allocator.release(matchId, r.m.driver, true)
+      await this.d.db.update(matches).set({ serverReleasedAt: new Date(this.now()) }).where(eq(matches.id, matchId))
+    }
     const tickets = [...new Set(r.players.map((p) => p.ticketId).filter((t): t is string => !!t))]
     for (const t of tickets) {
       if (opts.requeue) await this.d.queue.requeue(t)
@@ -546,6 +585,7 @@ export class MatchFlow {
         }
         const [fresh] = await db.select().from(matches).where(eq(matches.id, matchId))
         if (fresh) this.sendServerReady(fresh)
+        if (fresh) await this.matchChanged(fresh)
         return
       }
       case "player_connected":
@@ -608,6 +648,7 @@ export class MatchFlow {
       ...(lastRound ? { lastRound } : {}),
     }
     this.d.notifier.send({ kind: "match", matchId }, { type: "match_update", payload, ts: Date.now() })
+    await this.matchChanged(m)
   }
 
   private sendCancelled(m: MatchRow, reason: string): void {
@@ -702,7 +743,7 @@ export class MatchFlow {
     await withLock(this.d.redis, `lock:teardown:${matchId}`, 120_000, async () => {
       const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
       if (!m || m.serverReleasedAt || !TERMINAL.has(m.status)) return
-      if (m.driver === "dathost") await this.collectSurgeDemo(m)
+      if (m.driver === "dathost" && m.status !== "cancelled") await this.collectSurgeDemo(m)
       await this.d.allocator.release(matchId, m.driver, true)
       await this.d.db.update(matches).set({ serverReleasedAt: new Date(this.now()) }).where(eq(matches.id, matchId))
     })
@@ -795,8 +836,15 @@ export class MatchFlow {
     await this.emitResult({ matchId, outcome: "abandoned", reason, missingSteamIds: r.outcome.forfeiters })
   }
 
-  // Deadlines: accept windows, veto steps, allocation retries and players who never connect
+  // Both loops in one pass. Tests and scripts use it
   async tick(): Promise<void> {
+    await this.timersTick()
+    await this.allocationTick()
+  }
+
+  // Deadlines only: accept windows, veto steps, players who never connect and cooldown expiry.
+  // Postgres and Redis only, so a slow host never delays a countdown
+  async timersTick(): Promise<void> {
     const nowDate = new Date(this.now())
     const db = this.d.db
 
@@ -804,16 +852,13 @@ export class MatchFlow {
       .select({ id: matches.id })
       .from(matches)
       .where(and(eq(matches.status, "accepting"), lt(matches.acceptDeadline, nowDate)))
-    for (const { id } of expiredAccept) await this.guard(id, () => this.expireAccept(id))
+    for (const { id } of expiredAccept) await this.guard(id, () => this.expireAccept(id, false))
 
     const dueVetoes = await db
       .select({ matchId: vetoes.matchId })
       .from(vetoes)
       .where(and(eq(vetoes.done, false), lt(vetoes.stepDeadline, nowDate)))
-    for (const { matchId } of dueVetoes) await this.guard(matchId, () => this.expireVetoStep(matchId))
-
-    const allocating = await db.select({ id: matches.id }).from(matches).where(eq(matches.status, "allocating"))
-    for (const { id } of allocating) await this.guard(id, () => this.tryAllocate(id))
+    for (const { matchId } of dueVetoes) await this.guard(matchId, () => this.expireVetoStep(matchId, false))
 
     const connectCutoff = new Date(this.now() - this.d.options.connectTimeoutSec * 1000)
     const stale = await db
@@ -822,19 +867,6 @@ export class MatchFlow {
       .where(and(eq(matches.status, "ready"), lt(matches.readyAt, connectCutoff)))
     for (const { id } of stale) await this.guard(id, () => this.expireConnect(id))
 
-    const demoCutoff = new Date(this.now() - this.d.options.demoWaitSec * 1000)
-    const ended = await db
-      .select({ id: matches.id })
-      .from(matches)
-      .where(
-        and(
-          inArray(matches.status, ["finished", "abandoned"]),
-          isNull(matches.serverReleasedAt),
-          lt(matches.endedAt, demoCutoff),
-        ),
-      )
-    for (const { id } of ended) await this.guard(id, () => this.teardown(id))
-
     const startCutoff = new Date(
       this.now() - (this.d.options.allocationTimeoutSec + this.d.options.connectTimeoutSec) * 1000,
     )
@@ -842,7 +874,51 @@ export class MatchFlow {
       .select({ id: matches.id })
       .from(matches)
       .where(and(eq(matches.status, "starting"), lt(matches.allocationStartedAt, startCutoff)))
-    for (const { id } of stuck) await this.guard(id, () => this.cancelMatch(id, "server_never_ready", { requeue: false }))
+    for (const { id } of stuck) {
+      await this.guard(id, () => this.cancelMatch(id, "server_never_ready", { requeue: false, deferRelease: true }))
+    }
+
+    await this.guard("cooldowns", () => this.sweepCooldowns())
+  }
+
+  // Pushes a fresh queue status to players whose cooldown ended since the last sweep
+  private async sweepCooldowns(): Promise<void> {
+    const now = this.now()
+    const since = this.lastCooldownSweep ?? now - 5000
+    this.lastCooldownSweep = now
+    const rows = await this.d.db
+      .selectDistinct({ steamId: cooldowns.steamId })
+      .from(cooldowns)
+      .where(and(gt(cooldowns.endsAt, new Date(since)), lte(cooldowns.endsAt, new Date(now))))
+    if (rows.length > 0) await this.d.queue.notifyParty(rows.map((r) => r.steamId))
+  }
+
+  // Agent and DatHost calls: server starts and teardowns, a few at a time
+  async allocationTick(concurrency = ALLOCATION_CONCURRENCY): Promise<void> {
+    const db = this.d.db
+    const allocating = await db.select({ id: matches.id }).from(matches).where(eq(matches.status, "allocating"))
+    const demoCutoff = new Date(this.now() - this.d.options.demoWaitSec * 1000)
+    const ended = await db
+      .select({ id: matches.id })
+      .from(matches)
+      .where(
+        and(
+          isNull(matches.serverReleasedAt),
+          or(
+            and(inArray(matches.status, ["finished", "abandoned"]), lt(matches.endedAt, demoCutoff)),
+            // Cancelled by the timers loop with a server or slot still held
+            and(
+              eq(matches.status, "cancelled"),
+              or(isNotNull(matches.hostId), isNotNull(matches.slotId), isNotNull(matches.driverRef)),
+            ),
+          ),
+        ),
+      )
+    const jobs: (() => Promise<void>)[] = [
+      ...allocating.map(({ id }) => () => this.guard(id, () => this.tryAllocate(id))),
+      ...ended.map(({ id }) => () => this.guard(id, () => this.teardown(id))),
+    ]
+    await eachLimit(jobs, concurrency, (job) => job())
   }
 
   private async guard(matchId: string, fn: () => Promise<unknown>): Promise<void> {
@@ -854,7 +930,7 @@ export class MatchFlow {
     }
   }
 
-  async expireAccept(matchId: string): Promise<void> {
+  async expireAccept(matchId: string, allocateNow = true): Promise<void> {
     const r = await this.tx(async (tx) => {
       const m = await this.lock(tx, matchId)
       if (!m || m.status !== "accepting") return null
@@ -863,11 +939,11 @@ export class MatchFlow {
       const post = await this.applyAcceptOutcome(tx, m, outcome)
       return { m, outcome, post }
     })
-    if (r) await this.afterAccept(r.m, r.outcome, r.post)
+    if (r) await this.afterAccept(r.m, r.outcome, r.post, allocateNow)
   }
 
   // Resolves the current step with the votes cast so far. No votes means a random ban
-  async expireVetoStep(matchId: string): Promise<void> {
+  async expireVetoStep(matchId: string, allocateNow = true): Promise<void> {
     const r = await this.tx(async (tx) => {
       const m = await this.lock(tx, matchId)
       if (!m || m.status !== "veto") return null
@@ -880,13 +956,13 @@ export class MatchFlow {
     })
     if (!r) return
     this.sendVeto(r.m, r.next, r.stepDeadline)
-    if (r.next.done) await this.tryAllocate(matchId)
+    if (r.next.done && allocateNow) await this.tryAllocate(matchId)
   }
 
   private async expireConnect(matchId: string): Promise<void> {
     const players = await this.d.db.select().from(matchPlayers).where(eq(matchPlayers.matchId, matchId))
     const missing = players.filter((p) => !p.everConnected).map((p) => p.steamId)
-    if (missing.length === 0) await this.cancelMatch(matchId, "never_started", { requeue: false })
+    if (missing.length === 0) await this.cancelMatch(matchId, "never_started", { requeue: false, deferRelease: true })
     else await this.abandonMatch(matchId, missing, "connect_timeout")
   }
 

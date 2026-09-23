@@ -36,6 +36,27 @@
       "when": 1790169226403,
       "tag": "0004_challenge_source",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790169947184,
+      "tag": "0005_friends",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790170216944,
+      "tag": "0006_queue_perf",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790170620690,
+      "tag": "0007_tournament_bracket_version",
+      "breakpoints": true
     }
   ]
 }

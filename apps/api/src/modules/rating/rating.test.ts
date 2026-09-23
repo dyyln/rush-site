@@ -140,6 +140,14 @@ describe("RatingService", () => {
     expect(again.players).toHaveLength(0)
   })
 
+  it("ratingValues leaves out players with no rating in the mode", async () => {
+    const [a, b, c] = await makeUsers(h.db, 3)
+    await recordMatch([a!], [b!], 0)
+    const values = await h.ctx.ratings.ratingValues([a!, b!, c!], "aim1v1")
+    expect(Object.keys(values).sort()).toEqual([a!, b!].sort())
+    expect(await h.ctx.ratings.ratingValues([a!], "aim2v2")).toEqual({})
+  })
+
   it("only rolls back wins inside the window", async () => {
     const [cheater, victim] = await makeUsers(h.db, 2)
     await recordMatch([cheater!], [victim!], 0)

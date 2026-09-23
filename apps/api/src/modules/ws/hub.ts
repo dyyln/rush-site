@@ -1,5 +1,6 @@
 import type { Redis } from "ioredis"
 import type { WsEnvelope } from "@rushsite/shared"
+import { sendChecked, type BufferedSocket } from "../../lib/backpressure.js"
 
 export type Outgoing = WsEnvelope
 export type Audience =
@@ -7,6 +8,7 @@ export type Audience =
   | { kind: "broadcast" }
   | { kind: "admins" }
   | { kind: "match"; matchId: string }
+  | { kind: "tournament"; tournamentId: string }
 
 // Anything services use to push messages to connected players
 export interface Notifier {
@@ -18,13 +20,9 @@ export function toUsers(notifier: Notifier, steamIds: string[], type: string, pa
   notifier.send({ kind: "users", steamIds }, { type, payload, ts })
 }
 
-export interface SocketLike {
-  readonly readyState: number
-  send(data: string): void
-}
-
-const OPEN = 1
+export type SocketLike = BufferedSocket
 export const MAX_MATCH_SUBSCRIPTIONS = 20
+export const MAX_TOURNAMENT_SUBSCRIPTIONS = 10
 
 // Sockets connected to this process
 export class LocalHub {
@@ -32,6 +30,28 @@ export class LocalHub {
   private readonly admins = new Set<SocketLike>()
   private readonly matchSubs = new Map<string, Set<SocketLike>>()
   private readonly socketMatches = new Map<SocketLike, Set<string>>()
+  private readonly tournamentSubs = new Map<string, Set<SocketLike>>()
+  private readonly socketTournaments = new Map<SocketLike, Set<string>>()
+
+  // Returns false when the socket already follows the maximum number of tournaments
+  subscribeTournament(socket: SocketLike, tournamentId: string): boolean {
+    const mine = this.socketTournaments.get(socket) ?? new Set<string>()
+    if (!mine.has(tournamentId) && mine.size >= MAX_TOURNAMENT_SUBSCRIPTIONS) return false
+    mine.add(tournamentId)
+    this.socketTournaments.set(socket, mine)
+    const subs = this.tournamentSubs.get(tournamentId) ?? new Set<SocketLike>()
+    subs.add(socket)
+    this.tournamentSubs.set(tournamentId, subs)
+    return true
+  }
+
+  unsubscribeTournament(socket: SocketLike, tournamentId: string): void {
+    this.socketTournaments.get(socket)?.delete(tournamentId)
+    const subs = this.tournamentSubs.get(tournamentId)
+    if (!subs) return
+    subs.delete(socket)
+    if (subs.size === 0) this.tournamentSubs.delete(tournamentId)
+  }
 
   // Returns false when the socket already follows the maximum number of matches
   subscribeMatch(socket: SocketLike, matchId: string): boolean {
@@ -57,6 +77,8 @@ export class LocalHub {
   dropSocket(socket: SocketLike): void {
     for (const id of this.socketMatches.get(socket) ?? []) this.unsubscribeMatch(socket, id)
     this.socketMatches.delete(socket)
+    for (const id of this.socketTournaments.get(socket) ?? []) this.unsubscribeTournament(socket, id)
+    this.socketTournaments.delete(socket)
   }
 
   add(steamId: string, socket: SocketLike, isAdmin = false): void {
@@ -87,11 +109,11 @@ export class LocalHub {
           ? [this.admins]
           : audience.kind === "match"
             ? [this.matchSubs.get(audience.matchId) ?? new Set<SocketLike>()]
+            : audience.kind === "tournament"
+              ? [this.tournamentSubs.get(audience.tournamentId) ?? new Set<SocketLike>()]
             : audience.steamIds.map((id) => this.byUser.get(id)).filter((s): s is Set<SocketLike> => !!s)
     for (const set of targets) {
-      for (const socket of set) {
-        if (socket.readyState === OPEN) socket.send(data)
-      }
+      for (const socket of set) sendChecked(socket, msg, data)
     }
   }
 

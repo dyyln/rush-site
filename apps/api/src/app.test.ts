@@ -16,7 +16,7 @@ describe("app wiring", () => {
   })
 
   it("serves health and public reads", async () => {
-    expect((await h.app.inject({ method: "GET", url: "/health" })).json()).toEqual({ ok: true })
+    expect((await h.app.inject({ method: "GET", url: "/health" })).json()).toMatchObject({ ok: true, ws: { droppedSlow: expect.any(Number), closedSlow: expect.any(Number) } })
     const modes = (await h.app.inject({ method: "GET", url: "/modes" })).json() as { mode: string }[]
     expect(modes.map((m) => m.mode)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
     const lb = await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1" })

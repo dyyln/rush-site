@@ -56,9 +56,14 @@ export class RatingService {
     return out
   }
 
+  // Only players with a rating row in the mode. Unrated players are left out
   async ratingValues(steamIds: string[], mode: Mode): Promise<Record<string, number>> {
-    const map = await this.get(steamIds, mode)
-    return Object.fromEntries([...map].map(([k, v]) => [k, v.rating]))
+    if (steamIds.length === 0) return {}
+    const rows = await this.db
+      .select({ steamId: ratings.steamId, rating: ratings.rating })
+      .from(ratings)
+      .where(and(inArray(ratings.steamId, steamIds), eq(ratings.mode, mode)))
+    return Object.fromEntries(rows.map((r) => [r.steamId, r.rating]))
   }
 
   private async lockRows(tx: Db, steamIds: string[], mode: Mode): Promise<Map<string, typeof ratings.$inferSelect>> {

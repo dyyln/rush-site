@@ -112,3 +112,41 @@ describe("findMatches 3v3", () => {
     expect(findMatches(late, { mode: "rush3v3", teamSize: 3, now: NOW })).toHaveLength(1)
   })
 })
+
+describe("findMatches at scale", () => {
+  function seeded(seed: number): () => number {
+    return () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0
+      return seed / 2 ** 32
+    }
+  }
+
+  function crowd(count: number, teamSize: number, seed: number): MmTicket[] {
+    const r = seeded(seed)
+    return Array.from({ length: count }, (_, i) => {
+      const x = r()
+      const size = teamSize === 1 ? 1 : teamSize === 2 ? (x < 0.7 ? 1 : 2) : x < 0.6 ? 1 : x < 0.85 ? 2 : 3
+      const rating = 1500 + Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r()) * 300
+      return { id: `c${i}`, size, rating, enqueuedAt: NOW - Math.floor(r() * 400_000), region: "eu" }
+    })
+  }
+
+  it.each([
+    ["aim1v1", 1],
+    ["aim2v2", 2],
+    ["rush3v3", 3],
+  ] as const)("matches 5,000 %s tickets in under 200 ms", (mode, teamSize) => {
+    const tickets = crowd(5000, teamSize, 7)
+    findMatches(crowd(500, teamSize, 8), { mode, teamSize, now: NOW })
+    let best = Number.POSITIVE_INFINITY
+    let proposals = 0
+    // Best of five so a busy machine does not fail the run
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now()
+      proposals = findMatches(tickets, { mode, teamSize, now: NOW }).length
+      best = Math.min(best, performance.now() - t0)
+    }
+    expect(proposals).toBeGreaterThan(1000)
+    expect(best).toBeLessThan(200)
+  })
+})

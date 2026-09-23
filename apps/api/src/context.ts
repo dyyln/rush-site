@@ -6,9 +6,12 @@ import type { Db } from "./db/client.js"
 import type { Env } from "./env.js"
 import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
+import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
+import { FriendsService } from "./modules/friends/service.js"
+import { PresenceService } from "./modules/friends/presence.js"
 import { HttpAgentClient, type AgentApi } from "./modules/match/agent.js"
 import { Allocator } from "./modules/match/allocator.js"
 import { MatchFlow } from "./modules/match/flow.js"
@@ -44,6 +47,9 @@ export type AppContext = {
   allocator: Allocator
   flow: MatchFlow
   storage: DemoStorage
+  presence: PresenceService
+  friends: FriendsService
+  snapshots: SnapshotStore
 }
 
 export type ContextDeps = {
@@ -62,8 +68,10 @@ export type ContextDeps = {
 }
 
 export function buildContext(deps: ContextDeps): AppContext {
-  const { env, db, redis, notifier, log } = deps
+  const { env, db, redis, log } = deps
   const now = deps.now ?? Date.now
+  const snapshots = new SnapshotStore(redis, now)
+  const notifier = withSnapshots(deps.notifier, snapshots, (err) => log.warn({ err }, "snapshot write failed"))
   const fetchFn = deps.fetch ?? fetch
   const sessions = new SessionStore(redis, env.SESSION_TTL_DAYS * 86400)
   const admins = new Set(env.ADMIN_STEAM_IDS)
@@ -128,6 +136,12 @@ export function buildContext(deps: ContextDeps): AppContext {
       allowUnresolvedModes,
     },
   })
+  const presence = new PresenceService({ db, redis, notifier, queue, parties, log, now })
+  const friends = new FriendsService({ db, redis, notifier, steam, users, parties, log, now, presence })
+  queue.onPlayersChanged((ids) => presence.refresh(ids))
+  flow.onPlayersChanged((ids) => presence.refresh(ids))
+  flow.onMatchChanged((m) => presence.matchChanged(m))
+  flow.onResult(async (r) => presence.refresh((await flow.playersOf(r.matchId)).map((p) => p.steamId)))
   const bans = new BanService(db, ratings, trust, queue, parties, sessions, now, env.ROLLBACK_WINDOW_DAYS)
   return {
     env,
@@ -152,5 +166,8 @@ export function buildContext(deps: ContextDeps): AppContext {
     allocator,
     flow,
     storage,
+    presence,
+    friends,
+    snapshots,
   }
 }

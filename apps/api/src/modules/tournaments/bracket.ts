@@ -1,7 +1,7 @@
 // Pure single elimination bracket logic. No IO. Every function returns a new bracket.
 
 export type Side = "a" | "b"
-export type BracketMatchStatus = "pending" | "ready" | "live" | "done"
+export type BracketMatchStatus = "pending" | "ready" | "provisioning" | "live" | "done"
 export type Resolution = "played" | "bye" | "walkover" | "forfeit" | "double_forfeit" | "void"
 
 export interface GameRecord {
@@ -196,10 +196,30 @@ export function playableMatches(b: Bracket): BracketMatch[] {
   return b.matches.filter((m) => m.status === "ready")
 }
 
-export function startGame(input: Bracket, bracketMatchId: string, gameMatchId: string): Bracket {
+// Marks a ready match while a server is requested for its next game.
+export function claimGame(input: Bracket, bracketMatchId: string): Bracket {
   const b = clone(input)
   const m = find(b, bracketMatchId)
   if (m.status !== "ready") throw new BracketError(`${m.id} is ${m.status}, not ready`)
+  m.status = "provisioning"
+  return b
+}
+
+// Puts a claimed match back to ready so the next tick can try again.
+export function releaseGame(input: Bracket, bracketMatchId: string): Bracket {
+  const current = find(input, bracketMatchId)
+  if (current.status !== "provisioning") return input
+  const b = clone(input)
+  find(b, bracketMatchId).status = "ready"
+  return b
+}
+
+export function startGame(input: Bracket, bracketMatchId: string, gameMatchId: string): Bracket {
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  if (m.status !== "ready" && m.status !== "provisioning") {
+    throw new BracketError(`${m.id} is ${m.status}, not ready`)
+  }
   m.status = "live"
   m.liveMatchId = gameMatchId
   return b
@@ -242,7 +262,7 @@ export function recordGame(
 // Forfeits the whole series. Both sides forfeiting eliminates both.
 export function forfeit(input: Bracket, bracketMatchId: string, losers: Side[]): Bracket {
   const current = find(input, bracketMatchId)
-  if (current.status !== "ready" && current.status !== "live") {
+  if (current.status !== "ready" && current.status !== "provisioning" && current.status !== "live") {
     throw new BracketError(`${current.id} is ${current.status}, cannot forfeit`)
   }
   if (losers.length === 0) return input

@@ -11,7 +11,7 @@ import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
 import { TierChip } from "@/components/ui/TierChip";
 import { api } from "@/lib/api";
-import { pct, winRate } from "@/lib/format";
+import { formatStat, winRate } from "@/lib/format";
 import { MODE_COPY, isMode } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import type { Leaderboard, LeaderboardRow } from "@/lib/types";
@@ -50,7 +50,7 @@ const columns: Column<BoardRow>[] = [
       ),
     align: "right",
   },
-  { key: "winrate", header: "Win %", cell: (r) => pct(winRate(r.wins, r.matches)), numeric: true, hideOnMobile: true },
+  { key: "winrate", header: "Win %", cell: (r) => formatStat(winRate(r.wins, r.matches), "pct", r.matches), numeric: true, hideOnMobile: true },
   { key: "matches", header: "Matches", cell: (r) => r.matches, numeric: true, hideOnMobile: true },
 ];
 
