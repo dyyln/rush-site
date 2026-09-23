@@ -475,7 +475,7 @@ const LIVE_START_ROUNDS = 9;
 
 const MIDS = RUSH_ROOMS.midRooms.map((r) => r.displayName);
 
-// Plays out a whole match from a seed. Aim is first to 16, Rush first to 8 of 15
+// Plays out a whole match from a seed. Aim is first to 13, Rush first to 8 of 15
 function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[] } {
   const r = rng(seed);
   const target = mode === "rush3v3" ? 8 : 16;

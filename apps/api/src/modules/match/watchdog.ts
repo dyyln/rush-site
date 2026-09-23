@@ -16,7 +16,7 @@ export const SERVER_LOST = "server_lost"
 export const MATCH_TIMEOUT = "timeout"
 export type WatchdogReason = typeof SERVER_LOST | typeof MATCH_TIMEOUT
 
-// Generous caps. Aim is first to 16 and Rush has at most 15 rounds
+// Generous caps. Aim is first to 13 and Rush has at most 15 rounds
 export const DEFAULT_MAX_DURATION_MIN: Record<Mode, number> = { aim1v1: 45, aim2v2: 45, rush3v3: 40 }
 
 export type WatchdogOptions = {

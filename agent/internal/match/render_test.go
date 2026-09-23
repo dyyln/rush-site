@@ -128,7 +128,7 @@ func TestPluginJSONMatchesContract(t *testing.T) {
 			t.Errorf("match.json missing %s", k)
 		}
 	}
-	if m["winCondition"] != "first_to_16" {
+	if m["winCondition"] != "first_to_13" {
 		t.Errorf("winCondition=%v", m["winCondition"])
 	}
 	demo := m["demoUpload"].(map[string]any)

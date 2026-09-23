@@ -746,6 +746,14 @@ public sealed class MatchController
         _sink.Enqueue(new MatchEnd(winner, new Dictionary<string, int>(_teamScore), _stats.Snapshot(), false));
         ScheduleDemoStop();
         SaveState();
+        if (_settings.KickOnMatchEnd) KickEveryone("Match over. Thanks for playing.");
+    }
+
+    // Nobody needs to stay for the demo wait. Kicking keeps the server idle until it is torn down.
+    private void KickEveryone(string reason)
+    {
+        foreach (var p in _game.ConnectedPlayers())
+            _game.KickPlayer(p.SteamId, reason);
     }
 
     // tv_record writes the delayed GOTV stream so keep recording through tv_delay before stopping.

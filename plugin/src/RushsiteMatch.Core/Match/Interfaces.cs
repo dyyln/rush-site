@@ -75,6 +75,8 @@ public sealed class MatchSettings
     public bool AimHalftime { get; init; }
     public bool PauseOnDisconnect { get; init; } = true;
     public bool KickBots { get; init; } = true;
+    // Kick every player as soon as the result is decided
+    public bool KickOnMatchEnd { get; init; } = true;
     public bool TryChangeTeam { get; init; }
     // Rush. Wrong team joins a player may make before being kicked.
     public int TeamJoinRefusalsBeforeKick { get; init; } = 3;

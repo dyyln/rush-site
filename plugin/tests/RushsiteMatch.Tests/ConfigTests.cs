@@ -19,17 +19,17 @@ public class ConfigTests
     }
 
     [Fact]
-    public void ParsesFirstTo16()
+    public void ParsesFirstTo13()
     {
         var cfg = TestData.Aim1v1();
         Assert.Equal(WinConditionKind.FirstTo, cfg.ParsedWinCondition.Kind);
-        Assert.Equal(16, cfg.ParsedWinCondition.RoundsToWin);
-        Assert.Equal(31, cfg.ParsedWinCondition.MaxRounds);
+        Assert.Equal(13, cfg.ParsedWinCondition.RoundsToWin);
+        Assert.Equal(25, cfg.ParsedWinCondition.MaxRounds);
         Assert.True(cfg.ParsedWinCondition.PluginManagesMatch);
     }
 
     [Theory]
-    [InlineData("first_to_16", true)]
+    [InlineData("first_to_13", true)]
     [InlineData("first_to_1", true)]
     [InlineData("valve_rush", true)]
     [InlineData("first_to_0", false)]
@@ -49,7 +49,7 @@ public class ConfigTests
 
     [Theory]
     [InlineData("\"mode\": \"rush3v3\"", "\"mode\": \"deathmatch\"", "mode")]
-    [InlineData("\"winCondition\": \"valve_rush\"", "\"winCondition\": \"first_to_16\"", "does not fit mode")]
+    [InlineData("\"winCondition\": \"valve_rush\"", "\"winCondition\": \"first_to_13\"", "does not fit mode")]
     [InlineData("\"password\": \"hunter2\"", "\"password\": \"\"", "password")]
     [InlineData("\"webhookSecret\": \"topsecret\"", "\"webhookSecret\": \"\"", "webhookSecret")]
     [InlineData("\"webhookUrl\": \"https://api.example", "\"webhookUrl\": \"ftp://api.example", "webhookUrl")]

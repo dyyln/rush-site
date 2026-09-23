@@ -99,6 +99,19 @@ public class ControllerTests
     }
 
     [Fact]
+    public void MatchEndKicksEveryConnectedPlayer()
+    {
+        var m = LiveRush();
+        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.CT, false, false);
+        m.OnWinPanelMatch();
+        Assert.Equal(MatchPhase.Ended, m.Phase);
+        var kicked = _game.SteamKicks.Select(k => k.Item1).ToHashSet();
+        Assert.All(_game.ConnectedPlayers(), p => Assert.Contains(p.SteamId, kicked));
+        Assert.All(_game.SteamKicks, k => Assert.Equal("Match over. Thanks for playing.", k.Item2));
+        Assert.Single(_sink.Types, "match_end");
+    }
+
+    [Fact]
     public async Task RushCastleWinSendsMatchEndAtOnceThenDemoUploaded()
     {
         _game.ConVars["tv_delay"] = "105";
@@ -250,8 +263,8 @@ public class ControllerTests
         m.OnReady(A1);
 
         Assert.Equal(MatchPhase.Live, m.Phase);
-        var start = _game.Commands.SkipWhile(c => c != "mp_maxrounds 31").ToList();
-        Assert.Equal(new[] { "mp_maxrounds 31", "mp_match_can_clinch 1", "mp_overtime_enable 0", "mp_halftime 0", "mp_warmup_pausetimer 0" }, start.Take(5));
+        var start = _game.Commands.SkipWhile(c => c != "mp_maxrounds 25").ToList();
+        Assert.Equal(new[] { "mp_maxrounds 25", "mp_match_can_clinch 1", "mp_overtime_enable 0", "mp_halftime 0", "mp_warmup_pausetimer 0" }, start.Take(5));
         Assert.StartsWith("tv_record", start[5]);
         Assert.Equal("mp_warmup_end", start[6]);
         Assert.Equal(new[] { "server_ready", "player_connected", "player_connected", "match_started" }, _sink.Types);
@@ -285,7 +298,7 @@ public class ControllerTests
     }
 
     [Fact]
-    public void AimFirstTo16WithPauseOnDisconnect()
+    public void AimFirstTo13WithPauseOnDisconnect()
     {
         var m = New(Aim1v1());
         Join(m, A1, Side.CT);
@@ -299,16 +312,16 @@ public class ControllerTests
         Join(m, B1, Side.T);
         Assert.Contains("mp_unpause_match", _game.Commands);
 
-        for (var i = 0; i < 15; i++)
+        for (var i = 0; i < 12; i++)
         {
             m.OnRoundEnd(Side.CT, false, false);
             m.OnRoundEnd(Side.T, false, false);
         }
         m.OnRoundEnd(Side.T, false, false);
-        Assert.Equal(31, m.Round);
+        Assert.Equal(25, m.Round);
         m.OnWinPanelMatch();
         Assert.Equal("bravo", _sink.Last<MatchEnd>().WinnerTeam);
-        Assert.Equal(16, _sink.Last<MatchEnd>().Score["bravo"]);
+        Assert.Equal(13, _sink.Last<MatchEnd>().Score["bravo"]);
     }
 
     [Fact]
@@ -340,7 +353,7 @@ public class ControllerTests
     [Fact]
     public async Task MissingPresignedUrlReportsDemoNotUploaded()
     {
-        var m = New(MatchConfigLoader.Parse(Json("aim1v1", "first_to_16", 1, presigned: null)));
+        var m = New(MatchConfigLoader.Parse(Json("aim1v1", "first_to_13", 1, presigned: null)));
         Join(m, A1, Side.CT);
         Join(m, B1, Side.T);
         m.ForceStart();
@@ -366,7 +379,7 @@ public class ControllerTests
         m.ForceStart();
         var exec = "exec rushsite/matches/5f0c7a3e-1b2c-4d5e-8f90-1234567890ab/mode.cfg";
         var start = _game.Commands.SkipWhile(c => c != exec).ToList();
-        Assert.Equal(new[] { exec, "mp_maxrounds 31" }, start.Take(2));
+        Assert.Equal(new[] { exec, "mp_maxrounds 25" }, start.Take(2));
         Assert.True(start.IndexOf("mp_warmup_pausetimer 0") > 0);
         Assert.True(start.IndexOf("mp_warmup_end") > start.IndexOf("mp_warmup_pausetimer 0"));
 

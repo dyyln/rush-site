@@ -29,8 +29,8 @@ var reCfgName = regexp.MustCompile(`^[A-Za-z0-9_\-]{1,64}\.cfg$`)
 // DefaultModes returns the rules for the three platform modes.
 func DefaultModes() ModeTable {
 	return ModeTable{
-		Aim1v1:  {TeamSize: 1, WinCondition: "first_to_16"},
-		Aim2v2:  {TeamSize: 2, WinCondition: "first_to_16"},
+		Aim1v1:  {TeamSize: 1, WinCondition: "first_to_13"},
+		Aim2v2:  {TeamSize: 2, WinCondition: "first_to_13"},
 		Rush3v3: {TeamSize: 3, WinCondition: "valve_rush"},
 	}
 }

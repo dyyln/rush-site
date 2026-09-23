@@ -32,7 +32,7 @@ type ModeConfig = {
   maps: MapEntry[]            // aim maps or rush arenas
   vetoFormat: "none" | "bo1-ban" | "ban-to-7" | "bo3-pickban"
   // none: no veto, single map (rush ladder for now). bo1-ban: alternate bans to one map (aim ladder). ban-to-7: alternate bans over 15 arenas to 7 (rush ladder). bo3-pickban: tournament finals only
-  winCondition: string         // "first_to_16" or "valve_rush"
+  winCondition: string         // "first_to_13" or "valve_rush"
   cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[] }
   // execCfg is our cfg, shipped by the agent in agent/internal/match/cfgs. Never a Valve gamemode cfg, the game runs those itself
 }

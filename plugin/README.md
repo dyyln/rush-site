@@ -30,7 +30,7 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 - `!ready` works only when the player is on the right side. Changing side clears ready.
 - The match starts when everyone is connected and ready and the teams sit on opposite sides. It also starts `rushsite_ready_timeout` seconds after everyone connects, as long as the sides are valid.
 - The mode cfg is exec'd again at match start because Valve's `gamemode_competitive.cfg` runs on map load after the agent's command line `+exec`. Without it aim plays with $800, buy zones and C4. It runs before `mp_warmup_pausetimer 0` (the cfg sets it to 1) and before `mp_warmup_end`, whose restart applies `mp_startmoney 16000`. Rush never runs it.
-- On start the plugin runs these commands in order: `exec rushsite/matches/<matchId>/mode.cfg` (written by both drivers), `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 0`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`. With 31 max rounds and clinch on, first to 16 always finishes without overtime.
+- On start the plugin runs these commands in order: `exec rushsite/matches/<matchId>/mode.cfg` (written by both drivers), `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 0`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`. With 31 max rounds and clinch on, first to 13 always finishes without overtime.
 - The score is kept per config team, so a halftime swap is handled.
 
 ### Rush

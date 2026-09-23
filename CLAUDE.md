@@ -24,8 +24,8 @@ A competitive platform for Counter-Strike 2 in the spirit of the old PvPRO (CS:G
 
 | Mode | Players | Maps | Rules |
 |---|---|---|---|
-| **1v1 Aim** | 1 vs 1 | Workshop aim maps (`aim_map`, `aim_redline`, `aim_ag_texture2`, `aim_usp`, `aim_deagle7k`, `awp_india`) | First to 16 rounds |
-| **2v2 Aim** | 2 vs 2 (duo or solo + auto-filled teammate) | Same aim-map pool | First to 16 rounds |
+| **1v1 Aim** | 1 vs 1 | Workshop aim maps (`aim_map`, `aim_redline`, `aim_ag_texture2`, `aim_usp`, `aim_deagle7k`, `awp_india`) | First to 13 rounds |
+| **2v2 Aim** | 2 vs 2 (duo or solo + auto-filled teammate) | Same aim-map pool | First to 13 rounds |
 | **3v3 Rush** | 3 vs 3 (party of 1 to 3, filled from solo queue) | Valve's single Rush map `rush_001` ("Complex"), rooms drawn at map load | Valve's Rush rules, no tweaks |
 
 - **Rush is the headline mode and a hard requirement.** Valve released Rush on 22 September 2026. Server settings are `+game_type 0 +game_mode 6 +map rush_001`, and dedicated servers receive the map in their depot. The rules live in the map script: seven room slots per match (T castle, 2 mid, start, 2 mid, CT castle) drawn from 4 start rooms and 12 mid rooms, tower control decides rounds, a round win moves play one room toward the loser's castle, the match ends on a win in the enemy castle or 8 round wins, max 15 rounds. The room draw is random and not server-controllable. See docs/RUSH-RESEARCH.md. Running it on a community server is inferred, not yet proven, and is the first experiment.

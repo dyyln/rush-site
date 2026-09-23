@@ -86,7 +86,7 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     teamSize: 1,
     maps: [...AIM_MAPS],
     vetoFormat: "bo1-ban",
-    winCondition: "first_to_16",
+    winCondition: "first_to_13",
     cs2: { gameType: 0, gameMode: 1, execCfg: "rushsite_aim1v1.cfg" },
   },
   aim2v2: {
@@ -94,7 +94,7 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     teamSize: 2,
     maps: [...AIM_MAPS],
     vetoFormat: "bo1-ban",
-    winCondition: "first_to_16",
+    winCondition: "first_to_13",
     cs2: { gameType: 0, gameMode: 1, execCfg: "rushsite_aim2v2.cfg" },
   },
   rush3v3: {

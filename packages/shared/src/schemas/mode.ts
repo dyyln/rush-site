@@ -15,7 +15,7 @@ export type MapEntry = z.infer<typeof MapEntrySchema>
 export const VetoFormatSchema = z.enum(["none", "bo1-ban", "ban-to-7", "bo3-pickban"])
 export type VetoFormat = z.infer<typeof VetoFormatSchema>
 
-export const WinConditionSchema = z.enum(["first_to_16", "valve_rush"])
+export const WinConditionSchema = z.enum(["first_to_13", "valve_rush"])
 export type WinCondition = z.infer<typeof WinConditionSchema>
 
 // Plain cfg file name, no directories

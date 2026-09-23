@@ -8,7 +8,7 @@
   "modes": {
     "aim1v1": {
       "teamSize": 1,
-      "winCondition": "first_to_16",
+      "winCondition": "first_to_13",
       "launches": [
         {
           "map": {
@@ -98,7 +98,7 @@
     },
     "aim2v2": {
       "teamSize": 2,
-      "winCondition": "first_to_16",
+      "winCondition": "first_to_13",
       "launches": [
         {
           "map": {

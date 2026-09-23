@@ -180,6 +180,8 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
             "cs2_settings.game_mode": mode.preset,
             "cs2_settings.enable_gotv": true,
             "cs2_settings.enable_metamod": true,
+            // Workshop maps otherwise drop sv_password, tv_ and log cvars from every cfg
+            "cs2_settings.disable_workshop_command_filtering": true,
             "cs2_settings.slots": Math.min(64, Math.max(5, req.allowedSteamIds.length + 1)),
             "cs2_settings.maps_source": workshop ? "workshop_single_map" : "mapgroup",
             ...(workshop
