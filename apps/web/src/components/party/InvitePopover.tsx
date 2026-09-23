@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { PresenceAvatar } from "@/components/friends/presence";
+import { BRAND_NAME } from "@rushsite/shared";
+import { matchesQuery, PresenceAvatar, sortByPresence } from "@/components/friends/presence";
+import { SearchBox } from "@/components/friends/SearchBox";
 import { useFriends } from "@/components/friends/store";
 import { Button } from "@/components/ui/Button";
 import { FriendAction, STEAM_FRIENDS_SUBTITLE } from "./FriendAction";
@@ -47,11 +49,15 @@ export function InvitePopover({ inviteUrl, ensureInvite, onParty, onClose, retur
     setBusy(false);
   }
 
-  // Friends not offline first, then Steam friends who can only get a link
-  const list = [
-    ...(friends.data?.friends ?? []).map((f) => ({ ...f, registered: true })),
-    ...(friends.data?.steamOnly ?? []).map((f) => ({ ...f, registered: false, presence: f.personaState > 0 ? ("online" as const) : ("offline" as const) })),
+  const [query, setQuery] = useState("");
+  // Friends here first, grouped by presence. Steam friends who can only get a link come after a divider
+  const all = [
+    ...sortByPresence(friends.data?.friends ?? []).map((f) => ({ ...f, registered: true })),
+    ...[...(friends.data?.steamOnly ?? [])]
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }))
+      .map((f) => ({ ...f, presence: f.personaState > 0 ? ("online" as const) : ("offline" as const), registered: false })),
   ];
+  const list = all.filter((f) => matchesQuery(f, query));
 
   return (
     <div ref={ref} className={styles.popover} role="dialog" aria-labelledby={titleId}>
@@ -61,18 +67,25 @@ export function InvitePopover({ inviteUrl, ensureInvite, onParty, onClose, retur
       <Button variant="secondary" block onClick={copy} loading={busy}>
         {copied ? "Link copied" : "Copy invite link"}
       </Button>
-      {list.length > 0 && (
+      {all.length > 0 && (
         <>
           <p className={styles.title}>Friends</p>
           <p className={styles.status}>{STEAM_FRIENDS_SUBTITLE}</p>
+          <SearchBox value={query} onChange={setQuery} />
+          {list.length === 0 && <p className={styles.status}>No friends match.</p>}
           <ul className={styles.friends}>
-            {list.map((f) => (
+            {list.map((f, i) => [
+              !f.registered && (i === 0 || list[i - 1]!.registered) && (
+                <li key="divider" className={styles.divider} role="presentation">
+                  Not on {BRAND_NAME}
+                </li>
+              ),
               <li key={f.steamId} className={styles.friend}>
                 <PresenceAvatar name={f.displayName} src={f.avatarUrl} presence={f.presence} />
                 <span className={styles.name}>{f.displayName}</span>
                 <FriendAction friend={f} actions={actions} />
-              </li>
-            ))}
+              </li>,
+            ])}
           </ul>
         </>
       )}

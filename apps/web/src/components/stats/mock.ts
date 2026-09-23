@@ -1,6 +1,6 @@
 // Deterministic mock data for the stats pages
-import { AIM_MAPS, RUSH_MAP, TIERS, tierForRating, type LiveMatch, type Mode, type ServiceStatus, type TierDistribution } from "@rushsite/shared";
-import { MOCK_ME, MOCK_NOW, mockLeaderboard, mockUser, mockUuid } from "@/lib/mock";
+import { TIERS, tierForRating, type Mode, type ServiceStatus, type TierDistribution } from "@rushsite/shared";
+import { MOCK_ME, MOCK_NOW, mockLeaderboard } from "@/lib/mock";
 import type { FriendsLeaderboard } from "./statsApi";
 
 // Rough bell curve per mode, low to high tiers
@@ -64,33 +64,4 @@ export function mockStatus(): ServiceStatus {
     ],
     updatedAt: new Date(MOCK_NOW).toISOString(),
   };
-}
-
-const TEAM_SIZE: Record<Mode, number> = { aim1v1: 1, aim2v2: 2, rush3v3: 3 };
-
-function mockRoster(match: number, team: number, size: number) {
-  return Array.from({ length: size }, (_, k) => {
-    const u = mockUser(1 + ((match * 7 + team * 3 + k) % 39));
-    return { steamId: u.steamId, displayName: u.displayName, avatarUrl: u.avatarUrl };
-  });
-}
-
-export function mockLiveMatches(limit: number): LiveMatch[] {
-  const modes: Mode[] = ["rush3v3", "aim1v1", "aim2v2", "rush3v3", "aim1v1", "aim2v2", "aim1v1", "rush3v3"];
-  return modes.slice(0, limit).map((mode, i) => {
-    const map = mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[i % AIM_MAPS.length]!.id;
-    return {
-      id: mockUuid(`live-${i}`),
-      mode,
-      mapId: map,
-      status: "live" as const,
-      teams: [
-        { name: "Team A", score: (i * 3 + 2) % 9, players: mockRoster(i, 0, TEAM_SIZE[mode]) },
-        { name: "Team B", score: (i * 5 + 1) % 8, players: mockRoster(i, 1, TEAM_SIZE[mode]) },
-      ],
-      ...(i === 1 ? { tournament: { id: mockUuid("live-cup"), name: "Daily 1v1 Aim Cup" } } : {}),
-      startedAt: new Date(MOCK_NOW - (i + 3) * 4 * 60_000).toISOString(),
-      topRating: 2380 - i * 57,
-    };
-  });
 }

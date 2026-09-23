@@ -1,13 +1,18 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, MODES, RUSH_MAP, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
-import { MOCK_LIVE_MATCH_ID, MOCK_MATCH_HINTS } from "./mock-match";
+import { AIM_MAPS, MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { teamSize } from "./modes";
 import type {
   Bracket,
   BracketMatch,
   EntryView,
   Leaderboard,
   LeaderboardRow,
+  MatchDetail,
+  MatchKill,
+  MatchPlayer,
+  MatchRound,
   MatchSummary,
+  MatchTeam,
   ModeStats,
   Profile,
   TournamentDetail,
@@ -15,7 +20,7 @@ import type {
   User,
 } from "./types";
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0 || 1;
   return () => {
     s = (s * 1664525 + 1013904223) >>> 0;
@@ -23,13 +28,21 @@ function rng(seed: number) {
   };
 }
 
-function hash(str: string): number {
+export function hash(str: string): number {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
+}
+
+export const mockDelay = (ms = 250) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Waits like a network call and returns a copy so callers cannot change mock state
+export async function mockCall<T>(fn: () => T, ms = 250): Promise<T> {
+  await mockDelay(ms);
+  return structuredClone(fn());
 }
 
 const NAMES = [
@@ -286,7 +299,7 @@ export const MOCK_TOURNAMENTS: TournamentSummary[] = [
 
 function mockEntries(t: TournamentSummary): EntryView[] {
   const r = rng(hash(t.id));
-  const size = t.mode === "aim1v1" ? 1 : t.mode === "aim2v2" ? 2 : 3;
+  const size = teamSize(t.mode);
   return Array.from({ length: t.entrantCount }, (_, i) => {
     const players = Array.from({ length: size }, (_, j) => {
       const u = mockUser(i * size + j + 1);
@@ -400,4 +413,245 @@ export function mockTournamentDetail(id: string): TournamentDetail | null {
     bracketVersion: mockBracketVersion(id),
     myEntryId: null,
   };
+}
+
+// Match pages. One live match that gains a round every few seconds, the rest finished
+export const MOCK_LIVE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a1";
+export const MOCK_DONE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000b2";
+// Finished with the viewer playing and no demo uploaded
+export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
+
+export const MOCK_ROUND_MS = 3000;
+
+// Lets mock history rows open a match page with the same mode and map
+export const MOCK_MATCH_HINTS = new Map<string, { mode: Mode; mapId: string }>();
+const LIVE_START = Date.now();
+const LIVE_START_ROUNDS = 9;
+
+const MIDS = RUSH_ROOMS.midRooms.map((r) => r.displayName);
+
+// Plays out a whole match from a seed. Aim is first to 16, Rush first to 8 of 15
+function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[] } {
+  const r = rng(seed);
+  const target = mode === "rush3v3" ? 8 : 16;
+  const score = [0, 0];
+  const winners: number[] = [];
+  const arenas: string[] = [];
+  const bias = 0.45 + r() * 0.15;
+  let room = 3;
+  while (score[0]! < target && score[1]! < target) {
+    const w = r() < bias ? 0 : 1;
+    score[w]!++;
+    winners.push(w);
+    if (mode === "rush3v3") {
+      arenas.push(room === 0 ? RUSH_ROOMS.castles.t.displayName : room === 6 ? RUSH_ROOMS.castles.ct.displayName : room === 3 ? RUSH_ROOMS.startRooms[Math.floor(r() * 4)]!.displayName : MIDS[Math.floor(r() * MIDS.length)]!);
+      room = Math.max(0, Math.min(6, room + (w === 0 ? 1 : -1)));
+      if (score[0] === 7 && score[1] === 7) room = -1;
+    }
+  }
+  return { winners, arenas };
+}
+
+function players(mode: Mode, seed: number, offset: number, rounds: number, meFirst = false): MatchPlayer[] {
+  const r = rng(seed + offset);
+  const size = teamSize(mode);
+  return Array.from({ length: size }, (_, i) => {
+    const u = meFirst && i === 0 ? mockUser(0) : mockUser(offset + i + 1);
+    const rating = Math.round(1400 + r() * 700);
+    const kills = Math.round(rounds * (0.5 + r() * 0.6) / Math.max(1, size - 1 || 1));
+    return {
+      steamId: u.steamId,
+      displayName: u.displayName,
+      avatarUrl: null,
+      tier: tierForRating(rating).id,
+      rating,
+      kills,
+      deaths: Math.round(rounds * (0.4 + r() * 0.5) / Math.max(1, size - 1 || 1)),
+      headshots: Math.round(kills * (0.3 + r() * 0.4)),
+      damage: Math.round(kills * (95 + r() * 30)),
+    };
+  });
+}
+
+// meOnB puts the mock viewer on the second team to show own and enemy colours
+function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number, meOnB = false, demo = true): MatchDetail {
+  const plan = playOut(mode, seed);
+  const n = roundsPlayed === null ? plan.winners.length : Math.min(roundsPlayed, plan.winners.length);
+  const names = mode === "aim1v1" ? [mockUser(1).displayName, mockUser(meOnB ? 0 : 11).displayName] : ["Team A", "Team B"];
+  const score: Record<string, number> = { [names[0]!]: 0, [names[1]!]: 0 };
+  const rounds: MatchRound[] = [];
+  for (let i = 0; i < n; i++) {
+    const w = names[plan.winners[i]!]!;
+    score[w]!++;
+    rounds.push({
+      round: i + 1,
+      winnerTeam: w,
+      score: { ...score },
+      arena: mode === "rush3v3" ? plan.arenas[i] ?? RUSH_ROOMS.decider.displayName : undefined,
+      endedAt: new Date(startedAt + (i + 1) * 60_000).toISOString(),
+    });
+  }
+  const done = n === plan.winners.length;
+  const teams: MatchTeam[] = names.map((name, i) => ({
+    name,
+    score: score[name]!,
+    players: players(mode, seed, i * 10, n, meOnB && i === 1),
+  }));
+  const base: MatchDetail = {
+    id,
+    mode,
+    mapId,
+    status: done ? "finished" : "live",
+    driver: "hetzner",
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: done ? new Date(startedAt + (n + 1) * 60_000).toISOString() : null,
+    teams,
+    rounds,
+  };
+  return { ...base, ...mockMatchExtras(base, seed, { demo }) };
+}
+
+export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
+  if (id === MOCK_LIVE_MATCH_ID) {
+    // Loops so the demo stays live. Holds the final score for a few rounds before restarting
+    const total = playOut("aim1v1", 42).winners.length;
+    const cycle = total - LIVE_START_ROUNDS + 4;
+    const played = LIVE_START_ROUNDS + (Math.floor((now - LIVE_START) / MOCK_ROUND_MS) % cycle);
+    return {
+      ...build(id, "aim1v1", "aim_redline", 42, played, LIVE_START - 10 * 60_000, true),
+      tournament: { id: MOCK_TOURNAMENT_IDS[1]!, name: "Daily Aim Cup", bracketMatchId: "r4m0", bestOf: 3, gameNumber: 2 },
+    };
+  }
+  if (id === MOCK_DONE_MATCH_ID) return build(id, "rush3v3", RUSH_MAP.id, 7, null, now - 3 * 3_600_000);
+  if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);
+  const seed = hash(id);
+  const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];
+  const hint = MOCK_MATCH_HINTS.get(id);
+  const mode = hint?.mode ?? modes[seed % 3]!;
+  const mapId = hint?.mapId ?? (mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[seed % AIM_MAPS.length]!.id);
+  return build(id, mode, mapId, seed, null, now - (seed % 72) * 3_600_000, false, seed % 4 !== 0);
+}
+
+// Kills, MVP, rating deltas and demo for match pages. Seeded per round so live refetches stay stable
+const AIM_WEAPONS: Record<string, string[]> = {
+  aim_usp: ["usp_silencer"],
+  aim_deagle7k: ["deagle"],
+  awp_india: ["awp"],
+};
+const AIM_DEFAULT = ["ak47", "ak47", "m4a1_silencer", "deagle", "m4a4"];
+const RUSH_WEAPONS = ["ak47", "ak47", "m4a1_silencer", "awp", "mp9", "glock", "usp_silencer", "deagle", "hegrenade", "knife"];
+const NO_WALLBANG = new Set(["knife", "hegrenade"]);
+
+const TICK_RATE = 64;
+
+function roundKills(m: MatchDetail, seed: number, roundIndex: number): MatchKill[] {
+  const round = m.rounds[roundIndex];
+  if (!round) return [];
+  const r = rng(seed * 31 + round.round * 7919);
+  const winIdx = m.teams.findIndex((t) => t.name === round.winnerTeam);
+  const winners = m.teams[winIdx === -1 ? 0 : winIdx]!.players;
+  const losers = m.teams[winIdx === 1 ? 0 : 1]!.players;
+  const pool = m.mode === "rush3v3" ? RUSH_WEAPONS : (AIM_WEAPONS[m.mapId ?? ""] ?? AIM_DEFAULT);
+  // Winners kill every loser in aim. In rush tower control can end the round early
+  const loserDeaths = m.mode === "rush3v3" ? 1 + Math.floor(r() * losers.length) : losers.length;
+  const winnerDeaths = Math.floor(r() * winners.length);
+  const aliveW = winners.map((p) => p.steamId);
+  const aliveL = losers.map((p) => p.steamId);
+  const kills: MatchKill[] = [];
+  let tick = (round.round - 1) * TICK_RATE * 75 + TICK_RATE * (8 + Math.floor(r() * 12));
+  let wLeft = winnerDeaths;
+  let lLeft = loserDeaths;
+  while (lLeft > 0 || wLeft > 0) {
+    // The last kill of the round always goes to the winners
+    const loserKill = wLeft > 0 && (lLeft <= 1 ? true : r() < 0.4);
+    const atk = loserKill ? aliveL : aliveW;
+    const vic = loserKill ? aliveW : aliveL;
+    const victimIndex = Math.floor(r() * vic.length);
+    const victim = vic[victimIndex]!;
+    vic.splice(victimIndex, 1);
+    // Now and then a loser dies to a teammate to show team kills
+    const tk = !loserKill && vic.length > 0 && r() < 0.08;
+    const attacker = tk ? vic[Math.floor(r() * vic.length)]! : atk[Math.floor(r() * atk.length)]!;
+    const weapon = pool[Math.floor(r() * pool.length)]!;
+    const mates = (tk ? [] : atk).filter((s) => s !== attacker);
+    kills.push({
+      round: round.round,
+      tick,
+      attacker,
+      victim,
+      weapon,
+      headshot: weapon !== "hegrenade" && weapon !== "knife" && r() < 0.45,
+      wallbang: !NO_WALLBANG.has(weapon) && r() < 0.07,
+      assister: mates.length > 0 && r() < 0.3 ? mates[Math.floor(r() * mates.length)] : undefined,
+    });
+    if (loserKill) wLeft--;
+    else lLeft--;
+    tick += TICK_RATE * (1 + Math.floor(r() * 9));
+  }
+  return kills;
+}
+
+function mockMatchExtras(m: MatchDetail, seed: number, opts: { demo?: boolean } = {}): Partial<MatchDetail> {
+  const kills = m.rounds.flatMap((_, i) => roundKills(m, seed, i));
+  const r = rng(seed ^ 0x5bd1e995);
+  const teams: MatchTeam[] = m.teams.map((t) => ({
+    ...t,
+    players: t.players.map((p) => {
+      const k = kills.filter((x) => x.attacker === p.steamId);
+      const hs = k.filter((x) => x.headshot).length;
+      return {
+        ...p,
+        kills: k.length,
+        deaths: kills.filter((x) => x.victim === p.steamId).length,
+        headshots: hs,
+        damage: Math.round(k.length * (88 + r() * 30) + hs * 6 + r() * 60),
+      };
+    }),
+  }));
+  const done = m.status === "finished";
+  if (!done) return { teams, kills, mvp: null, demo: { available: false } };
+
+  const everyone = teams.flatMap((t) => t.players);
+  const top = [...everyone].sort((a, b) => b.damage - a.damage || b.kills - a.kills)[0];
+  const winner = m.teams.reduce((a, b) => (b.score > a.score ? b : a)).name;
+  const ratingDeltas: Record<string, number> = {};
+  for (const t of teams) {
+    for (const p of t.players) {
+      const d = 8 + Math.round(r() * 16);
+      ratingDeltas[p.steamId] = t.name === winner ? d : -d;
+    }
+  }
+  const available = opts.demo ?? true;
+  return {
+    teams,
+    kills,
+    mvp: top ? { steamId: top.steamId, reason: everyone.some((p) => p !== top && p.damage === top.damage) ? "most_kills" : "most_damage" } : null,
+    ratingDeltas,
+    demo: available
+      ? {
+          available: true,
+          url: `https://demos.rushsite.invalid/matches/${m.id}.dem?X-Amz-Expires=600`,
+          expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+        }
+      : { available: false },
+  };
+}
+
+// Sign in state, kept per browser. Signed in unless the viewer signed out
+const KEY = "rushsite-mock-signed-in";
+
+export function mockSignedIn(): boolean {
+  try {
+    return window.localStorage.getItem(KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setMockSignedIn(v: boolean) {
+  try {
+    window.localStorage.setItem(KEY, v ? "1" : "0");
+  } catch {
+    // Storage can be blocked. The mock then stays signed in
+  }
 }

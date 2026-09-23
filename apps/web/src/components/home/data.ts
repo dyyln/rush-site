@@ -1,9 +1,8 @@
 import { AIM_MAPS, MODES, RUSH_MAP, type Mode } from "@rushsite/shared";
 import { api } from "@/lib/api";
 import { isMock } from "@/lib/env";
-import { MOCK_NOW, MOCK_TOURNAMENTS, mockUuid, mockUser } from "@/lib/mock";
-import { MOCK_LIVE_MATCH_ID, MOCK_MATCH_HINTS, mockMatchDetail } from "@/lib/mock-match";
-import { isMode } from "@/lib/modes";
+import { MOCK_LIVE_MATCH_ID, MOCK_MATCH_HINTS, MOCK_NOW, MOCK_TOURNAMENTS, mockMatchDetail, mockUuid, mockUser } from "@/lib/mock";
+import { isMode, teamSize } from "@/lib/modes";
 import type { TournamentSummary } from "@/lib/types";
 
 // The list rows may carry myEntryId. When they do not, detail is fetched for signed in players
@@ -115,7 +114,7 @@ function mockLiveMatches(limit: number): LiveMatch[] {
   specs.forEach((s, i) => {
     const id = mockUuid(`live-${i}`);
     MOCK_MATCH_HINTS.set(id, { mode: s.mode, mapId: s.mapId });
-    const size = s.mode === "aim1v1" ? 1 : s.mode === "aim2v2" ? 2 : 3;
+    const size = teamSize(s.mode);
     const names = (off: number) => Array.from({ length: size }, (_, j) => mockUser(i * 10 + off + j + 2).displayName);
     rows.push({
       id,

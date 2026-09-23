@@ -1,65 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { STEAM_FRIENDS_SUBTITLE } from "@/components/party/FriendAction";
+import { useMemo, useState } from "react";
 import { useFriendInvite, type InviteSource } from "@/components/party/useFriendInvite";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { FriendRow, SteamOnlyRow } from "./FriendRow";
+import { FriendRow } from "./FriendRow";
+import { matchesQuery, sortByPresence } from "./presence";
+import { SearchBox } from "./SearchBox";
 import { usePending, useFriends } from "./store";
 import styles from "./friends.module.css";
 
-const SHOWN = 6;
+const SHOWN = 8;
 
-// Friends under the party panel on /play. Friends first by presence, then Steam friends to send a link to
+// Friends who play here, under the party panel on /play. Steam-only friends live on /friends
 export function FriendsCard(invite: Partial<InviteSource>) {
   const { data, error } = useFriends();
   const { data: pending } = usePending();
   const actions = useFriendInvite(invite);
-  const [all, setAll] = useState(false);
+  const [query, setQuery] = useState("");
 
-  const friends = data?.friends ?? [];
-  const steamOnly = data?.steamOnly ?? [];
-  const total = friends.length + steamOnly.length;
-  const limit = all ? Infinity : SHOWN;
-  const shownFriends = friends.slice(0, limit);
-  const shownSteam = steamOnly.slice(0, Math.max(0, limit - shownFriends.length));
+  const friends = useMemo(() => sortByPresence(data?.friends ?? []), [data]);
+  const filtered = friends.filter((f) => matchesQuery(f, query));
+  const shown = filtered.slice(0, SHOWN);
   const requests = pending?.requests ?? 0;
 
   return (
     <Card
       title="Friends"
       actions={
-        <Link href="/friends" className={styles.watch}>
-          {requests > 0 ? `${requests} request${requests === 1 ? "" : "s"}` : "All friends"}
-        </Link>
+        requests > 0 ? (
+          <Link href="/friends" className={styles.watch}>
+            {requests} request{requests === 1 ? "" : "s"}
+          </Link>
+        ) : undefined
       }
     >
-      <p className={`muted ${styles.subtitle}`}>{STEAM_FRIENDS_SUBTITLE}</p>
+      {friends.length > SHOWN && <SearchBox value={query} onChange={setQuery} />}
       {!data && !error ? (
         <p className={styles.empty}>Loading friends…</p>
       ) : error && !data ? (
         <p className={styles.error}>Could not load friends.</p>
-      ) : total === 0 ? (
+      ) : friends.length === 0 ? (
         <p className={styles.empty}>
-          {data?.steamListAvailable ? "No friends here yet. " : "Your Steam friends list is private or unavailable. "}
-          <Link href="/friends">Add friends</Link>
+          None of your friends play here yet. <Link href="/friends">Find friends</Link>
         </p>
+      ) : filtered.length === 0 ? (
+        <p className={styles.empty}>No friends match “{query.trim()}”.</p>
       ) : (
         <ul className={styles.list}>
-          {shownFriends.map((f) => (
+          {shown.map((f) => (
             <FriendRow key={f.steamId} friend={f} actions={actions} />
-          ))}
-          {shownSteam.map((f) => (
-            <SteamOnlyRow key={f.steamId} friend={f} actions={actions} />
           ))}
         </ul>
       )}
-      {total > SHOWN && (
-        <Button variant="ghost" block onClick={() => setAll((v) => !v)}>
-          {all ? "Show fewer" : `Show all ${total}`}
-        </Button>
+      {data && (
+        <p className={styles.seeAll}>
+          <Link href="/friends">
+            {filtered.length > SHOWN ? `See all ${filtered.length} friends` : "See all friends"}
+          </Link>
+        </p>
       )}
     </Card>
   );

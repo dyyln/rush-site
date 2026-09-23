@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { BRAND_NAME } from "@rushsite/shared";
 import { apiUrl, isMock } from "@/lib/env";
-import { mockMatchDetail } from "@/lib/mock-match";
+import { mockMatchDetail } from "@/lib/mock";
 import { mvpReason } from "@/components/match/roster";
 import { mapName, modeLabel } from "@/lib/modes";
 import type { MatchDetail } from "@/lib/types";

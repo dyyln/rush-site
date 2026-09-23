@@ -104,15 +104,6 @@
   color: var(--color-accent);
 }
 
-.mockBar {
-  background: var(--color-warn-subtle);
-  color: var(--color-warn);
-  font-size: var(--text-xs);
-  text-align: center;
-  padding: var(--space-1) var(--gutter);
-  border-top: 1px solid var(--color-border);
-}
-
 @media (min-width: 768px) {
   .menuButton {
     display: none;

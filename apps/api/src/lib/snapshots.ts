@@ -76,6 +76,8 @@ export class SnapshotStore {
   // Stores outgoing messages that describe a user's state
   record(audience: Audience, msg: Outgoing): Promise<unknown> | null {
     if (audience.kind !== "users" || !TRACKED.has(msg.type)) return null
+    // Periodic refreshes repeat known state. Storing them would cost a write per queued user per pass
+    if ((msg.payload as { refresh?: boolean } | null)?.refresh === true) return null
     const env: WsEnvelope = { type: msg.type, payload: msg.payload, ts: msg.ts }
     let patch: SnapshotPatch
     if (msg.type === "party_update") patch = { party: env }

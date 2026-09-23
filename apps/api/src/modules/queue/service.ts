@@ -44,7 +44,8 @@ const K = {
 
 const AGGREGATE_TTL_MS = 2000
 const MGET_CHUNK = 1000
-const IN_PROGRESS_STATUSES = ["starting", "ready", "live"] as const
+// Written by the mode_stats loop every few seconds. The refresh reads it so a busy Postgres pool cannot stall it
+export const MODE_STATS_KEY = "mode_stats:last"
 
 // Figures that are the same for every ticket in a mode
 export type ModeAggregate = { playersInQueue: number; estimatedSec: number | null; matchesInProgress: number }
@@ -425,17 +426,13 @@ export class QueueService {
     if (this.aggregateInFlight && !players) return this.aggregateInFlight
     const run = (async () => {
       const sizes = players ?? (await this.sizes())
-      const rows = await this.db
-        .select({ mode: matches.mode, n: sql<number>`count(*)::int` })
-        .from(matches)
-        .where(inArray(matches.status, [...IN_PROGRESS_STATUSES]))
-        .groupBy(matches.mode)
+      const inProgress = await this.matchesInProgress()
       const modes = {} as Record<Mode, ModeAggregate>
       for (const mode of MODES) {
         modes[mode] = {
           playersInQueue: sizes[mode],
           estimatedSec: this.eta ? await this.eta(mode) : null,
-          matchesInProgress: Number(rows.find((r) => r.mode === mode)?.n ?? 0),
+          matchesInProgress: inProgress.get(mode) ?? 0,
         }
       }
       const agg: QueueAggregate = { at: this.now(), modes }
@@ -447,6 +444,19 @@ export class QueueService {
     return run.finally(() => {
       if (this.aggregateInFlight === run) this.aggregateInFlight = null
     })
+  }
+
+  private async matchesInProgress(): Promise<Map<Mode, number>> {
+    const out = new Map<Mode, number>()
+    const raw = await this.redis.get(MODE_STATS_KEY)
+    if (!raw) return out
+    try {
+      const stats = JSON.parse(raw) as { modes?: { mode: Mode; matchesInProgress?: number }[] }
+      for (const m of stats.modes ?? []) out.set(m.mode, Number(m.matchesInProgress ?? 0))
+    } catch {
+      // A bad value counts as unknown
+    }
+    return out
   }
 
   // Everything but the ticket's own fields comes from the shared aggregate

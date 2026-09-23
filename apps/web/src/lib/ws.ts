@@ -128,3 +128,9 @@ export function getRealtime(): Realtime {
   singleton ??= isMock ? new MockRealtime() : new RealtimeClient(wsUrl);
   return singleton;
 }
+
+// The mock realtime client, or null outside mock mode
+export function mockRealtime(): MockRealtime | null {
+  const rt = getRealtime();
+  return rt instanceof MockRealtime ? rt : null;
+}

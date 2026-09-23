@@ -285,3 +285,149 @@ a.name:hover {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+.search {
+  position: relative;
+  margin-bottom: var(--space-3);
+}
+
+.search input {
+  width: 100%;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 22px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.search input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  color: var(--color-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.seeAll {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+}
+
+.seeAll a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  color: var(--color-accent);
+}
+
+/* /friends sections. On desktop each one scrolls inside a max height with its header pinned */
+.page {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 880px;
+}
+
+.section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+
+.sectionScroll {
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  margin: 0 calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--color-surface-1);
+}
+
+.sectionHead h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.sectionHead .count {
+  margin-left: 0;
+}
+
+.sectionHeadActions {
+  margin-left: auto;
+}
+
+.disclosure {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--target-min);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disclosure:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+.chevron {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  transition: transform 120ms ease;
+}
+
+.disclosure[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.pageSearch {
+  position: sticky;
+  top: 61px;
+  z-index: 2;
+  padding: var(--space-2) 0;
+  background: var(--color-bg);
+}
+
+.pageSearch .search {
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .sectionScroll {
+    max-height: min(60vh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: inherit;
+  }
+  .sectionHead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .pageSearch {
+    position: static;
+    padding: 0;
+  }
+}

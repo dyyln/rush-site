@@ -9,6 +9,10 @@ import type {
   MatchStatus as SharedMatchStatus,
   MatchUpdatePayload,
   BracketView,
+  EntryPlayer as SharedEntryPlayer,
+  TournamentBracketResponse,
+  TournamentDetail as SharedTournamentDetail,
+  TournamentEntry,
   Kill,
   MatchDemo as SharedMatchDemo,
   MatchExtras as SharedMatchExtras,
@@ -109,34 +113,13 @@ export type TournamentStatus = SharedTournamentStatus;
 export type TournamentSummary = SharedTournamentSummary;
 export type CupCadence = TournamentSummary["cadence"];
 
-// rating and tier are being added to shared EntryPlayerSchema
-export type EntryPlayer = { steamId: string; displayName: string; avatarUrl: string | null; rating?: number; tier?: TierId };
-
-export type EntryView = {
-  id: string;
-  captainSteamId: string;
-  steamIds: string[];
-  seed: number | null;
-  rating: number | null;
-  registeredAt: string;
-  // Display fields the web needs. Falls back to steamIds when absent
-  name?: string;
-  players?: EntryPlayer[];
-};
-
+export type EntryPlayer = SharedEntryPlayer;
+export type EntryView = TournamentEntry;
 export type BracketMatch = BracketMatchView;
 export type Bracket = BracketView;
 export type BracketMatchStatus = BracketMatch["status"];
-
-export type TournamentDetail = TournamentSummary & {
-  entries: EntryView[];
-  bracket: Bracket | null;
-  // Matches the ETag of GET /tournaments/:id/bracket
-  bracketVersion: number;
-  myEntryId: string | null;
-};
-
-export type TournamentBracket = { tournamentId: string; version: number; bracket: Bracket | null };
+export type TournamentDetail = SharedTournamentDetail;
+export type TournamentBracket = TournamentBracketResponse;
 
 // Match page types come from @rushsite/shared
 export type MatchStatus = SharedMatchStatus;

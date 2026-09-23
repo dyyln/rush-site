@@ -146,7 +146,8 @@ async function sendSnapshot(
   const snap = await ctx.snapshots.read(steamId).catch(() => null)
   if (snap) {
     realtimeMetrics.snapshotHits++
-    for (const m of [snap.party, snap.queue, snap.match]) if (m) send(m.type, m.payload, m.ts)
+    // Fresh timestamps so clients do not treat the replay as late
+    for (const m of [snap.party, snap.queue, snap.match]) if (m) send(m.type, m.payload)
     return
   }
   realtimeMetrics.snapshotMisses++

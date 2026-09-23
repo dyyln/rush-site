@@ -43,33 +43,6 @@
   font-size: var(--text-sm);
 }
 
-.friends {
-  display: grid;
-  gap: var(--space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.friend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--target-min);
-}
-
-.friendName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.friendName a {
-  color: inherit;
-}
-
 .inline {
   display: inline-flex;
   flex-wrap: wrap;
@@ -135,16 +108,4 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-}
-.subtitle {
-  font-size: var(--text-sm);
-  margin-bottom: var(--space-3);
-}
-.friendActions {
-  flex: none;
-  display: flex;
-  gap: var(--space-1);
-}
-.friendActions button {
-  padding: 0 var(--space-2);
 }

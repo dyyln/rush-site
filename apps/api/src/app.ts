@@ -17,7 +17,7 @@ import { registerPartyRoutes } from "./modules/parties/routes.js"
 import { matchmakeAll } from "./modules/queue/loop.js"
 import { LoopMetrics } from "./modules/queue/metrics.js"
 import { registerQueueRoutes } from "./modules/queue/routes.js"
-import type { LiveTicket } from "./modules/queue/service.js"
+import { MODE_STATS_KEY, type LiveTicket } from "./modules/queue/service.js"
 import { registerStatsFeatures } from "./modules/stats/features.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { LocalHub, type Audience } from "./modules/ws/hub.js"
@@ -248,10 +248,10 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics)
     loop("mode_stats", 5000, async () => {
       const stats = await modeStats(ctx)
       const key = JSON.stringify(stats)
-      const prev = await ctx.redis.get("mode_stats:last")
+      const prev = await ctx.redis.get(MODE_STATS_KEY)
       if (key === prev && key === lastStats) return
       lastStats = key
-      await ctx.redis.set("mode_stats:last", key, "EX", 60)
+      await ctx.redis.set(MODE_STATS_KEY, key, "EX", 60)
       ctx.notifier.send({ kind: "broadcast" }, { type: "mode_stats", payload: stats, ts: Date.now() })
     })
   })

@@ -1,8 +1,7 @@
 // In-memory challenge flows for mock mode. Opponents answer on their own after a short wait
 import { CHALLENGE_TTL_SEC, MODES, type Challenge, type ChallengePlayer, type CreateChallengeBody, type CreateChallengeResponse } from "@rushsite/shared";
 import { MOCK_ME, mockUser, mockUserBySteamId, mockUuid } from "@/lib/mock";
-import { getRealtime } from "@/lib/ws";
-import { MockRealtime } from "@/lib/ws-mock";
+import { mockRealtime as rt } from "@/lib/ws";
 
 const store = new Map<string, Challenge>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -22,11 +21,6 @@ function hash(s: string): number {
 function code(): string {
   const abc = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
   return Array.from({ length: 8 }, () => abc[Math.floor(Math.random() * abc.length)]).join("");
-}
-
-function rt(): MockRealtime | null {
-  const r = getRealtime();
-  return r instanceof MockRealtime ? r : null;
 }
 
 function publish(c: Challenge) {

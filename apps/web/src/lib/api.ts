@@ -1,10 +1,9 @@
 import type { Mode, ModeStatsPayload, PartyUpdatePayload, QueueStatusPayload } from "@rushsite/shared";
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
-import { mockSignedIn, setMockSignedIn } from "./mock-session";
-import { getRealtime } from "./ws";
-import { mockMatchDetail } from "./mock-match";
-import { MockRealtime, mockModeStats } from "./ws-mock";
+import { mockCall, mockDelay, mockMatchDetail, mockSignedIn, setMockSignedIn } from "./mock";
+import { mockRealtime } from "./ws";
+import { mockModeStats } from "./ws-mock";
 import { challengeApi } from "@/components/challenges/api";
 import { friendsApi } from "@/components/friends/api";
 import type {
@@ -67,12 +66,11 @@ async function request<T>(method: string, path: string, opts: { query?: Query; b
   return data as T;
 }
 
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
-
-async function mocked<T>(value: T | null, what = "Not found"): Promise<T> {
-  await delay();
-  if (value === null) throw new ApiError(404, "not_found", what);
-  return structuredClone(value);
+function mocked<T>(value: T | null, what = "Not found"): Promise<T> {
+  return mockCall(() => {
+    if (value === null) throw new ApiError(404, "not_found", what);
+    return value;
+  });
 }
 
 // Only same site paths are allowed as a return target
@@ -162,8 +160,7 @@ export const api = {
 
   async queueStatus(): Promise<QueueStatusPayload> {
     if (isMock) {
-      const rt = getRealtime();
-      return mocked(rt instanceof MockRealtime ? rt.snapshot() : null);
+      return mocked(mockRealtime()?.snapshot() ?? null);
     }
     return request("GET", "/queue/status");
   },
@@ -180,7 +177,7 @@ export const api = {
 
   // 409 means this viewer already reported that player in this match
   async reportPlayer(matchId: string, body: { steamId: string; reason: ReportReason; note?: string }): Promise<void> {
-    if (isMock) return void (await delay(400));
+    if (isMock) return mockDelay(400);
     await request("POST", `/matches/${matchId}/report`, { body });
   },
 
@@ -227,11 +224,11 @@ export const api = {
       return (await res.json()) as TournamentBracket;
     },
     async enter(id: string): Promise<void> {
-      if (isMock) return void (await delay());
+      if (isMock) return mockDelay();
       await request("POST", `/tournaments/${id}/enter`);
     },
     async withdraw(id: string): Promise<void> {
-      if (isMock) return void (await delay());
+      if (isMock) return mockDelay();
       await request("DELETE", `/tournaments/${id}/enter`);
     },
   },

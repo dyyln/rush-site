@@ -50,7 +50,3 @@ export function challengeError(e: unknown): string {
   if (e instanceof ApiError) return MESSAGES[e.code] ?? e.message;
   return e instanceof Error ? e.message : "Something went wrong";
 }
-
-export function isParticipant(c: Challenge, steamId: string | undefined): boolean {
-  return !!steamId && (c.createdBy.steamId === steamId || c.target?.steamId === steamId);
-}

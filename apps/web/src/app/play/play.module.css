@@ -133,9 +133,6 @@
     transform: none;
   }
 }
-.actions {
-  display: flex;
-}
 .found {
   display: flex;
   align-items: center;

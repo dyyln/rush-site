@@ -1,6 +1,6 @@
 // Stateful fake admin backend for NEXT_PUBLIC_MOCK=1. Actions change the state and a ticker keeps it moving.
 import { AIM_MAPS, MODES, MODE_CONFIGS, RUSH_MAP, type Mode, type TrustLevel } from "@rushsite/shared";
-import { MOCK_ME, mockSteamId, mockUser } from "@/lib/mock";
+import { MOCK_ME, mockSteamId, mockUser, rng } from "@/lib/mock";
 import type {
   AdminEventKind,
   AuditAction,
@@ -16,14 +16,6 @@ import type {
   UserCard,
   UserDetailView,
 } from "./types";
-
-function rng(seed: number) {
-  let s = seed >>> 0 || 1;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
-}
 
 const USER_COUNT = 48;
 const ACTIVE = ["accepting", "veto", "allocating", "starting", "ready", "live"];

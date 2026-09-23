@@ -14,8 +14,7 @@ import {
   type VetoState,
 } from "@rushsite/shared";
 import { hasLadderVeto } from "./modes";
-import { mockMatchDetail } from "./mock-match";
-import { MOCK_ME, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockSteamId, mockTournamentDetail } from "./mock";
+import { MOCK_ME, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockMatchDetail, mockSteamId, mockTournamentDetail } from "./mock";
 import { Emitter, type ClientPayload, type ConnectionState, type Realtime } from "./ws-core";
 
 type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]> = Extract<U, { type: T }>["payload"];

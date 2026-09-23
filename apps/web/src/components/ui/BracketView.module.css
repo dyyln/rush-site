@@ -97,12 +97,6 @@
 .me {
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
-.liveTag {
-  position: absolute;
-  top: 50%;
-  right: var(--space-6);
-  transform: translateY(-50%);
-}
 .resolution {
   display: block;
   padding: 2px 0;
@@ -110,14 +104,6 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-.linked {
-  display: block;
-  color: var(--color-text);
-  text-decoration: none;
-}
-.linked:hover {
-  border-color: var(--color-accent);
 }
 .lead {
   display: inline-flex;

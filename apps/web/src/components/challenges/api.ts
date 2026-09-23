@@ -1,16 +1,10 @@
 // REST client for challenges. Mock mode runs the flows in memory
 import type { Challenge, CreateChallengeBody, CreateChallengeResponse } from "@rushsite/shared";
 import { isMock } from "@/lib/env";
+import { mockCall as mocked } from "@/lib/mock";
 import { mockAccept, mockCreate, mockDecline, mockGet, mockMine } from "./mock";
 
 type Request = <T>(method: string, path: string, body?: unknown) => Promise<T>;
-
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
-
-async function mocked<T>(fn: () => T): Promise<T> {
-  await delay();
-  return fn();
-}
 
 export function challengeApi(request: Request) {
   const at = (code: string) => `/challenges/${encodeURIComponent(code)}`;

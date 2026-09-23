@@ -10,7 +10,21 @@ export const PRESENCE_LABEL: Record<Presence, string> = {
   offline: "Offline",
 };
 
-export const PRESENCE_ORDER: Record<Presence, number> = { match: 0, queue: 1, online: 2, offline: 3 };
+export const PRESENCE_ORDER: Record<Presence, number> = { online: 0, queue: 1, match: 2, offline: 3 };
+
+// Friends on the site now (online, queue or match) first, then offline friends. Names sort within each group
+export function sortByPresence<T extends { presence: Presence; displayName: string }>(list: readonly T[]): T[] {
+  const group = (p: Presence) => (p === "offline" ? 1 : 0);
+  return [...list].sort(
+    (a, b) => group(a.presence) - group(b.presence) || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
+  );
+}
+
+// Case-insensitive name match. A pasted SteamID64 matches too
+export function matchesQuery(p: { displayName: string; steamId: string }, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || p.displayName.toLowerCase().includes(q) || p.steamId.includes(q);
+}
 
 // Rush always plays on Complex, so it reads well before the map is set
 function mapLabel(d: PresenceDetail): string | null {

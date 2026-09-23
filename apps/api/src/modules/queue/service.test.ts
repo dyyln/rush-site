@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createAppHarness, createHarness, makeUsers, type Harness } from "../../../test/helpers.js"
 import { queueTickets } from "../../db/schema.js"
 import { createEtaSource } from "../stats/eta.js"
+import { MODE_STATS_KEY } from "./service.js"
 
 let h: Harness
 afterEach(async () => {
@@ -129,8 +130,25 @@ describe("queue status refresh", () => {
 
     expect(h.notifier.ofType("queue_status")).toHaveLength(60)
     expect(large).toBe(small)
-    // One in progress count plus one ETA read per mode
-    expect(large).toBeLessThanOrEqual(4)
+    // Only the ETA reads, one per mode on a cold cache
+    expect(large).toBeLessThanOrEqual(3)
+    // A warm ETA cache leaves no Postgres work at all
+    await h.redis.del("q:agg")
+    expect(await countQueries(h.db, () => h.ctx.queue.refreshQueued())).toBe(0)
+  })
+
+  it("takes matches in progress from the mode_stats value in Redis", async () => {
+    h = await createHarness()
+    const [a] = await makeUsers(h.db, 1)
+    await h.ctx.queue.join(a!, ["rush3v3"])
+    await h.redis.set(
+      MODE_STATS_KEY,
+      JSON.stringify({ modes: [{ mode: "rush3v3", playersInQueue: 1, matchesInProgress: 7 }] }),
+    )
+    h.notifier.clear()
+    await h.ctx.queue.refreshQueued()
+    const payload = h.notifier.ofType("queue_status")[0]!.msg.payload as { modes: { matchesInProgress: number }[] }
+    expect(payload.modes[0]!.matchesInProgress).toBe(7)
   })
 })
 

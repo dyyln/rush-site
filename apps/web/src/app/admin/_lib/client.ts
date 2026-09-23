@@ -1,6 +1,7 @@
 import type { TrustLevel } from "@rushsite/shared";
 import { api, ApiError } from "@/lib/api";
 import { isMock } from "@/lib/env";
+import { mockCall } from "@/lib/mock";
 import { MockNotFound, mockAdmin } from "./mock";
 import type {
   ActionResult,
@@ -13,12 +14,9 @@ import type {
   UserDetailView,
 } from "./types";
 
-const delay = (ms = 200) => new Promise((r) => setTimeout(r, ms));
-
 async function mocked<T>(fn: () => T): Promise<T> {
-  await delay();
   try {
-    return structuredClone(fn());
+    return await mockCall(fn, 200);
   } catch (e) {
     if (e instanceof MockNotFound) throw new ApiError(404, "not_found", e.message);
     throw e;

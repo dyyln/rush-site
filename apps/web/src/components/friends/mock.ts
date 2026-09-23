@@ -56,6 +56,18 @@ function request(from: ReturnType<typeof card>, to: ReturnType<typeof card>, min
   };
 }
 
+const STEAM_NAMES = ["kettle_fish", "nomad.cs", "wraith", "pilot", "moss", "glint", "tarn", "fjord", "cinder", "ledger", "quill", "hollow", "brisk", "ember", "slate"];
+
+// A long Steam list like a real account has, so paging and search get exercised
+function steamOnlyFriends(n: number): SteamOnlyFriend[] {
+  return Array.from({ length: n }, (_, i) => ({
+    steamId: mockSteamId(400 + i),
+    displayName: `${STEAM_NAMES[i % STEAM_NAMES.length]}${i < STEAM_NAMES.length ? "" : `_${i}`}`,
+    avatarUrl: null,
+    personaState: i % 4 === 0 ? 1 : 0,
+  }));
+}
+
 function init(): Store {
   if (store) return store;
   const me = card(0);
@@ -81,10 +93,7 @@ function init(): Store {
       { ...card(12), matchId: mockUuid("recent-2"), mode: "rush3v3", playedAt: recentAt(5), requested: false },
       { ...card(19), matchId: mockUuid("recent-2"), mode: "rush3v3", playedAt: recentAt(5), requested: false },
     ],
-    steamOnly: [
-      { steamId: mockSteamId(401), displayName: "kettle_fish", avatarUrl: null, personaState: 1 },
-      { steamId: mockSteamId(402), displayName: "nomad.cs", avatarUrl: null, personaState: 0 },
-    ],
+    steamOnly: steamOnlyFriends(150),
     invites: [],
     // The live friend's score ticks so the card visibly updates
   };

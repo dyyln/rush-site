@@ -117,6 +117,23 @@ describe("reconnect snapshot", () => {
     expect(snap!.match).toBeNull()
   })
 
+  it("skips refreshes and stamps the replay with a fresh ts", async () => {
+    const [a] = (await makeUsers(h.db, 1)) as [string]
+    await connect(a)
+    const stored = (await h.ctx.snapshots.read(a))!.queue
+    h.ctx.notifier.send(
+      { kind: "users", steamIds: [a] },
+      { type: "queue_status", payload: { ...(stored.payload as object), refresh: true }, ts: stored.ts + 1 },
+    )
+    await settle()
+    expect((await h.ctx.snapshots.read(a))!.queue).toEqual(stored)
+
+    const before = Date.now()
+    const s = await connect(a)
+    expect(s.received.every((m) => m.ts >= before)).toBe(true)
+    expect(stored.ts).toBeLessThan(before)
+  })
+
   it("serves an expired cooldown as idle", async () => {
     const [a] = (await makeUsers(h.db, 1)) as [string]
     await connect(a)
