@@ -3,6 +3,20 @@
 DatHost surge driver. Implements the `ServerDriver` contract from `docs/CONTRACTS.md` by cloning a prepared
 CS2 template server per match, configuring it, starting it and deleting it afterwards.
 
+## Template status (23 Sep 2026)
+
+The template `rushsite-template` exists on the DatHost account, id `6ab450a9e85891190562866f`, in `dusseldorf`, with
+Metamod, GOTV, 7 slots, bots off, autostop 30 min and deletion protection on. It ships CounterStrikeSharp 1.0.374
+with-runtime, our plugin (net8 build) under `addons/counterstrikesharp/plugins/RushsiteMatch/`, `cfg/rushsite_base.cfg`
+from this package's `cfg/` dir, the three mode cfgs and a `core.json` with hot reload off.
+
+Checked on the DatHost box (CS2 1.41.8.2, build 2000914): Metamod lists CounterStrikeSharp, `css_plugins list` shows
+RushsiteMatch loaded, and the net8 plugin binds in the .NET 10 host. One gamedata signature fails at load,
+`CEntityIOOutput_FireOutputInternal`, which the plugin does not use. The Rush check below passed: after
+`game_type 0`, `game_mode 6`, `changelevel rush_001` the server execs Valve's `gamemode_rush.cfg` and reports
+`mp_team_intro_type = rush`, `mp_maxrounds = 15`, `mp_halftime = false`, and a player could join and spawn.
+`rush_001` is in DatHost's depot. `ent_find` needs `sv_cheats 1`, so the room-name check is still open.
+
 ## First: prove Rush on the template
 
 Before relying on this driver for Rush, prove it by hand on the template server. DatHost has no numeric game mode
@@ -110,7 +124,7 @@ so the api must call `fetchDemo` before `stop`.
    through the file manager or FTP (unzip endpoint exists: `POST /game-servers/{id}/unzip`). Pin the build that works on
    the current CS2 version, see the CounterStrikeSharp note in CLAUDE.md.
 4. Upload our plugin build from `plugin/` to `addons/counterstrikesharp/plugins/RushsiteMatch/`.
-5. Upload `cfg/rushsite_base.cfg` with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
+5. Upload `cfg/rushsite_base.cfg` (kept in this package under `cfg/`) with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
    `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload every mode cfg
    from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`) to `cfg/`.
    `gamemode_rush.cfg` is Valve's and the game runs it by itself.

@@ -265,3 +265,12 @@ Options, all **UNKNOWN / unproven**:
    - `EventRoundEnd` and `EventCsWinPanelMatch` callbacks fire
    - `ChangeTeam` and `Teleport` work
    - entity listeners still fail, per the maintainer's note
+
+## Result: Rush on a DatHost community server (23 Sep 2026)
+
+First confirmation that Valve's Rush runs on a community server. On the DatHost template (CS2 1.41.8.2, Metamod plus
+CounterStrikeSharp 1.0.374), `game_type 0`, `game_mode 6`, `changelevel rush_001` loaded the map, the game execd
+`gamemode_rush.cfg` by itself (`gamemode_rush_server.cfg` is missing and harmless), and the server reported
+`mp_team_intro_type = rush`, `mp_maxrounds = 15`, `mp_halftime = false`. A player joined, was put on T and spawned,
+and `Match_Start` fired. The map ships in the dedicated server depot. Not yet checked: round flow, tower capture,
+`round_end` reasons, the win panel, GOTV demo completeness, and the room names (`ent_find` needs `sv_cheats 1`).
