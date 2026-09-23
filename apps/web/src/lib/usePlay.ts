@@ -30,7 +30,7 @@ export type MatchPhase =
   | { phase: "veto"; veto: VetoStatePayload }
   | { phase: "ready"; server: ServerReadyPayload; veto: VetoStatePayload | null }
   // Server is being allocated. Seen on load, for example right after a challenge is accepted
-  | { phase: "starting"; matchId: string; mode: Mode; status?: "allocating" | "starting" }
+  | { phase: "starting"; matchId: string; mode: Mode; status?: "allocating" | "starting"; veto?: VetoStatePayload }
   // mapId and veto come from the phase before the result, when known
   | { phase: "result"; result: MatchResultPayload; mapId?: string; veto?: VetoStatePayload | null };
 
@@ -66,14 +66,18 @@ export function usePlay(notices: Notices = {}) {
       rt.on("match_found", (found) =>
         setMatch((m) => ({ phase: "found", found, responded: m.phase === "found" && m.found.matchId === found.matchId && m.responded })),
       ),
-      rt.on("veto_state", (veto) => setMatch({ phase: "veto", veto })),
+      // The last veto state carries done, and no other message covers allocation, so move on here
+      rt.on("veto_state", (veto) =>
+        setMatch(veto.state.done ? { phase: "starting", matchId: veto.matchId, mode: veto.mode, status: "allocating", veto } : { phase: "veto", veto }),
+      ),
       rt.on("server_ready", (server) =>
-        setMatch((m) => ({ phase: "ready", server, veto: m.phase === "veto" ? m.veto : null })),
+        setMatch((m) => ({ phase: "ready", server, veto: m.phase === "veto" ? m.veto : m.phase === "starting" ? (m.veto ?? null) : null })),
       ),
       rt.on("match_result", (result) =>
         setMatch((m) => {
           const ready = m.phase === "ready" && m.server.matchId === result.matchId ? m : null;
-          const veto = ready?.veto ?? (m.phase === "veto" && m.veto.matchId === result.matchId ? m.veto : null);
+          const veto =
+            ready?.veto ?? ((m.phase === "veto" || m.phase === "starting") && m.veto?.matchId === result.matchId ? m.veto : null);
           return { phase: "result", result, mapId: ready?.server.mapId ?? (veto?.state.done ? veto.state.maps[0] : undefined), veto };
         }),
       ),
