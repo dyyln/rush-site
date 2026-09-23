@@ -87,7 +87,6 @@ public sealed class MatchController
     }
 
     public MatchPhase Phase { get; private set; } = MatchPhase.Warmup;
-    public MatchConfig Config => _cfg;
     public bool ManagesMatch => _cfg.ParsedWinCondition.PluginManagesMatch;
     public bool IsRush => !ManagesMatch;
     public int Round => _round;

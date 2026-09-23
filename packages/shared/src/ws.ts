@@ -367,11 +367,3 @@ export function serverMessage<T extends ServerMessageType>(
 ): Extract<ServerMessage, { type: T }> {
   return { type, payload, ts } as Extract<ServerMessage, { type: T }>
 }
-
-export function clientMessage<T extends ClientMessageType>(
-  type: T,
-  payload: PayloadOf<ClientMessage, T>,
-  ts: number = Date.now(),
-): Extract<ClientMessage, { type: T }> {
-  return { type, payload, ts } as Extract<ClientMessage, { type: T }>
-}

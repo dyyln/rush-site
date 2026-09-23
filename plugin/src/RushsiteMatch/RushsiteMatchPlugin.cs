@@ -21,7 +21,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public override string ModuleAuthor => "rushsite";
     public override string ModuleDescription => "Match control and reporting for rushsite servers";
 
-    public FakeConVar<string> MatchConfigPath = new("rushsite_match_config", "Path to match.json. Relative paths resolve against game/csgo.", "");
+    public FakeConVar<string> MatchConfigPath = new(MatchConfigLoader.ConVarName, "Path to match.json. Relative paths resolve against game/csgo.", "");
     public FakeConVar<int> ConnectGrace = new("rushsite_connect_grace", "Seconds a player may take to first connect before the match is abandoned.", 300);
     public FakeConVar<int> DisconnectGrace = new("rushsite_disconnect_grace", "Seconds a player may stay disconnected before the match is abandoned.", 180);
     public FakeConVar<int> ReadyTimeout = new("rushsite_ready_timeout", "Aim modes. Seconds after everyone connects before the match starts without all ready.", 180);

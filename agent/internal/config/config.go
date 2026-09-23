@@ -83,26 +83,26 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	}
 	c.PortLo, c.PortHi = lo, hi
 
-	if c.TVPortOffset, err = intVar(get, "RUSHSITE_TV_PORT_OFFSET", 100); err != nil {
+	if c.TVPortOffset, err = envVar(get, "RUSHSITE_TV_PORT_OFFSET", 100, strconv.Atoi); err != nil {
 		errs = append(errs, err)
 	} else if c.TVPortOffset <= c.PortHi-c.PortLo && c.TVPortOffset >= -(c.PortHi-c.PortLo) {
 		errs = append(errs, errors.New("RUSHSITE_TV_PORT_OFFSET makes GOTV ports overlap the game port range"))
 	} else if c.PortHi+c.TVPortOffset > 65535 || c.PortLo+c.TVPortOffset < 1 {
 		errs = append(errs, errors.New("RUSHSITE_TV_PORT_OFFSET puts GOTV ports out of range"))
 	}
-	if c.StopGrace, err = durVar(get, "RUSHSITE_STOP_GRACE", 10*time.Second); err != nil {
+	if c.StopGrace, err = envVar(get, "RUSHSITE_STOP_GRACE", 10*time.Second, positiveDuration); err != nil {
 		errs = append(errs, err)
 	}
-	if c.UpdateInterval, err = durVar(get, "RUSHSITE_UPDATE_INTERVAL", 5*time.Minute); err != nil {
+	if c.UpdateInterval, err = envVar(get, "RUSHSITE_UPDATE_INTERVAL", 5*time.Minute, positiveDuration); err != nil {
 		errs = append(errs, err)
 	}
-	if c.DrainPoll, err = durVar(get, "RUSHSITE_DRAIN_POLL", 10*time.Second); err != nil {
+	if c.DrainPoll, err = envVar(get, "RUSHSITE_DRAIN_POLL", 10*time.Second, positiveDuration); err != nil {
 		errs = append(errs, err)
 	}
-	if c.UpdateValidate, err = boolVar(get, "RUSHSITE_UPDATE_VALIDATE", false); err != nil {
+	if c.UpdateValidate, err = envVar(get, "RUSHSITE_UPDATE_VALIDATE", false, strconv.ParseBool); err != nil {
 		errs = append(errs, err)
 	}
-	if c.PatchGameinfo, err = boolVar(get, "RUSHSITE_PATCH_GAMEINFO", true); err != nil {
+	if c.PatchGameinfo, err = envVar(get, "RUSHSITE_PATCH_GAMEINFO", true, strconv.ParseBool); err != nil {
 		errs = append(errs, err)
 	}
 	switch c.UpdateCheck {
@@ -130,38 +130,24 @@ func ParsePortRange(s string) (int, int, error) {
 	return lo, hi, nil
 }
 
-func intVar(get func(string, string) string, k string, def int) (int, error) {
+// envVar returns def when k is unset and wraps parse errors with the variable name.
+func envVar[T any](get func(string, string) string, k string, def T, parse func(string) (T, error)) (T, error) {
 	v := get(k, "")
 	if v == "" {
 		return def, nil
 	}
-	n, err := strconv.Atoi(v)
+	x, err := parse(v)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", k, err)
+		var zero T
+		return zero, fmt.Errorf("%s: %w", k, err)
 	}
-	return n, nil
+	return x, nil
 }
 
-func durVar(get func(string, string) string, k string, def time.Duration) (time.Duration, error) {
-	v := get(k, "")
-	if v == "" {
-		return def, nil
-	}
+func positiveDuration(v string) (time.Duration, error) {
 	d, err := time.ParseDuration(v)
 	if err != nil || d <= 0 {
-		return 0, fmt.Errorf("%s: want a positive duration like 30s, got %q", k, v)
+		return 0, fmt.Errorf("want a positive duration like 30s, got %q", v)
 	}
 	return d, nil
-}
-
-func boolVar(get func(string, string) string, k string, def bool) (bool, error) {
-	v := get(k, "")
-	if v == "" {
-		return def, nil
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return false, fmt.Errorf("%s: %w", k, err)
-	}
-	return b, nil
 }

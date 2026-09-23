@@ -81,7 +81,6 @@ func InstalledVersion(cs2Dir string) string {
 type SteamAPIChecker struct {
 	CS2Dir  string
 	BaseURL string
-	Client  *http.Client
 }
 
 // Outdated implements Checker.
@@ -101,10 +100,7 @@ func (c SteamAPIChecker) Outdated(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	client := c.Client
-	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
-	}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, err

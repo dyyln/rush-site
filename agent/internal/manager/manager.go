@@ -97,7 +97,6 @@ type Manager struct {
 	runner procrun.Runner
 	slots  *slots.Allocator
 	log    *slog.Logger
-	now    func() time.Time
 
 	// OnExit is called after a server exits and its slot is freed.
 	OnExit func()
@@ -126,7 +125,6 @@ func New(cfg Config, modes match.ModeTable, runner procrun.Runner, alloc *slots.
 		runner:    runner,
 		slots:     alloc,
 		log:       log,
-		now:       time.Now,
 		Alive:     ProcAlive,
 		Adopt:     func(pid int) procrun.Process { return procrun.Adopt(pid, 2*time.Second) },
 		servers:   make(map[string]*server),
@@ -244,13 +242,6 @@ func (m *Manager) SetAccepting(ok bool) {
 	m.mu.Unlock()
 }
 
-// Accepting reports whether new servers are allowed.
-func (m *Manager) Accepting() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.accepting
-}
-
 // Running is the number of servers that are starting, running or stopping.
 func (m *Manager) Running() int {
 	m.mu.Lock()
@@ -293,7 +284,7 @@ func (m *Manager) Start(req match.StartRequest) (match.StartResponse, error) {
 			TVPort:    port + m.cfg.TVPortOffset,
 			Connect:   match.Connect(m.cfg.PublicIP, port, req.Password),
 			Status:    StatusStarting,
-			StartedAt: m.now().UTC(),
+			StartedAt: time.Now().UTC(),
 			LogPath:   filepath.Join(m.logDir(), req.MatchID+".log"),
 		},
 		webhook: hook{URL: req.WebhookURL, Secret: req.WebhookSecret},
@@ -365,7 +356,7 @@ func (m *Manager) launch(s *server, req match.StartRequest, spec match.ModeSpec)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(lf, "rushsite-agent: %s starting %s %s\n", m.now().UTC().Format(time.RFC3339), m.cfg.CS2Bin, strings.Join(redactArgs(args), " "))
+	fmt.Fprintf(lf, "rushsite-agent: %s starting %s %s\n", time.Now().UTC().Format(time.RFC3339), m.cfg.CS2Bin, strings.Join(redactArgs(args), " "))
 	proc, err := m.runner.Start(procrun.Spec{
 		Path:   m.cfg.CS2Bin,
 		Args:   args,
@@ -401,7 +392,7 @@ func (m *Manager) processEnv(s *server) []string {
 
 func (m *Manager) watch(s *server) {
 	code := s.proc.Wait()
-	ended := m.now().UTC()
+	ended := time.Now().UTC()
 
 	m.mu.Lock()
 	if m.servers[s.info.MatchID] == s {
@@ -479,27 +470,6 @@ func (m *Manager) Stop(matchID string) error {
 	case <-time.After(m.cfg.StopGrace + 10*time.Second):
 		return fmt.Errorf("server %s did not stop in time", matchID)
 	}
-}
-
-// StopAll stops every server.
-func (m *Manager) StopAll() {
-	m.mu.Lock()
-	ids := make([]string, 0, len(m.servers))
-	for id := range m.servers {
-		ids = append(ids, id)
-	}
-	m.mu.Unlock()
-	var wg sync.WaitGroup
-	for _, id := range ids {
-		wg.Add(1)
-		go func(id string) {
-			defer wg.Done()
-			if err := m.Stop(id); err != nil {
-				m.log.Error("stop on shutdown", "match", id, "err", err)
-			}
-		}(id)
-	}
-	wg.Wait()
 }
 
 // List returns live servers sorted by port, then recent exits when includeExited is set.

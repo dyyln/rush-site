@@ -48,18 +48,6 @@ func newManager(t *testing.T, runner procrun.Runner, lo, hi int) *Manager {
 	return New(cfg, match.DefaultModes(), runner, slots.New(lo, hi, nil), nil)
 }
 
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %s", what)
-}
-
 func TestStartWritesFilesAndLaunches(t *testing.T) {
 	r := &procrun.FakeRunner{}
 	m := newManager(t, r, 27015, 27016)

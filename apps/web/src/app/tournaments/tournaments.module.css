@@ -93,3 +93,9 @@
   align-items: flex-start;
   gap: var(--space-3);
 }
+.format {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}

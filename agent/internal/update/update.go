@@ -68,7 +68,6 @@ type Updater struct {
 	gate    Gate
 	runner  procrun.Runner
 	log     *slog.Logger
-	now     func() time.Time
 	kick    chan struct{}
 
 	mu     sync.Mutex
@@ -86,7 +85,6 @@ func New(cfg Config, checker Checker, gate Gate, runner procrun.Runner, log *slo
 		gate:    gate,
 		runner:  runner,
 		log:     log,
-		now:     time.Now,
 		kick:    make(chan struct{}, 1),
 		status:  Status{State: Idle},
 	}
@@ -136,7 +134,7 @@ func (u *Updater) Step(ctx context.Context) {
 			return
 		}
 		outdated, err := u.checker.Outdated(ctx)
-		now := u.now().UTC()
+		now := time.Now().UTC()
 		u.set(func(s *Status) {
 			s.LastCheck = &now
 			if err != nil {
@@ -179,7 +177,7 @@ func (u *Updater) drain(ctx context.Context) {
 		u.set(func(s *Status) { s.State = Draining; s.LastError = "update: " + err.Error() })
 		return
 	}
-	now := u.now().UTC()
+	now := time.Now().UTC()
 	u.mu.Lock()
 	u.status = Status{State: Idle, LastCheck: u.status.LastCheck, LastUpdate: &now}
 	u.gate.SetAccepting(true)
@@ -209,7 +207,7 @@ func (u *Updater) runSteamCMD(ctx context.Context) error {
 	spec := procrun.Spec{Path: u.cfg.SteamCMD, Args: SteamCMDArgs(u.cfg.CS2Dir, u.cfg.Validate)}
 	if out != nil {
 		defer out.Close()
-		fmt.Fprintf(out, "rushsite-agent: %s running steamcmd\n", u.now().UTC().Format(time.RFC3339))
+		fmt.Fprintf(out, "rushsite-agent: %s running steamcmd\n", time.Now().UTC().Format(time.RFC3339))
 		spec.Stdout = out
 	}
 	code, err := procrun.Run(u.runner, spec)

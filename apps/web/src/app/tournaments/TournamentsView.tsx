@@ -96,7 +96,9 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
           {t.name}
         </Link>
       </h2>
-      <p className={styles.mode}>{MODE_COPY[t.mode].label}</p>
+      <p className={styles.mode}>
+        {MODE_COPY[t.mode].name} <span className={styles.format}>{MODE_COPY[t.mode].format}</span>
+      </p>
       <dl className={styles.facts}>
         <div>
           <dt>Starts</dt>

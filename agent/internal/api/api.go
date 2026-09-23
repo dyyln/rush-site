@@ -14,25 +14,11 @@ import (
 	"github.com/rushsite/agent/internal/update"
 )
 
-// Servers is the part of the manager the API uses.
-type Servers interface {
-	Start(req match.StartRequest) (match.StartResponse, error)
-	Stop(matchID string) error
-	List(includeExited bool) []manager.Info
-	Slots() (total, free int)
-}
-
-// Updates is the part of the updater the API uses.
-type Updates interface {
-	Status() update.Status
-	Trigger()
-}
-
 // Server holds the handler dependencies.
 type Server struct {
 	Token   string
-	Servers Servers
-	Updates Updates
+	Servers *manager.Manager
+	Updates *update.Updater
 	Version func() string
 	Log     *slog.Logger
 }

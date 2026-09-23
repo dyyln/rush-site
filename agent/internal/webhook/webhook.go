@@ -37,7 +37,6 @@ func ServerCrashed() Abandoned {
 
 // Sender posts events with retries.
 type Sender struct {
-	Client   *http.Client
 	Attempts int
 	Backoff  time.Duration // doubled after each failed attempt
 }
@@ -48,10 +47,7 @@ func (s Sender) Send(ctx context.Context, url, secret string, event any) error {
 	if err != nil {
 		return err
 	}
-	client := s.Client
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
+	client := &http.Client{Timeout: 10 * time.Second}
 	attempts := s.Attempts
 	if attempts < 1 {
 		attempts = 1

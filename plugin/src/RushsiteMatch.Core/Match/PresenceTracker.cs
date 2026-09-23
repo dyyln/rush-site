@@ -16,8 +16,6 @@ public sealed class PresenceTracker
     }
 
     public bool AllConnected => _players.All(_connected.Contains);
-    public bool IsConnected(string steamId) => _connected.Contains(steamId);
-    public bool EverConnected(string steamId) => _everConnected.Contains(steamId);
     public IReadOnlyList<string> Missing => _players.Where(p => !_connected.Contains(p)).ToList();
 
     // Returns true when this is a change.

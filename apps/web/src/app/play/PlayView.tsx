@@ -233,8 +233,8 @@ export function PlayView() {
                               </span>
                             )}
                           </span>
-                          <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
-                            {copy.blurb}
+                          <span id={`mode-${mode}-desc`} className={`${styles.modeBlurb} mono`}>
+                            {copy.format}
                           </span>
                           <Standing profile={me} mode={mode} />
                           <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>

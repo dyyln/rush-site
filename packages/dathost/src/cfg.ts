@@ -34,11 +34,6 @@ export function isWorkshopId(id: string | undefined): id is string {
   return !!id && /^\d+$/.test(id)
 }
 
-export function mapLoadName(req: StartServerRequest): string {
-  if (isWorkshopId(req.map.workshopId)) return `workshop/${req.map.workshopId}`
-  return req.map.mapName ?? req.map.id
-}
-
 // Console lines that put a custom mode server on the right game_type, game_mode and map
 export function consoleSwitchLines(req: StartServerRequest, cs2: Cs2Launch): string[] {
   const map = isWorkshopId(req.map.workshopId)

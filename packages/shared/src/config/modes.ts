@@ -3,9 +3,6 @@ import { ModeConfigSchema, type MapEntry, type Mode, type ModeConfig } from "../
 // Marks values that must be filled in before a mode can go live
 export const TODO = "TODO"
 
-// Negative game ids mean unknown
-export const UNKNOWN_GAME_ID = -1
-
 export const AIM_MAPS: readonly MapEntry[] = [
   { id: "aim_map", displayName: "aim_map", mapName: "aim_map", workshopId: TODO },
   { id: "aim_redline", displayName: "aim_redline", mapName: "aim_redline", workshopId: TODO },
