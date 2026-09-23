@@ -21,12 +21,38 @@ public sealed class MatchConfig
         Teams.FirstOrDefault(t => t.SteamIds.Contains(steamId))?.Name;
 
     public bool IsAllowed(string steamId) => AllowedSteamIds.Contains(steamId);
+
+    // Side each team plays. teams[0] is CT and teams[1] is T unless a team sets side.
+    // Fixed for the whole match. Never derived from where players stand.
+    public string ConfiguredSide(string team)
+    {
+        var idx = Teams.FindIndex(t => t.Name == team);
+        if (idx < 0) return "";
+        var own = TeamConfig.NormalizeSide(Teams[idx].Side);
+        if (own is not null) return own;
+        var other = Teams.Count == 2 ? TeamConfig.NormalizeSide(Teams[1 - idx].Side) : null;
+        if (other is not null) return other == TeamConfig.SideCt ? TeamConfig.SideT : TeamConfig.SideCt;
+        return idx == 0 ? TeamConfig.SideCt : TeamConfig.SideT;
+    }
 }
 
 public sealed class TeamConfig
 {
     public string Name { get; init; } = "";
     public List<string> SteamIds { get; init; } = new();
+
+    // Optional. "ct" or "t". When left out teams[0] plays CT and teams[1] plays T.
+    public string? Side { get; init; }
+
+    public const string SideCt = "ct";
+    public const string SideT = "t";
+
+    public static string? NormalizeSide(string? s) => s?.Trim().ToLowerInvariant() switch
+    {
+        "ct" or "3" or "counterterrorist" or "counter-terrorist" => SideCt,
+        "t" or "2" or "terrorist" => SideT,
+        _ => null,
+    };
 }
 
 public sealed class DemoUploadConfig

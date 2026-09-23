@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PartyInvite } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useSocialToast } from "@/components/play/socialHold";
 import { api } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { useSession } from "@/lib/session";
@@ -60,7 +61,7 @@ function InviteActions({ invite, onDone }: { invite: PartyInvite; onDone: () => 
 // Site wide toast for party invites from friends. Accept joins the party and goes to /play
 export function InviteInbox() {
   const { user } = useSession();
-  const toast = useToast();
+  const toast = useSocialToast();
   const shown = useRef(new Map<string, number>());
   const signedIn = !!user;
   usePending(signedIn);
@@ -87,6 +88,7 @@ export function InviteInbox() {
         title: `${invite.from.displayName} invited you to their party`,
         body: <InviteActions invite={invite} onDone={close} />,
         durationMs: Math.max(5000, Math.min(60_000, Date.parse(invite.expiresAt) - Date.now())),
+        expiresAt: Date.parse(invite.expiresAt),
       });
       shown.current.set(invite.id, id);
     });

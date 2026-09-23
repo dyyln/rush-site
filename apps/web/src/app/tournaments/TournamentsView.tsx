@@ -10,6 +10,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import { LocalTime } from "@/components/tournaments/LocalTime";
+import { VerifiedNote } from "@/components/tournaments/VerifiedNote";
 import { Avatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
 import { MODE_COPY, isMode } from "@/lib/modes";
@@ -45,6 +46,8 @@ export function TournamentsView() {
           options={[{ value: "all", label: "All modes" }, ...MODES.map((m) => ({ value: m, label: MODE_COPY[m].label }))]}
         />
       </header>
+
+      <VerifiedNote />
 
       <Tabs
         label="Tournament status"

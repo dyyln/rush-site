@@ -1,6 +1,7 @@
 import {
   MODE_CONFIGS,
   type Cs2Launch,
+  type Cs2Start,
   type PluginMatchConfig,
   type StartServerRequest,
 } from "@rushsite/shared"
@@ -18,8 +19,9 @@ const PRESETS: { type: number; mode: number; preset: DathostGameMode }[] = [
   { type: 1, mode: 2, preset: "ffa_deathmatch" },
 ]
 
-export function resolveCs2(req: StartServerRequest): Cs2Launch {
-  return req.cs2 ?? MODE_CONFIGS[req.mode].cs2
+// The launch block from shared config. The API always sends it
+export function resolveCs2(req: StartServerRequest): Cs2Start {
+  return req.cs2
 }
 
 export function dathostGameMode(cs2: Pick<Cs2Launch, "gameType" | "gameMode">): {
@@ -35,11 +37,19 @@ export function isWorkshopId(id: string | undefined): id is string {
 }
 
 // Console lines that put a custom mode server on the right game_type, game_mode and map
-export function consoleSwitchLines(req: StartServerRequest, cs2: Cs2Launch): string[] {
-  const map = isWorkshopId(req.map.workshopId)
-    ? `host_workshop_map ${req.map.workshopId}`
-    : `changelevel ${req.map.mapName ?? req.map.id}`
+export function consoleSwitchLines(cs2: Cs2Start): string[] {
+  const map = isWorkshopId(cs2.workshopId) ? `host_workshop_map ${cs2.workshopId}` : `changelevel ${cs2.mapName}`
   return [`game_type ${cs2.gameType}`, `game_mode ${cs2.gameMode}`, map]
+}
+
+// Same path as on the Hetzner agent, so the plugin execs it the same way at match start
+export function modeCfgPath(matchId: string): string {
+  return `rushsite/matches/${matchId}/mode.cfg`
+}
+
+// The template server ships our mode cfgs at cfg/<execCfg>
+export function buildModeCfg(cs2: Cs2Launch): string {
+  return ["// Written by rushsite for this match", `exec ${cs2.execCfg}`].join("\n") + "\n"
 }
 
 export function buildMatchJson(req: StartServerRequest): PluginMatchConfig {
@@ -61,7 +71,7 @@ function cfgString(s: string): string {
 }
 
 // server.cfg runs on every map load. Base settings stay in the template's base cfg.
-export function buildServerCfg(req: StartServerRequest, cs2: Cs2Launch, baseCfg: string | null): string {
+export function buildServerCfg(req: StartServerRequest, baseCfg: string | null): string {
   const [t1, t2] = req.teams
   const lines = [
     "// Written by rushsite for this match",
@@ -71,7 +81,7 @@ export function buildServerCfg(req: StartServerRequest, cs2: Cs2Launch, baseCfg:
     `mp_teamname_1 "${cfgString(t1?.name ?? "")}"`,
     `mp_teamname_2 "${cfgString(t2?.name ?? "")}"`,
     "tv_enable 1",
-    `exec ${cs2.execCfg}`,
+    `exec ${modeCfgPath(req.matchId)}`,
   ]
   return lines.join("\n") + "\n"
 }

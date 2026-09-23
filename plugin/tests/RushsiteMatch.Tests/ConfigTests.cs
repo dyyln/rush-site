@@ -98,3 +98,33 @@ public class ConfigTests
         Assert.Equal("/srv/cs2/game/csgo/cfg/match.json", MatchConfigLoader.ResolvePath(null, null, none, null, csgo));
     }
 }
+
+public class TeamSideConfigTests
+{
+    [Fact]
+    public void DefaultsToFirstTeamCt()
+    {
+        var cfg = TestData.Rush();
+        Assert.Equal("ct", cfg.ConfiguredSide("alpha"));
+        Assert.Equal("t", cfg.ConfiguredSide("bravo"));
+    }
+
+    [Fact]
+    public void OneSideFieldDecidesBoth()
+    {
+        var cfg = MatchConfigLoader.Parse(TestData.Json().Replace("{ \"name\": \"bravo\",", "{ \"name\": \"bravo\", \"side\": \"CT\","));
+        Assert.Equal("t", cfg.ConfiguredSide("alpha"));
+        Assert.Equal("ct", cfg.ConfiguredSide("bravo"));
+    }
+
+    [Fact]
+    public void RejectsBadOrClashingSides()
+    {
+        var bad = TestData.Json().Replace("{ \"name\": \"alpha\",", "{ \"name\": \"alpha\", \"side\": \"left\",");
+        Assert.Contains("must be 'ct' or 't'", Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(bad)).Message);
+        var clash = TestData.Json()
+            .Replace("{ \"name\": \"alpha\",", "{ \"name\": \"alpha\", \"side\": \"t\",")
+            .Replace("{ \"name\": \"bravo\",", "{ \"name\": \"bravo\", \"side\": \"t\",");
+        Assert.Contains("same side", Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(clash)).Message);
+    }
+}

@@ -44,6 +44,8 @@
 .link {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  min-height: 32px;
   text-decoration: none;
   border-radius: var(--radius-sm);
 }
@@ -51,7 +53,7 @@
 .link::after {
   content: "";
   position: absolute;
-  inset: -12px -4px;
+  inset: -6px -4px;
 }
 .link:hover .chip {
   background: var(--color-surface-2);

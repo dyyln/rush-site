@@ -25,7 +25,6 @@ type Config struct {
 	TVPortOffset int
 	StopGrace    time.Duration
 
-	ModesFile  string
 	ModeCfgDir string
 
 	SteamCMD       string
@@ -59,7 +58,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		PublicIP:     get("RUSHSITE_PUBLIC_IP", ""),
 		ListenAddr:   get("RUSHSITE_LISTEN", "0.0.0.0:8080"),
 		DataDir:      get("RUSHSITE_DATA_DIR", "/var/lib/rushsite-agent"),
-		ModesFile:    get("RUSHSITE_MODES_FILE", ""),
 		ModeCfgDir:   get("RUSHSITE_MODE_CFG_DIR", ""),
 		SteamCMD:     get("RUSHSITE_STEAMCMD", "/usr/games/steamcmd"),
 		UpdateCheck:  strings.ToLower(get("RUSHSITE_UPDATE_CHECK", CheckSteamAPI)),

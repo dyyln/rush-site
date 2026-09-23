@@ -46,10 +46,10 @@ describe("veto flow", () => {
     expect(h.agent.started).toHaveLength(1)
     const req = h.agent.started[0]!
     expect(req.map.id).toBe(state.maps[0])
-    expect(req.cs2?.execCfg).toBeTruthy()
+    expect(req.cs2.execCfg).toBe("rushsite_aim1v1.cfg")
     expect(req.webhookUrl).toMatch(new RegExp(`/webhooks/match/${matchId}$`))
     expect(req.allowedSteamIds).toHaveLength(2)
-    expect(req.gslt).toMatch(/^tok/)
+    expect(req.gslt).toMatch(/^GSLTTOKEN/)
   })
 
   it("rejects votes from the team that is not acting", async () => {

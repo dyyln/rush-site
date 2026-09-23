@@ -50,7 +50,7 @@ export function SiteHeader() {
           </ul>
         </nav>
         <div className={styles.end}>
-          {user ? (
+          {pathname === "/banned" ? null : user ? (
             <UserMenu user={user} onNavigate={() => setOpen(false)} />
           ) : (
             <SignInLink plain className={`${styles.link} ${styles.signIn}`} onClick={() => setOpen(false)}>

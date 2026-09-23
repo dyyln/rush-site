@@ -34,7 +34,7 @@ import type { Rng } from "../../lib/clock.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { EventLog } from "../../lib/event-log.js"
 import { randomPassword, randomToken } from "../../lib/hmac.js"
-import { withLock } from "../../lib/redis.js"
+import { withLease, withLock } from "../../lib/redis.js"
 import type { CooldownService } from "../queue/cooldowns.js"
 import type { LiveTicket, QueueService } from "../queue/service.js"
 import type { RatingService } from "../rating/service.js"
@@ -45,6 +45,7 @@ import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
 import { demoKey } from "./storage.js"
+import { MATCH_TIMEOUT, isWatched, type MatchWatchdog, type WatchdogReason } from "./watchdog.js"
 import { eachLimit } from "../../lib/async.js"
 
 type MatchRow = typeof matches.$inferSelect
@@ -71,6 +72,8 @@ export type FlowOptions = {
   // Server teardown waits this long for demo_uploaded after the match ends
   demoWaitSec: number
   allowUnresolvedModes?: boolean
+  // Per match allocation lock. It is renewed while a server boots, so this only matters after a crash
+  allocationLeaseMs?: number
 }
 
 export type FlowDeps = {
@@ -84,6 +87,8 @@ export type FlowDeps = {
   allocator: Allocator
   log: FastifyBaseLogger
   events?: EventLog
+  // Ends matches whose server is gone or that ran too long
+  watchdog?: MatchWatchdog
   now?: () => number
   rng?: Rng
   options: FlowOptions
@@ -92,6 +97,12 @@ export type FlowDeps = {
 export const SERVER_CRASHED = "server_crashed"
 
 const TERMINAL = new Set(["finished", "abandoned", "cancelled"])
+
+// A started server can still be attached to a match in these statuses
+const PRE_LIVE = new Set(["allocating", "starting", "ready"])
+
+// Nobody could reach the server, so the failure is ours
+export const SERVER_UNREACHABLE = "server_unreachable"
 
 export const ALLOCATION_CONCURRENCY = 4
 
@@ -103,6 +114,7 @@ export class MatchFlow {
   private readonly now: () => number
   private readonly rng: Rng
   private lastCooldownSweep: number | null = null
+  private lastWatchdogRun: number | null = null
 
   constructor(private readonly d: FlowDeps) {
     this.now = d.now ?? Date.now
@@ -471,7 +483,7 @@ export class MatchFlow {
 
   // Allocates a server once the map is known. Retries from the tick until the timeout
   async tryAllocate(matchId: string): Promise<void> {
-    await withLock(this.d.redis, `lock:alloc:${matchId}`, 60_000, async () => {
+    await withLease(this.d.redis, `lock:alloc:${matchId}`, this.d.options.allocationLeaseMs ?? 60_000, async () => {
       const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
       if (!m || m.status !== "allocating") return
       const started = m.allocationStartedAt?.getTime() ?? m.createdAt.getTime()
@@ -497,23 +509,47 @@ export class MatchFlow {
         }
         const { response, demo } = r
         const connect = response.connect.includes("password") ? response.connect : `${response.connect}; password ${m.password}`
-        await this.d.db
-          .update(matches)
-          .set({
-            status: "starting",
-            driver: r.driver,
-            ...(r.driverRef ? { driverRef: r.driverRef } : {}),
-            hostId: r.hostId,
-            serverIp: response.ip,
-            serverPort: response.port,
-            connect,
-          })
-          .where(and(eq(matches.id, matchId), eq(matches.status, "allocating")))
+        // A DatHost boot is long and the plugin can report server_ready before start() returns.
+        // Connect info is stored in any pre-live status and a held server_ready is released here
+        const next = await this.tx(async (tx) => {
+          const cur = await this.lock(tx, matchId)
+          if (!cur || !PRE_LIVE.has(cur.status)) return null
+          const readyNow = cur.status === "ready" || (cur.status === "allocating" && !!cur.readyAt)
+          const status = readyNow ? "ready" : "starting"
+          await tx
+            .update(matches)
+            .set({
+              status,
+              driver: r.driver,
+              ...(r.driverRef ? { driverRef: r.driverRef } : {}),
+              hostId: r.hostId,
+              serverIp: response.ip,
+              serverPort: response.port,
+              connect,
+              // The connect countdown starts when players get the address
+              ...(readyNow ? { readyAt: new Date(this.now()) } : {}),
+            })
+            .where(eq(matches.id, matchId))
+          return status
+        })
+        if (!next) {
+          // The match ended while the server booted. Stop it so it does not run unowned
+          this.d.log.warn({ matchId }, "server started for a match that already ended")
+          await this.d.allocator.release(matchId, r.driver, true)
+          return
+        }
         await this.d.db
           .insert(demos)
           .values({ matchId, bucket: demo.bucket, key: demo.key })
           .onConflictDoUpdate({ target: demos.matchId, set: { bucket: demo.bucket, key: demo.key } })
         this.d.events?.emit("match", { event: "server_started", matchId, driver: r.driver, ip: response.ip, port: response.port })
+        if (next === "ready") {
+          const [fresh] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
+          if (fresh) {
+            this.sendServerReady(fresh)
+            await this.matchChanged(fresh)
+          }
+        }
       } catch (err) {
         this.d.log.error({ err, matchId }, "server start failed")
         this.d.events?.record({ kind: "error", type: "allocation_error", message: (err as Error).message, matchId })
@@ -568,20 +604,33 @@ export class MatchFlow {
     }
     // Kills are frequent so they stay out of the admin event log
     if (event.type === "kill") {
-      if (!TERMINAL.has(m.status)) await storeKill(this.d.db, matchId, event)
+      if (!TERMINAL.has(m.status)) {
+        await storeKill(this.d.db, matchId, event)
+        await this.d.watchdog?.touch(matchId)
+      }
       return
     }
     this.d.events?.record({ kind: "webhook", type: event.type, message: TERMINAL.has(m.status) ? `ignored, match is ${m.status}` : "accepted", matchId, ok: true, detail: event })
     if (TERMINAL.has(m.status)) return
+    await this.d.watchdog?.touch(matchId)
     const db = this.d.db
     switch (event.type) {
       case "server_ready": {
-        if (m.status === "starting" || m.status === "allocating") {
-          await db
-            .update(matches)
-            .set({ status: "ready", readyAt: new Date(this.now()) })
-            .where(eq(matches.id, matchId))
-        }
+        // Before start() returns there is no connect info. The ready moment is recorded and
+        // tryAllocate moves the match to ready and tells players once the address is known
+        const send = await this.tx(async (tx) => {
+          const cur = await this.lock(tx, matchId)
+          if (!cur || TERMINAL.has(cur.status)) return false
+          if (cur.status === "allocating") {
+            await tx.update(matches).set({ readyAt: new Date(this.now()) }).where(eq(matches.id, matchId))
+            return false
+          }
+          if (cur.status === "starting") {
+            await tx.update(matches).set({ status: "ready", readyAt: new Date(this.now()) }).where(eq(matches.id, matchId))
+          }
+          return true
+        })
+        if (!send) return
         const [fresh] = await db.select().from(matches).where(eq(matches.id, matchId))
         if (fresh) this.sendServerReady(fresh)
         if (fresh) await this.matchChanged(fresh)
@@ -775,23 +824,32 @@ export class MatchFlow {
     }
   }
 
-  // Missing players forfeit and take the loss. Their teammates are left unrated
+  // Missing players forfeit. Penalties need proof the server was reachable. A missing player gets a
+  // cooldown only when someone on the other team connected, and a forfeit is rated only when the
+  // winning side connected. Winners who never connected and the forfeiters' teammates stay unrated
   async abandonMatch(matchId: string, missingSteamIds: string[], reason: string): Promise<void> {
     const r = await this.tx(async (tx) => {
       const m = await this.lock(tx, matchId)
       if (!m || TERMINAL.has(m.status) || m.ratingApplied) return null
       const players = await this.players(tx, matchId)
       const inMatch = new Set(players.map((p) => p.steamId))
+      const joined = new Set(players.filter((p) => p.everConnected).map((p) => p.steamId))
       const missing = missingSteamIds.filter((s) => inMatch.has(s))
       const teams: [string[], string[]] = [m.teams[0]!.steamIds, m.teams[1]!.steamIds]
       const outcome = resolveAbandon(teams, missing)
+      const teamConnected = (idx: number) => teams[idx]!.some((s) => joined.has(s))
+      const otherTeam = (steamId: string) => (teams[0].includes(steamId) ? 1 : 0)
+      const penalized = outcome.forfeiters.filter((s) => teamConnected(otherTeam(s)))
+      const endReason = joined.size === 0 ? SERVER_UNREACHABLE : reason
       const nowDate = new Date(this.now())
       let changes: RatingChange[] = []
       let winnerTeam: string | null = null
-      if (outcome.kind === "forfeit") {
-        const winnerIdx = outcome.loserTeam === 0 ? 1 : 0
+      const winnerIdx: 0 | 1 = outcome.kind === "forfeit" && outcome.loserTeam === 0 ? 1 : 0
+      const rated = outcome.kind === "forfeit" && teamConnected(winnerIdx)
+      if (outcome.kind === "forfeit" && rated) {
         winnerTeam = m.teams[winnerIdx]!.name
         const loserTeammates = teams[outcome.loserTeam].filter((s) => !outcome.forfeiters.includes(s))
+        const absentWinners = teams[winnerIdx].filter((s) => !joined.has(s))
         changes = await this.d.ratings.applyMatch(
           {
             matchId,
@@ -799,7 +857,7 @@ export class MatchFlow {
             teams,
             scoreA: outcome.loserTeam === 0 ? 0 : 1,
             forfeiters: outcome.forfeiters,
-            exclude: loserTeammates,
+            exclude: [...loserTeammates, ...absentWinners],
             source: m.source,
           },
           tx,
@@ -811,28 +869,27 @@ export class MatchFlow {
             .where(and(eq(matchPlayers.matchId, matchId), inArray(matchPlayers.steamId, team)))
         }
       }
-      if (outcome.forfeiters.length > 0) {
+      if (penalized.length > 0) {
         await tx
           .update(matchPlayers)
           .set({ abandoned: true })
-          .where(and(eq(matchPlayers.matchId, matchId), inArray(matchPlayers.steamId, outcome.forfeiters)))
+          .where(and(eq(matchPlayers.matchId, matchId), inArray(matchPlayers.steamId, penalized)))
       }
       await tx
         .update(matches)
         .set({
           status: outcome.forfeiters.length > 0 ? "abandoned" : "cancelled",
           winnerTeam,
-          cancelReason: reason,
+          cancelReason: endReason,
           endedAt: nowDate,
-          ratingApplied: outcome.kind === "forfeit",
+          ratingApplied: rated,
         })
         .where(eq(matches.id, matchId))
-      const connected = new Map(players.map((p) => [p.steamId, p.everConnected]))
-      return { m, outcome, changes, winnerTeam, connected }
+      return { m, outcome, penalized, changes, winnerTeam, joined, endReason }
     })
     if (!r) return
-    for (const id of r.outcome.forfeiters) {
-      await this.d.cooldowns.issue(id, r.connected.get(id) ? "abandon" : "no_connect", matchId)
+    for (const id of r.penalized) {
+      await this.d.cooldowns.issue(id, r.joined.has(id) ? "abandon" : "no_connect", matchId)
     }
     const payload: MatchResultPayload = {
       matchId,
@@ -843,10 +900,77 @@ export class MatchFlow {
       ratingChanges: r.changes,
     }
     toUsers(this.d.notifier, this.allSteamIds(r.m), "match_result", payload)
-    if (r.m.status !== "live") this.sendCancelled(r.m, reason)
+    if (r.m.status !== "live") this.sendCancelled(r.m, r.endReason)
     await this.sendMatchUpdate(matchId)
-    this.d.events?.emit("match", { event: "match_abandoned", matchId, reason, forfeiters: r.outcome.forfeiters })
-    await this.emitResult({ matchId, outcome: "abandoned", reason, missingSteamIds: r.outcome.forfeiters })
+    await this.d.queue.notifyParty(this.allSteamIds(r.m))
+    this.d.events?.emit("match", {
+      event: "match_abandoned",
+      matchId,
+      reason: r.endReason,
+      forfeiters: r.outcome.forfeiters,
+      penalized: r.penalized,
+    })
+    await this.emitResult({ matchId, outcome: "abandoned", reason: r.endReason, missingSteamIds: r.outcome.forfeiters })
+  }
+
+  // Watchdog end for a match whose server vanished or that ran past its cap.
+  // Nobody is at fault. No rating change and no cooldown, and slot and token go back at once
+  async endLost(matchId: string, reason: WatchdogReason, detail?: string): Promise<boolean> {
+    const r = await this.tx(async (tx) => {
+      const m = await this.lock(tx, matchId)
+      if (!m || !isWatched(m.status) || m.ratingApplied) return null
+      await tx
+        .update(matches)
+        .set({ status: "abandoned", winnerTeam: null, cancelReason: reason, endedAt: new Date(this.now()) })
+        .where(eq(matches.id, matchId))
+      return m
+    })
+    if (!r) return false
+    this.d.log.warn({ matchId, reason, detail, status: r.status, driver: r.driver }, "watchdog ended match")
+    this.d.events?.record({ kind: "error", type: `match_${reason}`, message: detail ?? reason, matchId })
+    if (reason === MATCH_TIMEOUT) {
+      // The server may still run. Teardown pulls a surge demo first
+      await this.teardown(matchId)
+    } else {
+      await this.d.allocator.release(matchId, r.driver, true)
+      await this.d.db.update(matches).set({ serverReleasedAt: new Date(this.now()) }).where(eq(matches.id, matchId))
+    }
+    await this.d.watchdog?.forget(matchId)
+    const everyone = this.allSteamIds(r)
+    const payload: MatchResultPayload = {
+      matchId,
+      mode: r.mode,
+      status: "abandoned",
+      winnerTeam: null,
+      score: r.score ?? {},
+      ratingChanges: [],
+    }
+    toUsers(this.d.notifier, everyone, "match_result", payload)
+    this.sendCancelled(r, reason)
+    await this.sendMatchUpdate(matchId)
+    await this.d.queue.notifyParty(everyone)
+    this.d.events?.emit("match", { event: "match_abandoned", matchId, reason, forfeiters: [] })
+    await this.emitResult({ matchId, outcome: "abandoned", reason, missingSteamIds: [] })
+    return true
+  }
+
+  // One watchdog pass. Runs from the allocation loop and once at boot
+  async runWatchdog(): Promise<string[]> {
+    const w = this.d.watchdog
+    if (!w) return []
+    this.lastWatchdogRun = this.now()
+    const ended: string[] = []
+    for (const v of await w.inspect()) {
+      await this.guard(v.matchId, async () => {
+        if (await this.endLost(v.matchId, v.reason, v.detail)) ended.push(v.matchId)
+      })
+    }
+    return ended
+  }
+
+  // Boot recovery. Matches whose server died while the API was down end the same way
+  async recover(): Promise<string[]> {
+    return this.runWatchdog()
   }
 
   // Both loops in one pass. Tests and scripts use it
@@ -931,6 +1055,11 @@ export class MatchFlow {
       ...allocating.map(({ id }) => () => this.guard(id, () => this.tryAllocate(id))),
       ...ended.map(({ id }) => () => this.guard(id, () => this.teardown(id))),
     ]
+    const w = this.d.watchdog
+    if (w && (this.lastWatchdogRun === null || this.now() - this.lastWatchdogRun >= w.options.intervalSec * 1000)) {
+      this.lastWatchdogRun = this.now()
+      jobs.push(() => this.guard("watchdog", () => this.runWatchdog()))
+    }
     await eachLimit(jobs, concurrency, (job) => job())
   }
 

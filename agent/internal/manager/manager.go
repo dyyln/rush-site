@@ -256,7 +256,7 @@ func (m *Manager) Slots() (total, free int) {
 
 // Start launches a server for req.
 func (m *Manager) Start(req match.StartRequest) (match.StartResponse, error) {
-	spec, err := match.Validate(&req, m.modes)
+	spec, err := match.Validate(&req, m.modes, m.cfg.ModeCfgDir)
 	if err != nil {
 		return match.StartResponse{}, err
 	}

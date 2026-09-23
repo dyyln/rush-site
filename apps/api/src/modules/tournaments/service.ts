@@ -33,7 +33,7 @@ import type {
   TournamentRecord,
   TournamentStore,
 } from "./store.js"
-import type { CupSchedule } from "@rushsite/shared"
+import { CUP_ENTRANT_PREVIEW_MAX, type CupEntrantPreview, type CupSchedule, type CupWinner } from "@rushsite/shared"
 import { getModeConfig, tierForRating, trustAtLeast } from "@rushsite/shared"
 import { eachLimit } from "../../lib/async.js"
 import {
@@ -157,10 +157,40 @@ export class TournamentService {
   ): Promise<TournamentSummary[]> {
     const rows = await this.d.store.listTournaments(filter)
     const ids = rows.map((r) => r.id)
-    const counts = await this.d.store.countEntries(ids)
-    if (!viewer) return rows.map((r) => this.summary(r, counts[r.id] ?? 0))
+    const [counts, extras] = await Promise.all([this.d.store.countEntries(ids), this.listExtras(rows)])
+    const base = (r: TournamentRecord) => ({ ...this.summary(r, counts[r.id] ?? 0), ...extras(r) })
+    if (!viewer) return rows.map(base)
     const mine = await this.d.store.findPlayerEntries(viewer, ids)
-    return rows.map((r) => ({ ...this.summary(r, counts[r.id] ?? 0), myEntryId: mine[r.id] ?? null }))
+    return rows.map((r) => ({ ...base(r), myEntryId: mine[r.id] ?? null }))
+  }
+
+  // Avatar stack and champion for list rows. One query each plus one profile lookup.
+  private async listExtras(
+    rows: TournamentRecord[],
+  ): Promise<(t: TournamentRecord) => { entrantPreview: CupEntrantPreview[]; winner: CupWinner | null }> {
+    const winnerIds = rows.flatMap((r) => (r.winnerEntryId ? [r.winnerEntryId] : []))
+    const [preview, winners] = await Promise.all([
+      this.d.store.previewEntries(
+        rows.map((r) => r.id),
+        CUP_ENTRANT_PREVIEW_MAX,
+      ),
+      this.d.store.getEntries(winnerIds),
+    ])
+    const captains = [...new Set([...preview, ...winners].map((e) => e.captainSteamId))]
+    const profiles =
+      captains.length === 0
+        ? {}
+        : await this.d.getProfiles(captains).catch((err) => {
+            this.d.log.warn({ err }, "profile lookup failed")
+            return {} as Record<string, ProfileInfo>
+          })
+    const byCup = new Map<string, EntryRecord[]>()
+    for (const e of preview) byCup.set(e.tournamentId, [...(byCup.get(e.tournamentId) ?? []), e])
+    const winnerById = new Map(winners.map((e) => [e.id, e]))
+    return (t) => ({
+      entrantPreview: (byCup.get(t.id) ?? []).map((e) => previewOf(e, profiles)),
+      winner: t.winnerEntryId && winnerById.has(t.winnerEntryId) ? winnerOf(winnerById.get(t.winnerEntryId)!, profiles) : null,
+    })
   }
 
   async detail(id: string, viewer: string | null): Promise<TournamentDetail> {
@@ -170,8 +200,12 @@ export class TournamentService {
     const stored = await this.d.store.loadBracket(id)
     const profiles = await this.playerInfo(entries.flatMap((e) => e.steamIds), t.mode)
     const mine = viewer ? entries.find((e) => !e.disqualifiedAt && e.steamIds.includes(viewer)) : undefined
+    const active = entries.filter((e) => !e.disqualifiedAt)
+    const champion = t.winnerEntryId ? entries.find((e) => e.id === t.winnerEntryId) : undefined
     return {
-      ...this.summary(t, entries.filter((e) => !e.disqualifiedAt).length),
+      ...this.summary(t, active.length),
+      entrantPreview: active.slice(0, CUP_ENTRANT_PREVIEW_MAX).map((e) => previewOf(e, profiles.profiles)),
+      winner: champion ? winnerOf(champion, profiles.profiles) : null,
       entries: entries.map((e) => toEntryView(e, profiles)),
       bracket: stored?.bracket ?? null,
       bracketVersion: t.bracketVersion,
@@ -944,6 +978,16 @@ interface Claim {
   bracketMatchId: string
   claimedAt: number
   params: StartMatchParams
+}
+
+function previewOf(e: EntryRecord, profiles: Record<string, ProfileInfo>): CupEntrantPreview {
+  const p = profiles[e.captainSteamId]
+  return { steamId: e.captainSteamId, displayName: e.teamName ?? p?.displayName ?? e.captainSteamId, avatarUrl: p?.avatarUrl ?? null }
+}
+
+function winnerOf(e: EntryRecord, profiles: Record<string, ProfileInfo>): CupWinner {
+  const p = profiles[e.captainSteamId]
+  return { entryId: e.id, name: e.teamName ?? p?.displayName ?? e.captainSteamId, avatarUrl: p?.avatarUrl ?? null }
 }
 
 function liveMatchIds(stored: StoredBracket | null): string[] {

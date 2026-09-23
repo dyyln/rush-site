@@ -2,18 +2,32 @@ using RushsiteMatch.Core.Config;
 
 namespace RushsiteMatch.Core.Match;
 
-// Tracks which side each config team is on from what players are observed doing.
-// Nothing here moves players. That keeps it working while ChangeTeam is broken.
+// Tracks which side each config team is on. Nothing here moves players.
+//
+// Fixed mode (Rush). Each team's side comes from the config and never changes.
+// Where players stand never changes the mapping. Rush has mp_halftime 0 so sides never swap.
+//
+// Observed mode (aim). A team's side is where most of its players stand. A tie keeps the previous side,
+// so one player on the wrong side can never flip the mapping.
 public sealed class SideMap
 {
     private readonly MatchConfig _cfg;
+    private readonly bool _fixed;
     private readonly Dictionary<string, Side> _playerSide = new();
     private readonly Dictionary<string, Side> _teamSide = new();
 
-    public SideMap(MatchConfig cfg)
+    public SideMap(MatchConfig cfg, bool fixedFromConfig = false)
     {
         _cfg = cfg;
+        _fixed = fixedFromConfig;
+        if (_fixed)
+            foreach (var t in cfg.Teams) _teamSide[t.Name] = ConfiguredSide(t.Name);
     }
+
+    public bool IsFixed => _fixed;
+
+    public Side ConfiguredSide(string team) =>
+        _cfg.ConfiguredSide(team) == TeamConfig.SideT ? Side.T : Side.CT;
 
     public Side SideOfPlayer(string steamId) =>
         _playerSide.TryGetValue(steamId, out var s) ? s : Side.None;
@@ -22,10 +36,22 @@ public sealed class SideMap
     {
         _playerSide[steamId] = side;
         var team = _cfg.TeamOf(steamId);
-        if (team is not null && side.IsPlaying()) _teamSide[team] = side;
+        if (team is not null && !_fixed) UpdateObservedTeamSide(team);
     }
 
-    public void RemovePlayer(string steamId) => _playerSide.Remove(steamId);
+    public void RemovePlayer(string steamId)
+    {
+        _playerSide.Remove(steamId);
+    }
+
+    private void UpdateObservedTeamSide(string team)
+    {
+        var members = _cfg.Teams.First(t => t.Name == team).SteamIds;
+        var ct = members.Count(id => SideOfPlayer(id) == Side.CT);
+        var t = members.Count(id => SideOfPlayer(id) == Side.T);
+        if (ct > t) _teamSide[team] = Side.CT;
+        else if (t > ct) _teamSide[team] = Side.T;
+    }
 
     public Side SideOfTeam(string team)
     {
@@ -43,13 +69,14 @@ public sealed class SideMap
         return null;
     }
 
-    // Aim modes hold each team to one side without moving anyone.
-    // Teammates already on a side decide it. Otherwise an opponent already on a side decides it.
-    // Otherwise teams[0] defaults to CT and teams[1] to T, matching mp_teamname_1 and mp_teamname_2.
+    // Fixed mode returns the configured side.
+    // Observed mode. Teammates already on a side decide it. Otherwise an opponent already on a side decides it.
+    // Otherwise the configured side, which is teams[0] CT and teams[1] T by default.
     public Side? RequiredSide(string steamId)
     {
         var team = _cfg.TeamOf(steamId);
         if (team is null) return null;
+        if (_fixed) return ConfiguredSide(team);
         var mates = _cfg.Teams.First(t => t.Name == team).SteamIds.Where(id => id != steamId);
         foreach (var m in mates)
         {
@@ -64,8 +91,7 @@ public sealed class SideMap
         return DefaultSide(team);
     }
 
-    public Side DefaultSide(string team) =>
-        _cfg.Teams.Count > 0 && _cfg.Teams[0].Name == team ? Side.CT : Side.T;
+    public Side DefaultSide(string team) => ConfiguredSide(team);
 
     public bool IsJoinAllowed(string steamId, Side requested)
     {
@@ -74,7 +100,15 @@ public sealed class SideMap
         return required is null || required == requested;
     }
 
+    // True when the player stands on the side their team must play.
+    public bool IsOnRequiredSide(string steamId)
+    {
+        var s = SideOfPlayer(steamId);
+        return s.IsPlaying() && RequiredSide(steamId) == s;
+    }
+
     // True when every listed player is on a playing side, teammates share a side and the teams differ.
+    // In fixed mode every player must also be on the configured side.
     public bool TeamsAreValid(IEnumerable<string> steamIds)
     {
         var ids = steamIds.ToList();
@@ -85,6 +119,7 @@ public sealed class SideMap
             if (!s.IsPlaying()) return false;
             var team = _cfg.TeamOf(id);
             if (team is null) return false;
+            if (_fixed && s != ConfiguredSide(team)) return false;
             if (sides.TryGetValue(team, out var existing) && existing != s) return false;
             sides[team] = s;
         }

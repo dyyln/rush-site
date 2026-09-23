@@ -251,3 +251,11 @@
 .decided p {
   margin: 0;
 }
+
+/* Table links get a desktop sized hit area */
+.cellLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  min-width: 32px;
+}

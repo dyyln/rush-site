@@ -15,6 +15,7 @@ public sealed class PresenceTracker
         foreach (var p in _players) _missingSince[p] = now;
     }
 
+    public bool IsConnected(string steamId) => _connected.Contains(steamId);
     public bool AllConnected => _players.All(_connected.Contains);
     public IReadOnlyList<string> Missing => _players.Where(p => !_connected.Contains(p)).ToList();
 

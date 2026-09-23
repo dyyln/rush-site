@@ -36,15 +36,7 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	modes, err := match.LoadModes(cfg.ModesFile)
-	if err != nil {
-		return err
-	}
-	for mode, spec := range modes {
-		if !spec.Configured() {
-			log.Warn("mode has no game_type or game_mode and will be refused", "mode", mode)
-		}
-	}
+	modes := match.DefaultModes()
 
 	runner := procrun.ExecRunner{}
 	offset := cfg.TVPortOffset

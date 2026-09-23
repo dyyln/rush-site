@@ -83,10 +83,9 @@
 .modeName {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   line-height: 1.1;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 .format {
   display: inline-flex;
@@ -104,7 +103,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-control);
   color: transparent;
 }
 .checked .check {
@@ -122,6 +121,9 @@
 .reason {
   font-size: var(--text-sm);
   color: var(--color-warn);
+}
+.reason:empty {
+  display: none;
 }
 .stats {
   margin-top: auto;
@@ -304,4 +306,34 @@
 }
 .warmup .mono {
   color: var(--color-text);
+}
+
+/* Queue controls sit right under the mode cards and stay on screen while scrolling */
+.actionBar {
+  position: sticky;
+  top: 72px;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-1);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+}
+.actionBar .hint {
+  margin: 0;
+  flex: 1 1 240px;
+}
+.readOnly {
+  cursor: default;
+}
+.howTo {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
 }

@@ -11,6 +11,7 @@ import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendButton } from "@/components/friends/FriendButton";
 import { RatingChart } from "@/components/ui/RatingChart";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
+import { FormDots } from "@/components/ui/FormDots";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
@@ -253,24 +254,13 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
   );
 }
 
-const FORM: Record<MatchSummary["result"], { letter: string; word: string }> = {
-  win: { letter: "W", word: "win" },
-  loss: { letter: "L", word: "loss" },
-  abandoned: { letter: "A", word: "abandon" },
-};
-
 // Last five results, oldest on the left
 function RecentForm({ matches }: { matches: MatchSummary[] }) {
   const last = matches.slice(0, 5).reverse();
-  const label = `Recent form, oldest first: ${last.map((m) => FORM[m.result].word).join(", ")}`;
   return (
     <span className={styles.form}>
       <span className="eyebrow">Form</span>
-      <span className={styles.formDots} role="img" aria-label={label}>
-        {last.map((m) => (
-          <span key={m.matchId} className={styles.formDot} data-result={m.result} title={FORM[m.result].word} />
-        ))}
-      </span>
+      <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} />
     </span>
   );
 }

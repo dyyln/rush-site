@@ -2,15 +2,18 @@ import { randomBytes } from "node:crypto"
 import {
   StartServerRequestSchema,
   type ServerDriver,
+  type ServerLiveness,
   type StartServerRequest,
   type StartServerResponse,
 } from "@rushsite/shared"
 import {
   buildMatchJson,
+  buildModeCfg,
   buildServerCfg,
   consoleSwitchLines,
   dathostGameMode,
   isWorkshopId,
+  modeCfgPath,
   resolveCs2,
 } from "./cfg.js"
 import { DathostError } from "./errors.js"
@@ -163,7 +166,7 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
       log.info({ matchId: req.matchId, serverId: id, location }, "dathost clone created")
 
       try {
-        const workshop = isWorkshopId(req.map.workshopId)
+        const workshop = isWorkshopId(cs2.workshopId)
         await http.request("PUT", serverPath(id), {
           form: {
             name: `rushsite-${req.matchId}`,
@@ -180,19 +183,20 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
             "cs2_settings.slots": Math.min(64, Math.max(5, req.allowedSteamIds.length + 1)),
             "cs2_settings.maps_source": workshop ? "workshop_single_map" : "mapgroup",
             ...(workshop
-              ? { "cs2_settings.workshop_single_map_id": req.map.workshopId }
-              : { "cs2_settings.mapgroup_start_map": req.map.mapName ?? req.map.id }),
+              ? { "cs2_settings.workshop_single_map_id": cs2.workshopId }
+              : { "cs2_settings.mapgroup_start_map": cs2.mapName }),
           },
         })
 
         await upload(id, "cfg/match.json", JSON.stringify(buildMatchJson(req), null, 2), "application/json")
-        await upload(id, "cfg/server.cfg", buildServerCfg(req, cs2, baseCfg), "text/plain")
+        await upload(id, `cfg/${modeCfgPath(req.matchId)}`, buildModeCfg(cs2), "text/plain")
+        await upload(id, "cfg/server.cfg", buildServerCfg(req, baseCfg), "text/plain")
 
         await http.request("POST", `${serverPath(id)}/start`)
         let server = await waitUntilRunning(id)
 
         if (mode.needsConsoleSwitch) {
-          for (const line of consoleSwitchLines(req, cs2)) {
+          for (const line of consoleSwitchLines(cs2)) {
             await http.request("POST", `${serverPath(id)}/console`, { form: { line } })
           }
           server = await getServer(id)
@@ -228,6 +232,20 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
       await destroy(id)
       await store.delete(matchId)
       log.info({ matchId, serverId: id }, "dathost clone deleted")
+    },
+
+    // A clone we no longer track, a deleted clone or a stopped one counts as gone
+    async status(matchId: string): Promise<ServerLiveness> {
+      const id = await store.get(matchId)
+      if (!id) return "gone"
+      try {
+        const server = await getServer(id)
+        if (server.on || server.booting) return "alive"
+        return "gone"
+      } catch (err) {
+        if (err instanceof DathostError && err.status === 404) return "gone"
+        return "unknown"
+      }
     },
 
     async fetchDemo(matchId: string): Promise<Buffer | null> {

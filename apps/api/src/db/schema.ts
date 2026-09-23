@@ -352,6 +352,13 @@ export const ratingEvents = pgTable(
   ],
 )
 
+// Matches whose results were voided for a cheater. A second rollback skips them
+export const ratingRollbacks = pgTable("rating_rollbacks", {
+  matchId: uuid("match_id").primaryKey(),
+  cheaterSteamId: text("cheater_steam_id").notNull(),
+  rolledBackAt: ts("rolled_back_at").notNull(),
+})
+
 export const hosts = pgTable("hosts", {
   id: id(),
   name: text("name").notNull(),

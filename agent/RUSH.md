@@ -24,27 +24,16 @@ game/bin/linuxsteamrt64/cs2 -dedicated -console -port <slot> -maxplayers 7 \
   +game_type 0 +game_mode 6 \
   +map rush_001 \
   +sv_setsteamaccount <GSLT> +sv_password <password> \
-  +exec rushsite/matches/<matchId>/server.cfg
+  +exec rushsite/matches/<matchId>/server.cfg \
+  +exec rushsite/matches/<matchId>/mode.cfg
 ```
 
 - `+bot_quota 0` is needed because `gamemode_rush.cfg` sets `bot_quota 2` with `bot_quota_mode fill`. `server.cfg` and `rushsite_rush3v3.cfg` also set it and run `bot_kick`.
 - `+tv_enable 1` is needed so the plugin can `tv_record`. `gamemode_rush.cfg` leaves GOTV on and sets `tv_delay 105`. The agent sets a random `tv_password`, and the GOTV port is outside the firewall range, so nobody can ghost.
 - `-maxplayers 7` is 3v3 plus one spare slot. Valve's mode entry says 6.
-- `server.cfg` runs `exec rushsite/matches/<matchId>/rushsite_rush3v3.cfg`. That file only sets `bot_quota`, `bot_kick` and team balance. It must not touch the rules or Valve's warmup.
+- `mode.cfg` is a copy of `rushsite_rush3v3.cfg`, the `execCfg` in shared config. It only sets `bot_quota`, `bot_kick` and team balance. It must not touch the rules or Valve's warmup. Valve's own `gamemode_rush.cfg` is not ours to exec. The game runs it for `game_mode 6` on map load.
 
-If a value turns out wrong on a real box, override it without a rebuild by setting `RUSHSITE_MODES_FILE`:
-
-```json
-{
-  "rush3v3": {
-    "gameType": 0,
-    "gameMode": 6,
-    "extraArgs": ["+mapgroup", "mg_rush_001"]
-  }
-}
-```
-
-`extraArgs` go after `+game_mode` and before `+map`. Only use it if `+map rush_001` on its own does not pick up the mode.
+The launch values come from `MODE_CONFIGS.rush3v3.cs2` in `packages/shared`. If a value turns out wrong on a real box, change it there, run `pnpm -C packages/shared export:modes` and redeploy the API. For example, if `+map rush_001` on its own does not pick up the mode, add `extraArgs: ["+mapgroup", "mg_rush_001"]`. `extraArgs` go after `+game_mode` and before `+map`.
 
 ## Rules the server must leave alone
 

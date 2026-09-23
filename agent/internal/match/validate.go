@@ -28,63 +28,74 @@ var (
 	reArgValue = regexp.MustCompile(`^[A-Za-z0-9_.\-]{1,64}$`)
 )
 
-// applyCS2 lays the request's cs2 block over the table spec.
-// Extra args come from the API here, so each one must look like a flag or a plain value.
-func applyCS2(spec ModeSpec, o *CS2Settings) (ModeSpec, error) {
+// resolveCS2 turns the request's cs2 block into a launch spec.
+// The block comes from the API, so every field is checked and execCfg must be a cfg this agent has.
+func resolveCS2(rules ModeRules, req *StartRequest, cfgDir string) (ModeSpec, error) {
+	o := req.CS2
 	if o == nil {
-		return spec, nil
+		return ModeSpec{}, invalid("cs2 is required")
 	}
-	if o.GameType != nil {
-		if *o.GameType < 0 || *o.GameType > 100 {
-			return spec, invalid("cs2.gameType out of range")
-		}
-		spec.GameType = o.GameType
+	if o.GameType == nil || *o.GameType < 0 || *o.GameType > 100 {
+		return ModeSpec{}, invalid("cs2.gameType is missing or out of range")
 	}
-	if o.GameMode != nil {
-		if *o.GameMode < 0 || *o.GameMode > 100 {
-			return spec, invalid("cs2.gameMode out of range")
-		}
-		spec.GameMode = o.GameMode
+	if o.GameMode == nil || *o.GameMode < 0 || *o.GameMode > 100 {
+		return ModeSpec{}, invalid("cs2.gameMode is missing or out of range")
 	}
-	if o.ExecCfg != "" {
-		if !reCfgName.MatchString(o.ExecCfg) {
-			return spec, invalid("cs2.execCfg must be a plain file name ending in .cfg")
-		}
-		spec.ExecCfg = o.ExecCfg
+	if !reCfgName.MatchString(o.ExecCfg) {
+		return ModeSpec{}, invalid("cs2.execCfg must be a plain file name ending in .cfg")
 	}
-	if o.ExtraArgs != nil {
-		if len(o.ExtraArgs) > 16 {
-			return spec, invalid("cs2.extraArgs has too many entries")
-		}
-		for _, a := range o.ExtraArgs {
-			if !reArgFlag.MatchString(a) && !reArgValue.MatchString(a) {
-				return spec, invalid("cs2.extraArgs entry %q is not allowed", a)
-			}
-		}
-		spec.ExtraArgs = o.ExtraArgs
+	if !HasModeCfg(o.ExecCfg, cfgDir) {
+		return ModeSpec{}, invalid("no mode cfg named %s on this agent", o.ExecCfg)
 	}
-	return spec, nil
+	if len(o.ExtraArgs) > 16 {
+		return ModeSpec{}, invalid("cs2.extraArgs has too many entries")
+	}
+	for _, a := range o.ExtraArgs {
+		if !reArgFlag.MatchString(a) && !reArgValue.MatchString(a) {
+			return ModeSpec{}, invalid("cs2.extraArgs entry %q is not allowed", a)
+		}
+	}
+	if (o.WorkshopID == "") == (o.MapName == "") {
+		return ModeSpec{}, invalid("cs2 needs exactly one of workshopId or mapName")
+	}
+	if o.WorkshopID != "" {
+		if !reWorkshop.MatchString(o.WorkshopID) {
+			return ModeSpec{}, invalid("cs2.workshopId must be numeric")
+		}
+		if req.Map.WorkshopID != o.WorkshopID {
+			return ModeSpec{}, invalid("cs2.workshopId does not match map.workshopId")
+		}
+	} else {
+		if !reMapName.MatchString(o.MapName) {
+			return ModeSpec{}, invalid("cs2.mapName %q must be A-Z a-z 0-9 _", o.MapName)
+		}
+		if name, _ := LevelName(req.Map); req.Map.WorkshopID != "" || name != o.MapName {
+			return ModeSpec{}, invalid("cs2.mapName does not match map")
+		}
+	}
+	return ModeSpec{
+		ModeRules:  rules,
+		GameType:   *o.GameType,
+		GameMode:   *o.GameMode,
+		ExecCfg:    o.ExecCfg,
+		ExtraArgs:  o.ExtraArgs,
+		WorkshopID: o.WorkshopID,
+		MapName:    o.MapName,
+	}, nil
 }
 
 // ValidMatchID reports whether id is a UUID. Match ids end up in file paths so this is strict.
 func ValidMatchID(id string) bool { return reUUID.MatchString(id) }
 
-// Validate checks req against the mode table and returns the mode's spec.
-// A mode without game_type or game_mode returns an error wrapping ErrModeNotConfigured.
-func Validate(req *StartRequest, modes ModeTable) (ModeSpec, error) {
+// Validate checks req and returns the launch spec from its cs2 block.
+// cfgDir is the operator cfg dir that may add or replace mode cfgs, empty for embedded only.
+func Validate(req *StartRequest, modes ModeTable, cfgDir string) (ModeSpec, error) {
 	if !ValidMatchID(req.MatchID) {
 		return ModeSpec{}, invalid("matchId must be a UUID")
 	}
-	spec, ok := modes[req.Mode]
+	rules, ok := modes[req.Mode]
 	if !ok {
 		return ModeSpec{}, invalid("unknown mode %q", req.Mode)
-	}
-	spec, err := applyCS2(spec, req.CS2)
-	if err != nil {
-		return ModeSpec{}, err
-	}
-	if !spec.Configured() {
-		return ModeSpec{}, fmt.Errorf("%w: %s needs gameType and gameMode", ErrModeNotConfigured, req.Mode)
 	}
 	if req.Map.ID == "" {
 		return ModeSpec{}, invalid("map.id is required")
@@ -96,6 +107,10 @@ func Validate(req *StartRequest, modes ModeTable) (ModeSpec, error) {
 		if _, err := LevelName(req.Map); err != nil {
 			return ModeSpec{}, err
 		}
+	}
+	spec, err := resolveCS2(rules, req, cfgDir)
+	if err != nil {
+		return ModeSpec{}, err
 	}
 	if !reGSLT.MatchString(req.GSLT) {
 		return ModeSpec{}, invalid("gslt is malformed")

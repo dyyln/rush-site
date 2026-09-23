@@ -24,6 +24,21 @@ internal sealed class FakeGame : IGameServer
     public IReadOnlyList<(string SteamId, Side Side)> GetPlayerSides() => Sides.Select(kv => (kv.Key, kv.Value)).ToList();
     public void TryMovePlayer(string steamId, Side side) => Moves.Add((steamId, side));
     public string? DetectRushArena() => Arena;
+
+    public readonly List<(string SteamId, Side Side)> ForcedJoins = new();
+    public readonly List<(string SteamId, string Reason)> SteamKicks = new();
+    public readonly List<ConnectedPlayer> Connected = new();
+    public void ForceJoinTeam(string steamId, Side side) => ForcedJoins.Add((steamId, side));
+    public void KickPlayer(string steamId, string reason) => SteamKicks.Add((steamId, reason));
+    public IReadOnlyList<ConnectedPlayer> ConnectedPlayers() => Connected.ToList();
+}
+
+internal sealed class MemoryStateStore : RushsiteMatch.Core.State.IMatchStateStore
+{
+    public RushsiteMatch.Core.State.MatchState? State;
+    public int Saves;
+    public void Save(RushsiteMatch.Core.State.MatchState state) { State = state; Saves++; }
+    public RushsiteMatch.Core.State.MatchState? Load() => State;
 }
 
 internal sealed class FakeSink : IEventSink

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RushsiteMatch.Core.Config;
 using RushsiteMatch.Core.Demo;
 using RushsiteMatch.Core.Match;
+using RushsiteMatch.Core.State;
 using RushsiteMatch.Core.Webhooks;
 
 namespace RushsiteMatch;
@@ -30,7 +31,9 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<int> MatchEndWait = new("rushsite_match_end_wait", "Seconds to wait for cs_win_panel_match after the score decides the match.", 10);
     public FakeConVar<int> DemoStopExtra = new("rushsite_demo_stop_extra", "Seconds added to tv_delay before tv_stoprecord.", 5);
     public FakeConVar<bool> KickBots = new("rushsite_kick_bots", "Hold bot_quota at 0 and kick bots.", true);
-    public FakeConVar<bool> TryChangeTeam = new("rushsite_try_changeteam", "Aim modes. Also try ChangeTeam to put players on their side. Broken on CS2 1.41.8.2.", false);
+    public FakeConVar<bool> TryChangeTeam = new("rushsite_try_changeteam", "Also try ChangeTeam to put players on their side. Broken on CS2 1.41.8.2.", false);
+    public FakeConVar<int> TeamJoinRefusals = new("rushsite_team_refusals", "Rush. Wrong side joins before the player is kicked.", 3);
+    public FakeConVar<bool> HoldRushWarmup = new("rushsite_rush_hold_warmup", "Rush. Hold warmup until every player is in and on their side.", true);
     public FakeConVar<int> WebhookMaxAttempts = new("rushsite_webhook_max_attempts", "Delivery attempts per webhook event before it is dropped.", 10);
 
     private MatchController? _match;
@@ -38,10 +41,13 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     private HttpClientTransport? _transport;
     private CssGameServer? _game;
     private string? _loadError;
+    private bool _hotReload;
 
     public override void Load(bool hotReload)
     {
+        _hotReload = hotReload;
         _game = new CssGameServer(Logger, () => TryChangeTeam.Value);
+        WarnIfHotReloadEnabled();
 
         RegisterListener<Listeners.OnMapStart>(_ => AddTimer(1.0f, EnsureMatch, TimerFlags.STOP_ON_MAPCHANGE));
         RegisterListener<Listeners.OnClientAuthorized>(OnClientAuthorized);
@@ -72,6 +78,19 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         }, TimerFlags.REPEAT);
 
         if (hotReload) EnsureMatch();
+    }
+
+    private void WarnIfHotReloadEnabled()
+    {
+        try
+        {
+            if (CoreConfig.PluginHotReloadEnabled)
+                Logger.LogWarning("CounterStrikeSharp PluginHotReloadEnabled is true. Set it to false in configs/core.json on game hosts so a DLL copy cannot reload the plugin mid match.");
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning("could not read CounterStrikeSharp core config: {Message}", e.Message);
+        }
     }
 
     public override void Unload(bool hotReload)
@@ -136,17 +155,30 @@ public sealed class RushsiteMatchPlugin : BasePlugin
             PauseOnDisconnect = PauseOnDisconnect.Value,
             KickBots = KickBots.Value,
             TryChangeTeam = TryChangeTeam.Value,
+            TeamJoinRefusalsBeforeKick = Math.Max(1, TeamJoinRefusals.Value),
+            HoldRushWarmup = HoldRushWarmup.Value,
         };
         var uploader = new HttpDemoUploader(msg => Logger.LogInformation("{Message}", msg));
-        _match = new MatchController(cfg, settings, _game!, _webhooks, new SystemClock(), uploader);
-        _match.Start();
+        var store = new FileMatchStateStore(FileMatchStateStore.PathNextTo(path), msg => Logger.LogWarning("{Message}", msg));
+        var saved = store.Load();
+        _match = new MatchController(cfg, settings, _game!, _webhooks, new SystemClock(), uploader, store);
+        if (FileMatchStateStore.ShouldRestore(saved, cfg, _hotReload))
+        {
+            Logger.LogWarning("plugin reloaded during match {MatchId}. Restoring state from {Path}.", cfg.MatchId, store.Path);
+            _match.Restore(saved!);
+        }
+        else
+        {
+            _match.Start();
+        }
 
         // Players already on the server after a hot reload.
         foreach (var p in CssGameServer.HumanPlayers())
         {
             if (p.UserId is not int uid) continue;
-            _match.OnPlayerTeam(p.SteamID.ToString(), SideExtensions.FromTeamNum(p.TeamNum));
-            _match.OnPlayerConnected(p.SteamID.ToString(), uid);
+            var authorized = p.AuthorizedSteamID?.SteamId64.ToString();
+            if (authorized is not null) _match.OnPlayerTeam(authorized, SideExtensions.FromTeamNum(p.TeamNum));
+            _match.OnPlayerConnectFull(uid, authorized, p.SteamID.ToString());
         }
     }
 
@@ -171,6 +203,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         if (_match is null) return;
         var p = Utilities.GetPlayerFromSlot(slot);
         if (p is null || !p.IsValid || p.IsBot || p.IsHLTV || p.UserId is not int uid) return;
+        // Also counts a player who finished connecting before Steam confirmed them.
         _match.OnClientAuthorized(steamId.SteamId64.ToString(), uid);
     }
 
@@ -178,9 +211,8 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     {
         var p = ev.Userid;
         if (_match is null || p is null || !p.IsValid || p.IsBot || p.IsHLTV || p.UserId is not int uid) return HookResult.Continue;
-        var id = p.AuthorizedSteamID?.SteamId64.ToString();
-        // Unauthorized players are handled by OnClientAuthorized once Steam confirms them.
-        if (id is not null) _match.OnPlayerConnected(id, uid);
+        // Unauthorized players are counted by OnClientAuthorized once Steam confirms them.
+        _match.OnPlayerConnectFull(uid, p.AuthorizedSteamID?.SteamId64.ToString(), p.SteamID != 0 ? p.SteamID.ToString() : null);
         return HookResult.Continue;
     }
 
@@ -188,7 +220,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     {
         if (_match is null || ev.Userid is { IsBot: true }) return HookResult.Continue;
         var id = Sid(ev.Userid) ?? (ev.Xuid != 0 ? ev.Xuid.ToString() : null);
-        if (id is not null) _match.OnPlayerDisconnected(id);
+        if (id is not null) _match.OnPlayerDisconnected(id, ev.Userid?.UserId);
         return HookResult.Continue;
     }
 

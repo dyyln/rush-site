@@ -15,7 +15,7 @@ describe("split match tick", () => {
   let calls = 0
 
   beforeEach(async () => {
-    h = await createHarness({ rng: () => 0, env: { GSLT_TOKENS: "t1,t2,t3,t4,t5,t6,t7,t8" } })
+    h = await createHarness({ rng: () => 0, env: { GSLT_TOKENS: "GSLTTOKEN0001,GSLTTOKEN0002,GSLTTOKEN0003,GSLTTOKEN0004,GSLTTOKEN0005,GSLTTOKEN0006,GSLTTOKEN0007,GSLTTOKEN0008" } })
     h.agent.health_ = { ...h.agent.health_, slots: { total: 8, free: 8 } }
     await withServers(h)
     inFlight = 0
@@ -55,7 +55,7 @@ describe("split match tick", () => {
       mapId: "aim_map",
       maps: ["aim_map"],
       webhookSecret: "secret",
-      password: "pw",
+      password: "pw1234",
       allocationStartedAt: new Date(h.clock.now()),
       createdAt: new Date(h.clock.now()),
     })

@@ -10,10 +10,12 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 |---|---|---|
 | Whitelist kick, `sv_password` check | yes | yes |
 | `bot_quota 0` and `bot_kick`, re-checked every second | yes | yes |
-| Warmup hold, `!ready` and `!unready` | yes | no. Valve's script runs warmup |
-| Side validation on `jointeam` | yes | no |
+| Warmup hold, `!ready` and `!unready` | yes | warmup held until all six are in and on their side, no `!ready` |
+| Side validation on `jointeam` | yes, first team on a side claims it | yes, fixed from `match.json`. Wrong joins are redirected, repeated ones kicked |
 | Sets `mp_maxrounds`, clinch, overtime and halftime | yes | no. Never touches any `mp_` round convar |
 | Pause on disconnect | yes | no |
+| Late Steam authorization counted | yes | yes |
+| State restored after a plugin hot reload | yes | yes |
 | `tv_record` start | at match start | when all players are in, or when the match goes live |
 | round_end, match_end, stats, demo upload | yes | yes |
 | match_abandoned | yes | yes |
@@ -27,12 +29,15 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - Otherwise `teams[0]` goes CT and `teams[1]` goes T, matching `mp_teamname_1` and `mp_teamname_2`.
 - `!ready` works only when the player is on the right side. Changing side clears ready.
 - The match starts when everyone is connected and ready and the teams sit on opposite sides. It also starts `rushsite_ready_timeout` seconds after everyone connects, as long as the sides are valid.
-- On start the plugin runs these commands in order: `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 0`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`. With 31 max rounds and clinch on, first to 16 always finishes without overtime.
+- The mode cfg is exec'd again at match start because Valve's `gamemode_competitive.cfg` runs on map load after the agent's command line `+exec`. Without it aim plays with $800, buy zones and C4. It runs before `mp_warmup_pausetimer 0` (the cfg sets it to 1) and before `mp_warmup_end`, whose restart applies `mp_startmoney 16000`. Rush never runs it.
+- On start the plugin runs these commands in order: `exec rushsite/matches/<matchId>/mode.cfg` (written by both drivers), `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 0`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`. With 31 max rounds and clinch on, first to 16 always finishes without overtime.
 - The score is kept per config team, so a halftime swap is handled.
 
 ### Rush
 
-- Valve's `rush_001.js` owns warmup, teams, round time, max rounds and the match end. The plugin only watches game events.
+- Valve's `rush_001.js` owns round time, max rounds and the match end. The plugin never sets an `mp_` round convar.
+- Teams are fixed from `match.json`. See "Rush teams" below.
+- Warmup is held with `mp_warmup_pausetimer 1` until every player is connected and on their side. Then the plugin sets it to 0 and Valve's warmup timer runs out as normal. Turn this off with `rushsite_rush_hold_warmup 0`.
 - The match counts as live on the first of these:
   - `round_announce_match_start`
   - `begin_new_match`
@@ -48,6 +53,59 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - It is found at `round_freeze_end` by matching living T pawns, or `tspawn*` entities, to the nearest `t1room.<id>` target.
   - This field is not in CONTRACTS.md yet.
 
+## Rush teams
+
+The side each config team plays is fixed for the whole match:
+
+- `teams[0]` plays CT and `teams[1]` plays T.
+- A team may set `"side": "ct"` or `"side": "t"` in `match.json` to override this. Setting one side is enough, the other team gets the opposite. Two teams on the same side is a config error. This field is optional and not in CONTRACTS.md yet.
+- The mapping never changes from where players stand. `gamemode_rush.cfg` sets `mp_halftime 0`, so Rush never swaps sides. Round and match winners are credited from this mapping only.
+
+Enforcement, all through the `jointeam` listener and without `ChangeTeam`:
+
+- A match player may only join their team's side. Any other `jointeam`, spectator included, is blocked. The plugin tells the player their side and makes them run `jointeam <side>` on the next frame.
+- `jointeam 0` (auto select) is redirected the same way and never counts against the player.
+- After `rushsite_team_refusals` (default 3) wrong joins the player is kicked with "Your team plays CT in this match. Reconnect and join CT." They can reconnect. The disconnect grace applies.
+- If the game puts a player on the wrong side without a `jointeam`, for example auto assign, the plugin sends them back, at most 5 times per player. After that it logs that something else is assigning teams.
+- A side holds only its own team's players, so it never holds more than the team size. A join is refused when the side already has that many players who are not from the other team.
+- A player who is not connected, or connected but not on their side, counts as not ready. `rushsite_status` shows the lineup, the players on the wrong side and whether warmup is held. Wrong-side players are reminded every 15 seconds.
+- If Rush goes live anyway with players missing or off their side, the plugin logs it and scores by the config mapping.
+
+## Steam authorization
+
+A player counts as connected only once Steam has authorized their SteamID64. Both orders work:
+
+- Authorized before `player_connect_full`: counted at `player_connect_full`.
+- Authorized after `player_connect_full`: counted when `OnClientAuthorized` fires. A whitelisted player is counted and anyone else is kicked.
+- Every second the plugin also counts any authorized, fully connected player it has not counted yet, in case an event was missed.
+
+Abandon checks never list a match player who is on the server, authorized or not. A player waiting on Steam is logged once and left out of `missingSteamIds`. If they leave before authorizing, they count as missing again.
+
+## Plugin reload and match state
+
+The plugin writes `match_state.json` next to `match.json` on load, on every phase change and after every round. It holds the match id, phase, round, score per team, the Rush front slot and wins, whether the demo is recording, the last arena and player stats.
+
+When CounterStrikeSharp hot-reloads the plugin and `match_state.json` has the same `matchId` as `match.json`, the plugin restores that state instead of starting again:
+
+- No second `server_ready` or `match_started`. Warmup is not restarted.
+- Round numbers, scores and stats continue.
+- A match that was already decided ends on the score timer. A match that had ended stops and uploads its demo.
+- In aim warmup, ready state is lost and players type `!ready` again.
+
+On a normal server start the file is ignored and overwritten, because CS2 itself restarted and the old state no longer matches the game. Webhook events still queued in memory at the moment of the reload are lost.
+
+### Turn off hot reload on game hosts
+
+Restoring is a safety net. The real fix is to never reload the plugin during a match. CounterStrikeSharp reloads a plugin whenever its DLL changes on disk, and the install is shared by every server on the box. Turn that off in `game/csgo/addons/counterstrikesharp/configs/core.json`:
+
+```json
+{
+  "PluginHotReloadEnabled": false
+}
+```
+
+Keep the other keys in that file as they are. The plugin logs a warning at load when hot reload is on. With it off, plugin updates take effect when a server restarts, so ship them through the agent drain like CS2 updates.
+
 ## Team assignment and the current CounterStrikeSharp breakage
 
 On CS2 1.41.8.2 (build 2000913 and 2000914) the Linux vtable offsets moved:
@@ -59,7 +117,7 @@ On CS2 1.41.8.2 (build 2000913 and 2000914) the Linux vtable offsets moved:
 No CounterStrikeSharp release has the fix yet. PRs #1432 and #1433 are open. The plugin is built to live with this:
 
 - It never calls `Teleport` and uses no entity listeners.
-- It never depends on `ChangeTeam`. Players join with the vanilla team menu, and the plugin validates the join through a `jointeam` command listener.
+- It never depends on `ChangeTeam`. Players join with the vanilla team menu, and the plugin validates the join through a `jointeam` command listener. In Rush it also makes players run `jointeam` with `ExecuteClientCommandFromServer`, which is unverified on the current build.
 - `rushsite_try_changeteam 1` also calls `ChangeTeam` as a best effort once a fixed build ships. It is off by default.
 - Kicks use the `kickid` console command, not `Disconnect`.
 
@@ -67,7 +125,7 @@ The plugin cannot be tested end to end until a fixed CounterStrikeSharp build is
 
 ## Build
 
-Requires the .NET 8 SDK.
+Requires the .NET 8 SDK for the default build.
 
 ```sh
 cd plugin
@@ -75,15 +133,30 @@ dotnet build -c Release
 dotnet test
 ```
 
-The plugin references `CounterStrikeSharp.API` 1.0.368, the last NuGet build that targets net8.0. Starting with 1.0.370, CounterStrikeSharp targets net10.0 and ships a .NET 10 runtime. A net8.0 plugin loads in that host.
+The default build references `CounterStrikeSharp.API` 1.0.368, the last NuGet build that targets net8.0. Starting with 1.0.370, CounterStrikeSharp targets net10.0 and ships a .NET 10 runtime. Whether a net8.0 plugin loads and binds in that host has not been checked on a real server.
 
-Retarget plan: stay on net8.0 with 1.0.368 until a CounterStrikeSharp release ships the CS2 1.41.8.2 fixes from PR #1432 and #1433. Then do the following:
+### net10 and the latest CounterStrikeSharp
 
-1. Set `TargetFramework` to `net10.0` in all three projects.
-2. Bump `CounterStrikeSharp.API` to that release.
-3. Install the .NET 10 SDK.
-4. Rebuild and rerun the tests.
-5. Consider turning on `rushsite_try_changeteam`.
+The target lives in one place, `Directory.Build.props`:
+
+```xml
+<RushsiteRuntime Condition="'$(RushsiteRuntime)' == ''">net8</RushsiteRuntime>
+```
+
+Change `net8` to `net10` there, or pass it for one build:
+
+```sh
+dotnet build -c Release -p:RushsiteRuntime=net10
+dotnet test -p:RushsiteRuntime=net10
+```
+
+`net10` sets `TargetFramework` to `net10.0` for all three projects and references the newest `CounterStrikeSharp.API` 1.0.x on NuGet. It needs the .NET 10 SDK. To pin the build that is deployed, which is what production should do, add `-p:CounterStrikeSharpVersion=1.0.374` or set that property in `Directory.Build.props`. The output then lands in `bin/Release/net10.0/`.
+
+Switch once a CounterStrikeSharp release ships the CS2 1.41.8.2 fixes from PR #1432 and #1433, then:
+
+1. Rerun the tests on net10.
+2. Load the plugin on a test server and run `rushsite_status`.
+3. Consider turning on `rushsite_try_changeteam`.
 
 Layout:
 
@@ -119,6 +192,7 @@ Relative paths resolve against `game/csgo`. If `RUSHSITE_MATCH_ID` is set and di
 - Every team member must be in `allowedSteamIds`, and every allowed id must be on a team.
 - The ids must be SteamID64.
 - `winCondition` must fit the mode.
+- A team `side`, when set, must be `ct` or `t`, and the two teams must differ.
 
 The plugin retries the load every second until it succeeds, and `rushsite_reload` retries it on demand.
 
@@ -143,7 +217,9 @@ Launch the server with:
 | `rushsite_match_end_wait` | 10 | Seconds to wait for `cs_win_panel_match` after the score decides the match |
 | `rushsite_demo_stop_extra` | 5 | Seconds added to `tv_delay` before `tv_stoprecord` |
 | `rushsite_kick_bots` | 1 | Hold `bot_quota` at 0. `gamemode_rush.cfg` sets 2 |
-| `rushsite_try_changeteam` | 0 | Aim only. Also try `ChangeTeam`. Broken on the current CS2 build |
+| `rushsite_try_changeteam` | 0 | Also try `ChangeTeam` when a player must move. Broken on the current CS2 build |
+| `rushsite_team_refusals` | 3 | Rush only. Wrong side joins before the player is kicked |
+| `rushsite_rush_hold_warmup` | 1 | Rush only. Hold warmup until every player is in and on their side |
 | `rushsite_webhook_max_attempts` | 10 | Attempts per webhook event before it is dropped |
 
 The plugin sets these fake convars when it loads. To change them, use rcon or a cfg that is exec'd after the plugin loads. Durations are read when the match config loads.
@@ -216,7 +292,7 @@ Stats cover live rounds only:
 
 Also used:
 
-- The `OnClientAuthorized` listener, for the whitelist kick.
-- A `jointeam` command listener, for aim side validation.
+- The `OnClientAuthorized` listener, for the whitelist kick and for players authorized after they connect.
+- A `jointeam` command listener, for side validation in every mode.
 
 Valve added no game events for Rush. A tower capture fires no event, so the plugin does not report captures.

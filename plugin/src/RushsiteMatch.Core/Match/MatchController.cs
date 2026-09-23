@@ -1,5 +1,6 @@
 using RushsiteMatch.Core.Config;
 using RushsiteMatch.Core.Events;
+using RushsiteMatch.Core.State;
 using RushsiteMatch.Core.Stats;
 
 namespace RushsiteMatch.Core.Match;
@@ -19,8 +20,10 @@ public enum MatchPhase
 // Aim modes (first_to_N). The plugin manages the match. It holds warmup, runs !ready and !unready,
 // validates sides, sets mp_maxrounds and related convars, starts the match, pauses on disconnect.
 //
-// Rush (valve_rush). Valve's rush_001.js runs warmup, teams, round rules and the match end.
-// The plugin only observes and reports. It never touches mp_ round convars, warmup, pauses or teams.
+// Rush (valve_rush). Valve's rush_001.js runs round rules and the match end.
+// The plugin never touches mp_ round convars or pauses. It does hold each config team on its
+// configured side (teams[0] CT and teams[1] T by default) and holds warmup until all six are
+// in and on their side. Both are server fill, not rule changes.
 //
 // Both flows enforce the whitelist and password, record and upload the demo, track rounds and stats,
 // and emit round_end, match_end and match_abandoned.
@@ -34,6 +37,7 @@ public sealed class MatchController
     private readonly IEventSink _sink;
     private readonly IClock _clock;
     private readonly IDemoUploader _uploader;
+    private readonly IMatchStateStore? _store;
 
     private readonly PresenceTracker _presence;
     private readonly SideMap _sides;
@@ -54,6 +58,15 @@ public sealed class MatchController
     private DateTimeOffset? _endDeadline;
     private DateTimeOffset? _stopDemoAt;
     private DateTimeOffset _lastReminder;
+    private DateTimeOffset _lastLineupReminder = DateTimeOffset.MinValue;
+    private bool _warmupHeld;
+
+    // Fully connected players Steam has not authorized yet, by user id, with the id they claim.
+    private readonly Dictionary<int, string?> _awaitingAuth = new();
+    private readonly HashSet<string> _loggedOnServer = new();
+    private readonly Dictionary<string, int> _joinRefusals = new();
+    private readonly Dictionary<string, int> _forcedMoves = new();
+    public const int MaxForcedMovesPerPlayer = 5;
 
     public MatchController(
         MatchConfig cfg,
@@ -61,7 +74,8 @@ public sealed class MatchController
         IGameServer game,
         IEventSink sink,
         IClock clock,
-        IDemoUploader uploader)
+        IDemoUploader uploader,
+        IMatchStateStore? store = null)
     {
         _cfg = cfg;
         _settings = settings;
@@ -69,9 +83,10 @@ public sealed class MatchController
         _sink = sink;
         _clock = clock;
         _uploader = uploader;
+        _store = store;
 
         _presence = new PresenceTracker(cfg.AllowedSteamIds, clock.UtcNow);
-        _sides = new SideMap(cfg);
+        _sides = new SideMap(cfg, fixedFromConfig: !cfg.ParsedWinCondition.PluginManagesMatch);
         _stats = new StatsAggregator(cfg.AllowedSteamIds, cfg.TeamOf);
         _teamScore = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
 
@@ -107,9 +122,68 @@ public sealed class MatchController
             _game.ExecuteCommand("mp_warmup_start");
             _game.ExecuteCommand("mp_warmup_pausetimer 1");
         }
+        else
+        {
+            HoldRushWarmup();
+        }
         _game.Log($"match {_cfg.MatchId} mode {_cfg.Mode} win condition {_cfg.WinCondition}. " +
-                  (ManagesMatch ? "Plugin manages warmup and rounds." : "Observing Valve's Rush rules only."));
+                  (ManagesMatch ? "Plugin manages warmup and rounds." : "Valve's Rush rules. Plugin holds teams on their configured sides."));
         _sink.Enqueue(new ServerReady());
+        SaveState();
+    }
+
+    // Called instead of Start after a plugin reload when the saved state belongs to this match.
+    // server_ready is not sent again and warmup is not restarted.
+    public void Restore(MatchState st)
+    {
+        if (_started) return;
+        _started = true;
+        ApplyServerSetup();
+        Phase = Enum.TryParse<MatchPhase>(st.Phase, out var ph) ? ph : MatchPhase.Warmup;
+        _round = Math.Max(0, st.Round);
+        foreach (var t in _teamScore.Keys.ToList())
+            _teamScore[t] = st.Score.TryGetValue(t, out var v) ? v : 0;
+        _firstTo?.Restore(_teamScore);
+        if (_rush is not null)
+        {
+            Side? decided = st.RushDecided switch { "T" => Side.T, "CT" => Side.CT, _ => null };
+            _rush.Restore(st.RushFrontSlot ?? RushScoreTracker.StartSlot, st.RushTWins ?? 0, st.RushCtWins ?? 0,
+                st.RushRoundsPlayed ?? _round, decided);
+        }
+        _stats.Restore(st.Players);
+        _recording = st.Recording;
+        _currentArena = st.Arena;
+
+        switch (Phase)
+        {
+            case MatchPhase.Warmup:
+                if (ManagesMatch) _game.ExecuteCommand("mp_warmup_pausetimer 1");
+                else HoldRushWarmup();
+                break;
+            case MatchPhase.Live:
+                _ready?.Close();
+                var decidedNow = _firstTo?.DecidedWinner is not null || _rush?.DecidedWinner is not null;
+                if (decidedNow || _round >= _cfg.ParsedWinCondition.MaxRounds)
+                    _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
+                break;
+            case MatchPhase.Ended:
+            case MatchPhase.Abandoned:
+                _ready?.Close();
+                ScheduleDemoStop();
+                break;
+        }
+        _game.Log($"restored match {_cfg.MatchId} after a plugin reload. phase {Phase} round {_round} " +
+                  $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
+        if (Phase == MatchPhase.Warmup && ManagesMatch)
+            _game.PrintToAll($"{ChatPrefix} The match plugin reloaded. Type !ready again.");
+        SaveState();
+    }
+
+    private void HoldRushWarmup()
+    {
+        if (!_settings.HoldRushWarmup) return;
+        _game.ExecuteCommand("mp_warmup_pausetimer 1");
+        _warmupHeld = true;
     }
 
     public void OnMapStart()
@@ -153,8 +227,37 @@ public sealed class MatchController
         return false;
     }
 
-    // Returns false when the player was kicked.
+    // Steam confirmed the player's id. Returns false when the player was kicked.
+    // A player who already finished connecting is counted as connected now.
     public bool OnClientAuthorized(string steamId, int userId)
+    {
+        if (!CheckWhitelist(steamId, userId))
+        {
+            _awaitingAuth.Remove(userId);
+            return false;
+        }
+        if (_awaitingAuth.Remove(userId))
+        {
+            _game.Log($"{steamId} authorized after connecting. Counting them as connected.");
+            OnPlayerConnected(steamId, userId);
+        }
+        return true;
+    }
+
+    // player_connect_full. authorizedSteamId is null when Steam has not confirmed the player yet.
+    public void OnPlayerConnectFull(int userId, string? authorizedSteamId, string? claimedSteamId)
+    {
+        if (authorizedSteamId is not null)
+        {
+            _awaitingAuth.Remove(userId);
+            OnPlayerConnected(authorizedSteamId, userId);
+            return;
+        }
+        _awaitingAuth[userId] = claimedSteamId;
+        _game.Log($"user {userId} ({claimedSteamId ?? "unknown"}) is in but not authorized by Steam yet.");
+    }
+
+    private bool CheckWhitelist(string steamId, int userId)
     {
         if (_cfg.IsAllowed(steamId)) return true;
         _game.Log($"kicking {steamId}. Not on the match whitelist.");
@@ -162,9 +265,10 @@ public sealed class MatchController
         return false;
     }
 
+    // Call only with a Steam authorized id.
     public void OnPlayerConnected(string steamId, int userId)
     {
-        if (!OnClientAuthorized(steamId, userId)) return;
+        if (!CheckWhitelist(steamId, userId)) return;
         if (!_presence.Connect(steamId)) return;
         _sink.Enqueue(new PlayerConnected(steamId));
 
@@ -187,10 +291,14 @@ public sealed class MatchController
             if (required is not null && _settings.TryChangeTeam) _game.TryMovePlayer(steamId, required.Value);
             _game.PrintToPlayer(steamId, $"{ChatPrefix} Join your team's side then type !ready.");
         }
+        if (IsRush && Phase == MatchPhase.Warmup)
+            _game.PrintToPlayer(steamId, $"{ChatPrefix} Your team plays {SideName(RequiredRushSide(steamId))}.");
     }
 
-    public void OnPlayerDisconnected(string steamId)
+    public void OnPlayerDisconnected(string steamId, int? userId = null)
     {
+        if (userId is int uid) _awaitingAuth.Remove(uid);
+        foreach (var k in _awaitingAuth.Where(kv => kv.Value == steamId).Select(kv => kv.Key).ToList()) _awaitingAuth.Remove(k);
         _sides.RemovePlayer(steamId);
         if (!_presence.Disconnect(steamId, _clock.UtcNow)) return;
         _allConnectedSince = null;
@@ -215,12 +323,40 @@ public sealed class MatchController
             _ready.Drop(steamId);
             _game.PrintToPlayer(steamId, $"{ChatPrefix} You changed side so you are no longer ready.");
         }
+        // The game can place a player without a jointeam, for example auto assign. Send them to their side.
+        if (IsRush && EnforcesRushTeams && side.IsPlaying() && !_sides.IsOnRequiredSide(steamId))
+            RedirectToRequiredSide(steamId, "placed on the wrong side");
     }
 
-    // Aim modes block joins to the wrong side. Rush leaves team joins to the game.
+    private bool EnforcesRushTeams => Phase is MatchPhase.Warmup or MatchPhase.Live;
+
+    private Side RequiredRushSide(string steamId) => _sides.RequiredSide(steamId) ?? Side.None;
+
+    private void RedirectToRequiredSide(string steamId, string why)
+    {
+        var required = RequiredRushSide(steamId);
+        if (!required.IsPlaying()) return;
+        var moves = _forcedMoves.GetValueOrDefault(steamId);
+        if (moves >= MaxForcedMovesPerPlayer)
+        {
+            if (moves == MaxForcedMovesPerPlayer)
+                _game.Log($"{steamId} keeps landing off {required} ({why}). Stopped moving them. Something else is assigning teams.");
+            _forcedMoves[steamId] = moves + 1;
+            return;
+        }
+        _forcedMoves[steamId] = moves + 1;
+        _game.Log($"{steamId} {why}. Sending them to {required}.");
+        _game.ForceJoinTeam(steamId, required);
+        if (_settings.TryChangeTeam) _game.TryMovePlayer(steamId, required);
+    }
+
+    // Returns false to block the jointeam.
+    // Aim modes block joins to the wrong side. Rush allows only the configured side of the player's team,
+    // re-issues the right jointeam for them, and kicks after repeated wrong picks.
     public bool OnJoinTeamRequest(string steamId, Side requested)
     {
-        if (!ManagesMatch || !_cfg.IsAllowed(steamId)) return true;
+        if (!_cfg.IsAllowed(steamId)) return true;
+        if (IsRush) return OnRushJoinTeam(steamId, requested);
         if (Phase != MatchPhase.Warmup)
         {
             // Mid match a player may only return to the side the team is playing.
@@ -231,6 +367,63 @@ public sealed class MatchController
         _game.PrintToPlayer(steamId, $"{ChatPrefix} That side belongs to the other team. Join {_sides.RequiredSide(steamId)}.");
         return false;
     }
+
+    private bool OnRushJoinTeam(string steamId, Side requested)
+    {
+        if (!EnforcesRushTeams) return true;
+        var required = RequiredRushSide(steamId);
+        if (!required.IsPlaying()) return true;
+        if (requested == required)
+        {
+            if (!SideHasRoom(required, steamId))
+            {
+                _game.PrintToPlayer(steamId, $"{ChatPrefix} {SideName(required)} is full.");
+                return false;
+            }
+            return true;
+        }
+
+        // jointeam 0 is auto select. Not the player's fault, so it is not counted.
+        if (requested != Side.None)
+        {
+            var refusals = _joinRefusals.GetValueOrDefault(steamId) + 1;
+            _joinRefusals[steamId] = refusals;
+            if (refusals >= _settings.TeamJoinRefusalsBeforeKick)
+            {
+                _game.Log($"kicking {steamId} after {refusals} joins to the wrong side.");
+                _joinRefusals[steamId] = 0;
+                _game.KickPlayer(steamId,
+                    $"Your team plays {SideName(required)} in this match. Reconnect and join {SideName(required)}.");
+                return false;
+            }
+            _game.PrintToPlayer(steamId,
+                $"{ChatPrefix} Your team plays {SideName(required)} in this match. Moving you there.");
+        }
+        _game.ForceJoinTeam(steamId, required);
+        if (_settings.TryChangeTeam) _game.TryMovePlayer(steamId, required);
+        return false;
+    }
+
+    // Only the team's own players may stand on its side, and never more than the team size.
+    private bool SideHasRoom(Side side, string joiner)
+    {
+        var team = _cfg.TeamOf(joiner);
+        var size = _cfg.Teams.First(t => t.Name == team).SteamIds.Count;
+        // Players of the other team on this side are being sent back, so they do not take a slot.
+        var others = _game.GetPlayerSides().Count(p =>
+            p.Side == side && p.SteamId != joiner && (_cfg.TeamOf(p.SteamId) is null || _cfg.TeamOf(p.SteamId) == team));
+        return others < size;
+    }
+
+    private static string SideName(Side s) => s == Side.CT ? "CT" : s == Side.T ? "T" : s.ToString();
+
+    // Rush. Players who are not in or not on their side. They count as not ready.
+    public IReadOnlyList<string> RushNotReady() =>
+        _cfg.AllowedSteamIds.Where(id => !_presence.IsConnected(id) || !_sides.IsOnRequiredSide(id)).ToList();
+
+    // Rush. Connected players standing anywhere but their configured side.
+    public IReadOnlyList<string> WrongSidePlayers() =>
+        _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)).ToList();
 
     public string OnReady(string steamId)
     {
@@ -287,6 +480,8 @@ public sealed class MatchController
         var wc = _cfg.ParsedWinCondition;
         _ready!.Close();
         _game.Log($"starting match. {why}.");
+        // Runs first. The cfg sets pausetimer 1 and its startmoney only applies on the warmup end restart.
+        _game.ExecuteCommand($"exec rushsite/matches/{_cfg.MatchId}/mode.cfg");
         _game.ExecuteCommand($"mp_maxrounds {wc.MaxRounds}");
         _game.ExecuteCommand("mp_match_can_clinch 1");
         _game.ExecuteCommand("mp_overtime_enable 0");
@@ -303,6 +498,11 @@ public sealed class MatchController
     public void OnRushMatchLive()
     {
         if (!IsRush || Phase != MatchPhase.Warmup) return;
+        RefreshAllSides();
+        var notReady = RushNotReady();
+        if (notReady.Count > 0)
+            _game.Log($"Rush went live with players missing or off their side: {string.Join(",", notReady)}.");
+        _warmupHeld = false;
         StartRecording();
         GoLive();
     }
@@ -314,6 +514,7 @@ public sealed class MatchController
         _round = 0;
         _betweenRounds = false;
         _sink.Enqueue(new MatchStarted());
+        SaveState();
     }
 
     private void StartRecording()
@@ -361,6 +562,13 @@ public sealed class MatchController
             if (side is not null) decided = _sides.TeamOnSide(side.Value) ?? LeadingTeam();
         }
 
+        if (IsRush)
+        {
+            var wrong = WrongSidePlayers();
+            if (wrong.Count > 0)
+                _game.Log($"round {_round}: players off their configured side: {string.Join(",", wrong)}. Score follows the config sides.");
+        }
+
         var label = winnerTeam ?? (winner.IsPlaying() ? "unknown_" + winner : MatchEventJson.Draw);
         _sink.Enqueue(new RoundEnd(_round, label, new Dictionary<string, int>(_teamScore))
         {
@@ -373,6 +581,7 @@ public sealed class MatchController
             // Give cs_win_panel_match a chance to arrive first. It is the preferred end signal.
             _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
         }
+        SaveState();
     }
 
     public void OnWinPanelMatch()
@@ -420,7 +629,9 @@ public sealed class MatchController
         {
             case MatchPhase.Warmup:
             case MatchPhase.Live:
+                SyncConnectedPlayers();
                 if (CheckAbandon(now)) return;
+                if (Phase == MatchPhase.Warmup && IsRush) TickRushWarmup(now);
                 if (Phase == MatchPhase.Warmup) TickWarmup(now);
                 if (Phase == MatchPhase.Live && _endDeadline is not null && now >= _endDeadline)
                     FinishMatch("score tracking");
@@ -446,19 +657,76 @@ public sealed class MatchController
         }
     }
 
+    // Catches authorized players whose connect or authorize event was missed or arrived out of order.
+    private void SyncConnectedPlayers()
+    {
+        foreach (var p in _game.ConnectedPlayers())
+        {
+            if (!p.Authorized || _presence.IsConnected(p.SteamId)) continue;
+            _awaitingAuth.Remove(p.UserId);
+            OnPlayerConnected(p.SteamId, p.UserId);
+        }
+    }
+
+    // Match players who are on the server but not counted yet, usually because Steam has not authorized them.
+    // They are never treated as missing.
+    private HashSet<string> OnServerNotCounted()
+    {
+        var ids = new HashSet<string>();
+        foreach (var claimed in _awaitingAuth.Values)
+            if (claimed is not null) ids.Add(claimed);
+        foreach (var p in _game.ConnectedPlayers()) ids.Add(p.SteamId);
+        ids.RemoveWhere(id => !_cfg.IsAllowed(id) || _presence.IsConnected(id));
+        return ids;
+    }
+
+    private void TickRushWarmup(DateTimeOffset now)
+    {
+        RefreshAllSides();
+        var notReady = RushNotReady();
+        if (_settings.HoldRushWarmup)
+        {
+            if (notReady.Count > 0 && (!_warmupHeld || _game.GetConVar("mp_warmup_pausetimer") == "0"))
+            {
+                HoldRushWarmup();
+            }
+            else if (notReady.Count == 0 && _warmupHeld)
+            {
+                _warmupHeld = false;
+                _game.ExecuteCommand("mp_warmup_pausetimer 0");
+                _game.PrintToAll($"{ChatPrefix} All players are in and on their side. Warmup continues.");
+            }
+        }
+        var wrong = WrongSidePlayers();
+        if (wrong.Count > 0 && now - _lastLineupReminder >= TimeSpan.FromSeconds(15))
+        {
+            _lastLineupReminder = now;
+            foreach (var id in wrong)
+            {
+                _game.PrintToPlayer(id, $"{ChatPrefix} You are not ready. Your team plays {SideName(RequiredRushSide(id))}.");
+                RedirectToRequiredSide(id, "is off their side in warmup");
+            }
+        }
+    }
+
     private bool CheckAbandon(DateTimeOffset now)
     {
-        var noShows = _presence.NoShows(now, _settings.ConnectGrace);
-        var departed = _presence.Departed(now, _settings.DisconnectGrace);
+        var onServer = OnServerNotCounted();
+        var noShows = _presence.NoShows(now, _settings.ConnectGrace).Where(id => !onServer.Contains(id)).ToList();
+        var departed = _presence.Departed(now, _settings.DisconnectGrace).Where(id => !onServer.Contains(id)).ToList();
+        foreach (var id in onServer)
+            if (_loggedOnServer.Add(id))
+                _game.Log($"{id} is on the server but not authorized yet. Not counted as missing.");
         if (noShows.Count == 0 && departed.Count == 0) return false;
 
         var reason = noShows.Count > 0 ? "no_show" : "disconnected";
-        var missing = _presence.Missing;
+        var missing = _presence.Missing.Where(id => !onServer.Contains(id)).ToList();
         _game.Log($"abandoning match. {reason}: {string.Join(",", missing)}");
         _game.PrintToAll($"{ChatPrefix} Match abandoned. A player did not connect or return in time.");
         Phase = MatchPhase.Abandoned;
         if (ManagesMatch) _game.ExecuteCommand("mp_pause_match");
         _sink.Enqueue(new MatchAbandoned(reason, missing));
+        SaveState();
 
         // Keep the partial demo for review. demo_uploaded reports it.
         ScheduleDemoStop();
@@ -477,6 +745,7 @@ public sealed class MatchController
         // Results go out now. The demo follows in its own demo_uploaded event.
         _sink.Enqueue(new MatchEnd(winner, new Dictionary<string, int>(_teamScore), _stats.Snapshot(), false));
         ScheduleDemoStop();
+        SaveState();
     }
 
     // tv_record writes the delayed GOTV stream so keep recording through tv_delay before stopping.
@@ -493,6 +762,7 @@ public sealed class MatchController
         _stopDemoAt = null;
         _game.ExecuteCommand("tv_stoprecord");
         _recording = false;
+        SaveState();
         UploadTask = UploadAndReportAsync();
     }
 
@@ -525,6 +795,32 @@ public sealed class MatchController
             if (_cfg.IsAllowed(id) && side.IsPlaying()) _sides.SetPlayerSide(id, side);
     }
 
+    // Rush lineup checks need every player's side, including spectators and unassigned.
+    private void RefreshAllSides()
+    {
+        foreach (var (id, side) in _game.GetPlayerSides())
+            if (_cfg.IsAllowed(id)) _sides.SetPlayerSide(id, side);
+    }
+
+    public MatchState Snapshot() => new()
+    {
+        MatchId = _cfg.MatchId,
+        Phase = Phase.ToString(),
+        Round = _round,
+        Score = new Dictionary<string, int>(_teamScore),
+        Recording = _recording,
+        Arena = _currentArena,
+        RushFrontSlot = _rush?.FrontSlot,
+        RushTWins = _rush?.Wins[Side.T],
+        RushCtWins = _rush?.Wins[Side.CT],
+        RushRoundsPlayed = _rush?.RoundsPlayed,
+        RushDecided = _rush?.DecidedWinner?.ToString(),
+        Players = _stats.Snapshot().ToList(),
+        SavedAt = _clock.UtcNow,
+    };
+
+    private void SaveState() => _store?.Save(Snapshot());
+
     private string? LeadingTeam()
     {
         var ordered = _teamScore.OrderByDescending(kv => kv.Value).ToList();
@@ -541,6 +837,8 @@ public sealed class MatchController
         return $"match {_cfg.MatchId} mode {_cfg.Mode} phase {Phase} round {_round} " +
                $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))} " +
                $"connected {_cfg.AllowedSteamIds.Count - _presence.Missing.Count}/{_cfg.AllowedSteamIds.Count} ready {ready} " +
-               $"recording {_recording}" + (IsRush ? $" arena {_currentArena ?? "?"} front {_rush!.FrontSlot}" : "");
+               $"recording {_recording}" + (IsRush ? $" arena {_currentArena ?? "?"} front {_rush!.FrontSlot} " +
+               $"lineup {_cfg.AllowedSteamIds.Count - RushNotReady().Count}/{_cfg.AllowedSteamIds.Count} " +
+               $"wrong side [{string.Join(",", WrongSidePlayers())}] warmup held {_warmupHeld}" : "");
     }
 }

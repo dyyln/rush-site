@@ -17,6 +17,17 @@ public interface IGameServer
     // Best effort. ChangeTeam is a no-op on some CS2 builds so nothing may rely on it.
     void TryMovePlayer(string steamId, Side side);
 
+    // Makes the player issue jointeam for this side, as if they had picked it in the team menu.
+    // Must not run inside the jointeam listener that asked for it. The adapter defers it one frame.
+    void ForceJoinTeam(string steamId, Side side);
+
+    // Kicks a player on the server by SteamID64. Does nothing when the player is not found.
+    void KickPlayer(string steamId, string reason);
+
+    // Humans fully connected right now. Authorized is false until Steam has confirmed the id.
+    // SteamId is the id the client claims, which is only trusted once Authorized is true.
+    IReadOnlyList<ConnectedPlayer> ConnectedPlayers();
+
     // Rush only. Room id of the current round or null.
     string? DetectRushArena();
 }
@@ -30,6 +41,8 @@ public sealed record DeathInfo(
     bool Headshot,
     int Penetrated,
     int Tick);
+
+public sealed record ConnectedPlayer(string SteamId, int UserId, bool Authorized);
 
 public interface IClock
 {
@@ -63,4 +76,8 @@ public sealed class MatchSettings
     public bool PauseOnDisconnect { get; init; } = true;
     public bool KickBots { get; init; } = true;
     public bool TryChangeTeam { get; init; }
+    // Rush. Wrong team joins a player may make before being kicked.
+    public int TeamJoinRefusalsBeforeKick { get; init; } = 3;
+    // Rush. Hold warmup with mp_warmup_pausetimer until every player is in and on their side.
+    public bool HoldRushWarmup { get; init; } = true;
 }

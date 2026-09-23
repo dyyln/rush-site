@@ -36,20 +36,24 @@ await driver.stop(matchId)                            // stops and deletes the c
 - `DathostServerStore` `{ get, set, delete, count? }` maps matchId to the DatHost server id. `createMemoryServerStore()` is the default.
   The api can implement it over `matches.driver_ref`. `count()` feeds `capacity()`.
 - `DathostError` with `status` (0 for network or boot timeout), `body`, `method`, `path`. `isDathostError()`.
-- Helpers: `buildMatchJson`, `buildServerCfg`, `dathostGameMode`, `consoleSwitchLines`, `resolveLocation`.
+- Helpers: `buildMatchJson`, `buildServerCfg`, `buildModeCfg`, `modeCfgPath`, `dathostGameMode`, `consoleSwitchLines`, `resolveLocation`.
 
 ## What `start(req)` does
 
-1. Validates `req` with `StartServerRequestSchema`. Uses `req.cs2`, falling back to `MODE_CONFIGS[req.mode].cs2`.
+1. Validates `req` with `StartServerRequestSchema`. Launches only from `req.cs2`, the block `resolveLaunch` builds from `MODE_CONFIGS`. There is no fallback table.
 2. `POST /game-servers/{template}/duplicate` with `location`. The clone id goes into the store straight away.
 3. `PUT /game-servers/{clone}` with name, `user_data=matchId`, `deletion_protection=false`, `autostop` as a safety net,
    `cs2_settings.password`, a fresh `rcon`, the GSLT, `enable_gotv`, `enable_metamod`, `slots` (players + 1, min 5),
-   `game_mode` and the map (`workshop_single_map` when the map has a numeric workshop id, otherwise `mapgroup_start_map`).
-4. Uploads `cfg/match.json` (the `PluginMatchConfig` shape) and `cfg/server.cfg` (`exec rushsite_base.cfg`, `sv_password`,
-   team names, `tv_enable 1`, `exec <execCfg>`). The plugin already falls back to `cfg/match.json` when `RUSHSITE_MATCH_JSON` is unset.
+   `game_mode` and the map (`workshop_single_map` when `cs2.workshopId` is set, otherwise `mapgroup_start_map` with `cs2.mapName`).
+4. Uploads `cfg/match.json` (the `PluginMatchConfig` shape), `cfg/rushsite/matches/<matchId>/mode.cfg` (`exec <execCfg>`) and
+   `cfg/server.cfg` (`exec rushsite_base.cfg`, `sv_password`, team names, `tv_enable 1`, `exec rushsite/matches/<matchId>/mode.cfg`).
+   The mode.cfg path is the same as on the Hetzner agent, so the plugin re-execs it at match start the same way.
+   The template must ship the agent's cfgs from `agent/internal/match/cfgs/` in its `cfg/` dir. That DatHost's file upload
+   creates the nested dir is not yet checked against the real API.
+   The plugin already falls back to `cfg/match.json` when `RUSHSITE_MATCH_JSON` is unset.
 5. `POST /start`, then polls `GET /game-servers/{clone}` until `on && !booting`.
 6. If the mode has no DatHost preset (Rush is 0/6) the server is booted as `custom`, then the driver sends
-   `game_type 0`, `game_mode 6`, `changelevel rush_001` through the console endpoint.
+   `game_type`, `game_mode` and `changelevel <mapName>` (or `host_workshop_map <id>`) from `cs2` through the console endpoint.
 7. Returns `{ matchId, ip: raw_ip || ip, port: ports.game, connect: "connect ip:port; password X" }`.
 
 Any failure after the clone exists stops and deletes the clone, clears the mapping and rethrows.
@@ -107,8 +111,9 @@ so the api must call `fetchDemo` before `stop`.
    the current CS2 version, see the CounterStrikeSharp note in CLAUDE.md.
 4. Upload our plugin build from `plugin/` to `addons/counterstrikesharp/plugins/RushsiteMatch/`.
 5. Upload `cfg/rushsite_base.cfg` with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
-   `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload the mode cfgs
-   `cfg/rushsite_aim1v1.cfg` and `cfg/rushsite_aim2v2.cfg`. `gamemode_rush.cfg` is Valve's.
+   `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload every mode cfg
+   from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`) to `cfg/`.
+   `gamemode_rush.cfg` is Valve's and the game runs it by itself.
 6. Start the template, join it, check the plugin loads (`css_plugins list` in the console), and do the Rush check at the top of this README.
 7. Stop the template (this refreshes the duplicate cache) or call `POST /game-servers/{id}/sync-files`.
 8. Copy the server id from the control panel URL or `GET /game-servers` into `DATHOST_TEMPLATE_SERVER_ID`.

@@ -99,6 +99,13 @@
       "when": 1790177632479,
       "tag": "0013_review_reopen",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790180369928,
+      "tag": "0014_rating_rollbacks",
+      "breakpoints": true
     }
   ]
 }

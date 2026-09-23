@@ -236,3 +236,22 @@
 .live li > .liveRow {
   flex: 1;
 }
+
+.hero {
+  padding-top: var(--space-8);
+  max-width: 760px;
+}
+.heroTitle {
+  font-size: var(--text-3xl);
+}
+.lede {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+.notice {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+.notice a {
+  color: var(--color-text);
+}

@@ -18,7 +18,8 @@
     "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "export:modes": "tsc -p tsconfig.build.json && node scripts/export-modes.mjs"
   },
   "dependencies": {
     "zod": "^4.6.5"

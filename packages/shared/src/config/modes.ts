@@ -1,15 +1,17 @@
-import { ModeConfigSchema, type MapEntry, type Mode, type ModeConfig } from "../schemas/mode.js"
+import { Cs2StartSchema, ModeConfigSchema, type Cs2Start, type MapEntry, type Mode, type ModeConfig } from "../schemas/mode.js"
 
 // Marks values that must be filled in before a mode can go live
 export const TODO = "TODO"
 
+// Workshop ids and sources are in maps.md
 export const AIM_MAPS: readonly MapEntry[] = [
-  { id: "aim_map", displayName: "aim_map", mapName: "aim_map", workshopId: TODO },
-  { id: "aim_redline", displayName: "aim_redline", mapName: "aim_redline", workshopId: TODO },
-  { id: "aim_ag_texture2", displayName: "aim_ag_texture2", mapName: "aim_ag_texture2", workshopId: TODO },
-  { id: "aim_usp", displayName: "aim_usp", mapName: "aim_usp", workshopId: TODO },
-  { id: "aim_deagle7k", displayName: "aim_deagle7k", mapName: "aim_deagle7k", workshopId: TODO },
-  { id: "awp_india", displayName: "awp_india", mapName: "awp_india", workshopId: TODO },
+  { id: "aim_map", displayName: "Aim Map", mapName: "aim_map", workshopId: "3084291314" },
+  { id: "aim_redline", displayName: "Redline", mapName: "aim_redline", workshopId: "3199551320" },
+  { id: "aim_ag_texture2", displayName: "AG Texture 2", mapName: "aim_ag_texture2", workshopId: "3074961197" },
+  { id: "aim_usp", displayName: "USP", mapName: "aim_usp", workshopId: "3299812021" },
+  // aim_deagle7k has no CS2 upload. The slot keeps its id and plays aim_deagle
+  { id: "aim_deagle7k", displayName: "Deagle", mapName: "aim_deagle", workshopId: "3075996446" },
+  { id: "awp_india", displayName: "AWP India", mapName: "awp_india", workshopId: "3070290869" },
 ]
 
 // Rush runs on one map. Arenas are rooms inside it drawn by the map script at load
@@ -85,7 +87,7 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     maps: [...AIM_MAPS],
     vetoFormat: "bo1-ban",
     winCondition: "first_to_16",
-    cs2: { gameType: 0, gameMode: 1, workshopCollection: TODO, execCfg: "rushsite_aim1v1.cfg" },
+    cs2: { gameType: 0, gameMode: 1, execCfg: "rushsite_aim1v1.cfg" },
   },
   aim2v2: {
     mode: "aim2v2",
@@ -93,7 +95,7 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     maps: [...AIM_MAPS],
     vetoFormat: "bo1-ban",
     winCondition: "first_to_16",
-    cs2: { gameType: 0, gameMode: 1, workshopCollection: TODO, execCfg: "rushsite_aim2v2.cfg" },
+    cs2: { gameType: 0, gameMode: 1, execCfg: "rushsite_aim2v2.cfg" },
   },
   rush3v3: {
     mode: "rush3v3",
@@ -101,7 +103,8 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     maps: [RUSH_MAP],
     vetoFormat: "none",
     winCondition: "valve_rush",
-    cs2: { gameType: 0, gameMode: 6, execCfg: "gamemode_rush.cfg" },
+    // The game runs Valve's gamemode_rush.cfg for game_mode 6 on map load. Ours must not touch the rules
+    cs2: { gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg" },
   },
 }
 
@@ -121,13 +124,24 @@ export function allowedModesForParty(partySize: number): Mode[] {
   return (Object.keys(MODE_CONFIGS) as Mode[]).filter((m) => MODE_CONFIGS[m].teamSize >= partySize)
 }
 
+// The cs2 block of a StartServerRequest. A workshop id wins over a map name
+export function resolveLaunch(mode: Mode, map: MapEntry): Cs2Start {
+  const cs2 = MODE_CONFIGS[mode].cs2
+  const target = map.workshopId ? { workshopId: map.workshopId } : { mapName: map.mapName ?? map.id }
+  return Cs2StartSchema.parse({ ...cs2, ...(cs2.extraArgs ? { extraArgs: [...cs2.extraArgs] } : {}), ...target })
+}
+
+// Every cfg name the agent must ship
+export function agentExecCfgs(): string[] {
+  return [...new Set(Object.values(MODE_CONFIGS).map((c) => c.cs2.execCfg))].sort()
+}
+
 // Lists placeholder values that still block a mode from going live
 export function unresolvedConfig(mode: Mode): string[] {
   const cfg = MODE_CONFIGS[mode]
   const issues: string[] = []
   if (cfg.cs2.gameType < 0) issues.push("cs2.gameType")
   if (cfg.cs2.gameMode < 0) issues.push("cs2.gameMode")
-  if (cfg.cs2.workshopCollection?.includes(TODO)) issues.push("cs2.workshopCollection")
   for (const m of cfg.maps) {
     if (m.id.includes(TODO)) issues.push(`maps.${m.id}.id`)
     if (m.workshopId?.includes(TODO)) issues.push(`maps.${m.id}.workshopId`)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import type { MatchKill, MatchRound } from "@/lib/types";
@@ -27,20 +27,50 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
   const [all, setAll] = useState(false);
   const panelId = useId();
   const listRef = useRef<HTMLOListElement>(null);
+  // Caret position in px from the list's left edge. Null hides it when the round is scrolled away
+  const [caret, setCaret] = useState<number | null>(null);
+  const openIdx = open === null ? -1 : rounds.findIndex((r) => r.round === open);
+
+  const placeCaret = useCallback(() => {
+    const list = listRef.current;
+    const btn = openIdx >= 0 ? list?.querySelectorAll<HTMLButtonElement>("button")[openIdx] : undefined;
+    if (!list || !btn) {
+      setCaret(null);
+      return;
+    }
+    const l = list.getBoundingClientRect();
+    const b = btn.getBoundingClientRect();
+    const x = b.left + b.width / 2 - l.left;
+    setCaret(x < 0 || x > l.width ? null : x);
+  }, [openIdx]);
+
+  useLayoutEffect(placeCaret, [placeCaret, rounds.length]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    list.addEventListener("scroll", placeCaret, { passive: true });
+    window.addEventListener("resize", placeCaret);
+    return () => {
+      list.removeEventListener("scroll", placeCaret);
+      window.removeEventListener("resize", placeCaret);
+    };
+  }, [placeCaret, rounds.length === 0]);
 
   if (rounds.length === 0) return <p className="muted">No rounds yet.</p>;
 
   const sideOf = (team: string): TeamSide => (team === teamA ? sideA : sideA === "own" ? "enemy" : "own");
   const scoreOf = (r: MatchRound) => `${r.score[teamA] ?? 0}:${r.score[teamB] ?? 0}`;
   const killsOf = (round: number) => kills?.filter((k) => k.round === round) ?? [];
-  const openIndex = open === null ? -1 : rounds.findIndex((r) => r.round === open);
+  const openIndex = openIdx;
   const current = openIndex >= 0 ? rounds[openIndex] : undefined;
 
   const select = (i: number, focus = false) => {
     const r = rounds[Math.max(0, Math.min(rounds.length - 1, i))];
     if (!r) return;
     setOpen(r.round);
-    if (focus) listRef.current?.querySelectorAll<HTMLButtonElement>("button")[rounds.indexOf(r)]?.focus();
+    const btn = listRef.current?.querySelectorAll<HTMLButtonElement>("button")[rounds.indexOf(r)];
+    btn?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (focus) btn?.focus();
   };
 
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
@@ -121,11 +151,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
       <div id={panelId} className={styles.panelWrap}>
         {current && (
           <div className={styles.panel} role="region" aria-label={`Round ${current.round}`}>
-            <span
-              className={styles.caret}
-              style={{ left: `${((openIndex + 0.5) / rounds.length) * 100}%` }}
-              aria-hidden="true"
-            />
+            {caret !== null && <span className={styles.caret} style={{ left: `${caret}px` }} aria-hidden="true" />}
             <div className={styles.panelHead}>
               <RoundTitle r={current} side={sideOf(current.winnerTeam)} score={scoreOf(current)} rush={rush} />
               <div className={styles.nav}>

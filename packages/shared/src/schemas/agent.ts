@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { SteamId64Schema, UuidSchema } from "./common.js"
-import { Cs2LaunchSchema, MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
+import { Cs2StartSchema, MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
 
 export const TeamRosterSchema = z.object({
   // Team id used in results, such as A or B
@@ -29,8 +29,8 @@ export const StartServerRequestSchema = z.object({
   webhookUrl: z.url(),
   webhookSecret: z.string().min(16),
   demoUpload: DemoUploadSchema,
-  // Copied from the mode config
-  cs2: Cs2LaunchSchema.optional(),
+  // Built by resolveLaunch from the mode config and map. Drivers launch from this block only
+  cs2: Cs2StartSchema,
 })
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 

@@ -185,26 +185,6 @@
   gap: var(--space-2);
   min-width: 0;
 }
-.formDots {
-  display: inline-flex;
-  gap: 6px;
-}
-.formDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-surface-3);
-}
-.formDot[data-result="win"] {
-  background: var(--color-win);
-}
-.formDot[data-result="loss"] {
-  background: var(--color-loss);
-}
-.formDot[data-result="abandoned"] {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--color-warn);
-}
 .favouriteIcon {
   flex: none;
   color: var(--color-accent);

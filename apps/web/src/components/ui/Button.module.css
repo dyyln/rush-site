@@ -24,6 +24,14 @@
   cursor: not-allowed;
   opacity: 0.5;
 }
+/* Disabled filled buttons turn neutral grey so they never read as live. Busy ones keep their colour */
+.primary:disabled:not([aria-busy]),
+.secondary:disabled:not([aria-busy]) {
+  opacity: 1;
+  background: var(--color-disabled-surface);
+  border-color: var(--color-disabled-border);
+  color: var(--color-disabled-text);
+}
 
 .lg {
   min-height: 56px;
@@ -47,7 +55,7 @@
 
 .secondary {
   background: var(--color-surface-2);
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control);
   color: var(--color-text);
 }
 .secondary:hover:not(:disabled) {

@@ -1,6 +1,7 @@
-import type { ServerDriver, StartServerRequest } from "@rushsite/shared"
+import { MODE_CONFIGS, MODES, resolveLaunch, type ServerDriver, type StartServerRequest } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { validateLikeAgent } from "../../../test/agent-contract.js"
 import { createHarness, finishVeto, makeUsers, type Harness } from "../../../test/helpers.js"
 import { matches } from "../../db/schema.js"
 import { matchmakeAll } from "../queue/loop.js"
@@ -37,7 +38,7 @@ describe("allocator drivers", () => {
     h = await createHarness({ rng: () => 0, env: { AGENT_URLS: "" } })
     surge = new FakeSurge(new MatchesDathostStore(h.db))
     h.ctx.allocator.setSurgeDriver(surge)
-    await h.ctx.allocator.seedGslt(["tok1"])
+    await h.ctx.allocator.seedGslt(["GSLTTOKEN0001"])
   })
   afterEach(async () => {
     await h.close()
@@ -65,7 +66,7 @@ describe("allocator drivers", () => {
     expect(m!.status).toBe("starting")
     expect(m!.driver).toBe("dathost")
     expect(m!.driverRef).toBe("clone-1")
-    expect(surge.started[0]!.gslt).toBe("tok1")
+    expect(surge.started[0]!.gslt).toBe("GSLTTOKEN0001")
   })
 
   it("prefers Hetzner when a slot is free", async () => {
@@ -86,5 +87,63 @@ describe("allocator drivers", () => {
     const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
     expect(m!.driverRef).toBeNull()
     expect(m!.serverReleasedAt).not.toBeNull()
+  })
+})
+
+describe("allocator launch block", () => {
+  let h: Harness
+  beforeEach(async () => {
+    h = await createHarness({ rng: () => 0 })
+    await h.ctx.allocator.seedGslt(["GSLTTOKEN0001"])
+    await h.ctx.allocator.syncHosts(["http://agent.test:8080"])
+  })
+  afterEach(async () => {
+    await h.close()
+  })
+
+  const demo = { bucket: "demos", key: "k.dem", presignedPutUrl: "https://s3.example.test/put" }
+  const ids = ["76561198000000001", "76561198000000002", "76561198000000003", "76561198000000004", "76561198000000005", "76561198000000006"]
+
+  function params(mode: (typeof MODES)[number], mapIndex: number) {
+    const size = MODE_CONFIGS[mode].teamSize
+    return {
+      matchId: "3b241101-e2bb-4255-8caf-4136c566a962",
+      mode,
+      map: MODE_CONFIGS[mode].maps[mapIndex]!,
+      teams: [
+        { name: "A", steamIds: ids.slice(0, size) },
+        { name: "B", steamIds: ids.slice(3, 3 + size) },
+      ],
+      password: "pw1234",
+      webhookSecret: "0123456789abcdef",
+    }
+  }
+
+  it("sends a launch block the agent accepts for every mode and map", () => {
+    for (const mode of MODES) {
+      MODE_CONFIGS[mode].maps.forEach((map, i) => {
+        const req = h.ctx.allocator.buildRequest(params(mode, i), "GSLTTOKEN1", demo)
+        expect(req.cs2).toEqual(resolveLaunch(mode, map))
+        expect(() => validateLikeAgent(req)).not.toThrow()
+      })
+    }
+  })
+
+  it("starts Rush on the agent with our Rush cfg", async () => {
+    const res = await h.ctx.allocator.allocate(params("rush3v3", 0), 0)
+    expect(res.kind).toBe("started")
+    expect(h.agent.started[0]!.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg", mapName: "rush_001" })
+  })
+
+  it("fails the start when shared names a cfg the agent does not ship", async () => {
+    const cs2 = MODE_CONFIGS.rush3v3.cs2
+    const saved = cs2.execCfg
+    cs2.execCfg = "gamemode_rush.cfg"
+    try {
+      await expect(h.ctx.allocator.allocate(params("rush3v3", 0), 0)).rejects.toThrow(/no mode cfg named gamemode_rush.cfg/)
+      expect(h.agent.started).toHaveLength(0)
+    } finally {
+      cs2.execCfg = saved
+    }
   })
 })

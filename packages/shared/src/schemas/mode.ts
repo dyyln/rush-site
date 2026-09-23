@@ -18,15 +18,32 @@ export type VetoFormat = z.infer<typeof VetoFormatSchema>
 export const WinConditionSchema = z.enum(["first_to_16", "valve_rush"])
 export type WinCondition = z.infer<typeof WinConditionSchema>
 
+// Plain cfg file name, no directories
+export const CFG_NAME_RE = /^[A-Za-z0-9_-]{1,64}\.cfg$/
+export const WORKSHOP_ID_RE = /^[0-9]{1,20}$/
+export const MAP_NAME_RE = /^[A-Za-z0-9_]{1,64}$/
+// Command line extra args must be a flag or a plain value
+export const LAUNCH_ARG_RE = /^(?:[+-][A-Za-z0-9_]{1,64}|[A-Za-z0-9_.-]{1,64})$/
+
+// How a mode launches. This is the single source of truth for the agent and DatHost
 export const Cs2LaunchSchema = z.object({
-  gameType: z.number().int(),
-  gameMode: z.number().int(),
-  workshopCollection: z.string().optional(),
-  execCfg: z.string().min(1),
-  // Extra server command line args appended by the agent
-  extraArgs: z.array(z.string()).optional(),
+  gameType: z.number().int().min(0).max(100),
+  gameMode: z.number().int().min(0).max(100),
+  // Our cfg, shipped by the agent. Valve's gamemode cfg runs by itself on map load
+  execCfg: z.string().regex(CFG_NAME_RE),
+  // Extra server command line args, placed after game_mode and before the map
+  extraArgs: z.array(z.string().regex(LAUNCH_ARG_RE)).max(16).optional(),
 })
 export type Cs2Launch = z.infer<typeof Cs2LaunchSchema>
+
+// The launch block sent to a driver. The mode launch plus exactly one map target
+export const Cs2StartSchema = Cs2LaunchSchema.extend({
+  workshopId: z.string().regex(WORKSHOP_ID_RE).optional(),
+  mapName: z.string().regex(MAP_NAME_RE).optional(),
+}).refine((v) => (v.workshopId === undefined) !== (v.mapName === undefined), {
+  message: "cs2 needs exactly one of workshopId or mapName",
+})
+export type Cs2Start = z.infer<typeof Cs2StartSchema>
 
 export const ModeConfigSchema = z.object({
   mode: ModeSchema,

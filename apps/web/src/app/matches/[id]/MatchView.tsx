@@ -53,8 +53,14 @@ export function MatchView({ id }: { id: string }) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
       <div className="container page">
-        <Card title={notFound ? "Match not found" : "Could not load match"}>
-          <p className="muted">Check the link and try again.</p>
+        <header className="page-header">
+          <h1>{notFound ? "Match not found" : "Could not load match"}</h1>
+        </header>
+        <Card>
+          <p className="muted">{notFound ? "Check the link and try again." : "Try again in a moment."}</p>
+          <p>
+            <Link href="/play">Back to Play</Link>
+          </p>
         </Card>
       </div>
     );
@@ -81,10 +87,17 @@ function MatchBody({ m }: { m: MatchDetail }) {
             {m.status === "live" && <Throbber />}
             {status.label}
           </Badge>
-          <span className="eyebrow">{modeLabel(m.mode)}</span>
           {m.unrated && <Badge tone="info">Unrated</Badge>}
-          {m.mapId && <span className="mono muted">{mapName(m.mode, m.mapId)}</span>}
         </div>
+        <h1 className={styles.title}>
+          {modeLabel(m.mode)}
+          {m.mapId && (
+            <>
+              {" "}
+              <span className={styles.titleMap}>on {mapName(m.mode, m.mapId)}</span>
+            </>
+          )}
+        </h1>
         {m.tournament && (
           <p className={styles.cup}>
             <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>

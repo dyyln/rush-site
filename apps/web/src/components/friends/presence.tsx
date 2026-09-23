@@ -3,6 +3,7 @@ import type { Presence, PresenceDetail } from "@rushsite/shared";
 import { mapName, modeLabel, MODE_COPY } from "@/lib/modes";
 import { joinQueueHref, type JoinableModes } from "./useJoinQueue";
 import styles from "./friends.module.css";
+import { describeError } from "@/lib/errors";
 
 export const PRESENCE_LABEL: Record<Presence, string> = {
   online: "Online",
@@ -126,5 +127,5 @@ export function friendError(e: unknown): string {
     invite_not_pending: "This invite was already answered.",
   };
   if (code && MESSAGES[code]) return MESSAGES[code]!;
-  return e instanceof Error ? e.message : "Something went wrong";
+  return describeError(e).body;
 }

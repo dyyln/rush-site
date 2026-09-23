@@ -1,4 +1,4 @@
-import { and, arrayContains, asc, count, eq, inArray, isNull, lte, sql } from "drizzle-orm"
+import { and, arrayContains, asc, count, eq, getTableColumns, inArray, isNull, lte, sql } from "drizzle-orm"
 import type { Bracket, BracketMatch, Resolution } from "./bracket.js"
 import type { CupFormat } from "./config.js"
 import { adminAudit } from "../admin/schema.js"
@@ -107,6 +107,9 @@ export interface TournamentStore {
   countEntries(tournamentIds: string[]): Promise<Record<string, number>>
   // Entry id per tournament for one player. Disqualified entries are left out.
   findPlayerEntries(steamId: string, tournamentIds: string[]): Promise<Record<string, string>>
+  // The first `limit` entries per tournament by sign-up time, disqualified ones left out.
+  previewEntries(tournamentIds: string[], limit: number): Promise<EntryRecord[]>
+  getEntries(ids: string[]): Promise<EntryRecord[]>
   insertEntry(e: NewEntry): Promise<EntryRecord>
   disqualifyEntry(id: string, reason: string, at: Date): Promise<void>
   deleteEntries(ids: string[]): Promise<void>
@@ -283,6 +286,27 @@ export class DrizzleTournamentStore implements TournamentStore {
         ),
       )
     return Object.fromEntries(rows.map((r) => [r.tournamentId, r.id]))
+  }
+
+  async previewEntries(tournamentIds: string[], limit: number): Promise<EntryRecord[]> {
+    if (tournamentIds.length === 0) return []
+    const ranked = this.db
+      .select({
+        ...getTableColumns(tournamentEntries),
+        rn: sql<number>`row_number() over (partition by ${tournamentEntries.tournamentId} order by ${tournamentEntries.createdAt})`.as("rn"),
+      })
+      .from(tournamentEntries)
+      .where(and(inArray(tournamentEntries.tournamentId, tournamentIds), isNull(tournamentEntries.disqualifiedAt)))
+      .as("ranked")
+    const rows = await this.db.select().from(ranked).where(lte(ranked.rn, limit)).orderBy(asc(ranked.createdAt))
+    return rows.map(({ rn: _rn, ...r }) => toEntry(r as ERow))
+  }
+
+  async getEntries(ids: string[]): Promise<EntryRecord[]> {
+    const valid = ids.filter(isUuid)
+    if (valid.length === 0) return []
+    const rows = await this.db.select().from(tournamentEntries).where(inArray(tournamentEntries.id, valid))
+    return rows.map(toEntry)
   }
 
   async insertEntry(e: NewEntry): Promise<EntryRecord> {

@@ -11,4 +11,8 @@ export interface ServerDriver {
   stop(matchId: string): Promise<void>
   // DatHost only. Call after match_end
   fetchDemo?(matchId: string): Promise<ReadableStream | Buffer | null>
+  // Liveness for the match watchdog. gone means the driver is sure no server runs for the match
+  status?(matchId: string): Promise<ServerLiveness>
 }
+
+export type ServerLiveness = "alive" | "gone" | "unknown"

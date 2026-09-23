@@ -1,0 +1,209 @@
+{
+  "generatedBy": "pnpm -C packages/shared export:modes",
+  "execCfgs": [
+    "rushsite_aim1v1.cfg",
+    "rushsite_aim2v2.cfg",
+    "rushsite_rush3v3.cfg"
+  ],
+  "modes": {
+    "aim1v1": {
+      "teamSize": 1,
+      "winCondition": "first_to_16",
+      "launches": [
+        {
+          "map": {
+            "id": "aim_map",
+            "displayName": "Aim Map",
+            "mapName": "aim_map",
+            "workshopId": "3084291314"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3084291314"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_redline",
+            "displayName": "Redline",
+            "mapName": "aim_redline",
+            "workshopId": "3199551320"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3199551320"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_ag_texture2",
+            "displayName": "AG Texture 2",
+            "mapName": "aim_ag_texture2",
+            "workshopId": "3074961197"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3074961197"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_usp",
+            "displayName": "USP",
+            "mapName": "aim_usp",
+            "workshopId": "3299812021"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3299812021"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_deagle7k",
+            "displayName": "Deagle",
+            "mapName": "aim_deagle",
+            "workshopId": "3075996446"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3075996446"
+          }
+        },
+        {
+          "map": {
+            "id": "awp_india",
+            "displayName": "AWP India",
+            "mapName": "awp_india",
+            "workshopId": "3070290869"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim1v1.cfg",
+            "workshopId": "3070290869"
+          }
+        }
+      ]
+    },
+    "aim2v2": {
+      "teamSize": 2,
+      "winCondition": "first_to_16",
+      "launches": [
+        {
+          "map": {
+            "id": "aim_map",
+            "displayName": "Aim Map",
+            "mapName": "aim_map",
+            "workshopId": "3084291314"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3084291314"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_redline",
+            "displayName": "Redline",
+            "mapName": "aim_redline",
+            "workshopId": "3199551320"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3199551320"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_ag_texture2",
+            "displayName": "AG Texture 2",
+            "mapName": "aim_ag_texture2",
+            "workshopId": "3074961197"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3074961197"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_usp",
+            "displayName": "USP",
+            "mapName": "aim_usp",
+            "workshopId": "3299812021"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3299812021"
+          }
+        },
+        {
+          "map": {
+            "id": "aim_deagle7k",
+            "displayName": "Deagle",
+            "mapName": "aim_deagle",
+            "workshopId": "3075996446"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3075996446"
+          }
+        },
+        {
+          "map": {
+            "id": "awp_india",
+            "displayName": "AWP India",
+            "mapName": "awp_india",
+            "workshopId": "3070290869"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 1,
+            "execCfg": "rushsite_aim2v2.cfg",
+            "workshopId": "3070290869"
+          }
+        }
+      ]
+    },
+    "rush3v3": {
+      "teamSize": 3,
+      "winCondition": "valve_rush",
+      "launches": [
+        {
+          "map": {
+            "id": "rush_001",
+            "displayName": "Complex",
+            "mapName": "rush_001"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 6,
+            "execCfg": "rushsite_rush3v3.cfg",
+            "mapName": "rush_001"
+          }
+        }
+      ]
+    }
+  }
+}

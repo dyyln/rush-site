@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { useServiceStatus } from "@/components/stats/useServiceStatus";
 import { mapName, MODE_COPY } from "@/lib/modes";
 import { useAsync } from "@/lib/useAsync";
 import { fetchLiveMatches, type LiveMatch } from "./data";
@@ -13,6 +14,8 @@ const REFRESH_MS = 30_000;
 export function WatchLive() {
   const data = useAsync(() => fetchLiveMatches(6), []);
   const { reload } = data;
+  const status = useServiceStatus();
+  const canQueue = !status || status.modes.some((m) => m.available);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -35,7 +38,9 @@ export function WatchLive() {
       {rows === null && data.status === "error" && <p className="muted">Live matches are unavailable right now.</p>}
       {rows !== null &&
         (rows.length === 0 ? (
-          <p className="muted">No matches in progress. Queue up and be the first.</p>
+          <p className="muted">
+            {canQueue ? "No matches in progress. Queue up and be the first." : "No matches in progress. Matches start once servers are open."}
+          </p>
         ) : (
           <ul className={styles.live}>
             {rows.map((m) => (

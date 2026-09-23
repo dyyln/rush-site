@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { MODE_CONFIGS, type StartServerRequest } from "@rushsite/shared"
+import { MODE_CONFIGS, resolveLaunch, type StartServerRequest } from "@rushsite/shared"
 import { createDathostDriver, createMemoryServerStore, DathostError, resolveLocation } from "./index.js"
 import type { FetchInit, FetchLike, FetchResponseLike } from "./types.js"
 
@@ -61,7 +61,7 @@ function request(overrides: Partial<StartServerRequest> = {}): StartServerReques
     webhookUrl: "https://api.example.com/webhooks/match/" + MATCH_ID,
     webhookSecret: "0123456789abcdef0123",
     demoUpload: { bucket: "demos", key: "k.dem", presignedPutUrl: "https://s3.example.com/put" },
-    cs2: MODE_CONFIGS.rush3v3.cs2,
+    cs2: resolveLaunch("rush3v3", MODE_CONFIGS.rush3v3.maps[0]!),
     ...overrides,
   }
 }
@@ -73,6 +73,7 @@ function happyRoutes(extra: Record<string, Handler> = {}): Record<string, Handle
     "POST /game-servers/tmpl/duplicate": () => ({ json: { id: CLONE, on: false } }),
     [`PUT /game-servers/${CLONE}`]: () => ({ json: {} }),
     [`POST /game-servers/${CLONE}/files/cfg/match.json`]: () => ({}),
+    [`POST /game-servers/${CLONE}/files/cfg/rushsite/matches/${MATCH_ID}/mode.cfg`]: () => ({}),
     [`POST /game-servers/${CLONE}/files/cfg/server.cfg`]: () => ({}),
     [`POST /game-servers/${CLONE}/start`]: () => ({}),
     [`GET /game-servers/${CLONE}`]: (_c, n) => ({ json: n < 3 ? { ...running, booting: true } : running }),
@@ -143,8 +144,11 @@ describe("start", () => {
     const cfg = (await formText(calls.find((c) => c.path.endsWith("server.cfg"))!.init?.body, "file"))!
     expect(cfg).toContain('sv_password "abc123"')
     expect(cfg).toContain('mp_teamname_1 "Alpha"')
-    expect(cfg).toContain("exec gamemode_rush.cfg")
+    expect(cfg).toContain(`exec rushsite/matches/${MATCH_ID}/mode.cfg`)
     expect(cfg).toContain("exec rushsite_base.cfg")
+    expect(cfg).not.toContain("gamemode_rush.cfg")
+    const modeCfg = (await formText(calls.find((c) => c.path.endsWith("/mode.cfg"))!.init?.body, "file"))!
+    expect(modeCfg).toContain("exec rushsite_rush3v3.cfg\n")
 
     const order = calls.map((c) => `${c.method} ${c.path}`)
     expect(order.indexOf(`POST /game-servers/${CLONE}/start`)).toBeGreaterThan(order.indexOf(`POST /game-servers/${CLONE}/files/cfg/server.cfg`))
@@ -159,8 +163,8 @@ describe("start", () => {
     await d.start(
       request({
         mode: "aim1v1",
-        map: { id: "aim_map", displayName: "aim_map", mapName: "aim_map", workshopId: "3084291314" },
-        cs2: MODE_CONFIGS.aim1v1.cs2,
+        map: MODE_CONFIGS.aim1v1.maps[0]!,
+        cs2: resolveLaunch("aim1v1", MODE_CONFIGS.aim1v1.maps[0]!),
       }),
     )
     const put = calls.find((c) => c.method === "PUT")!
@@ -249,6 +253,33 @@ describe("stop", () => {
     const { d } = driver(fetch)
     await d.stop(MATCH_ID)
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe("status", () => {
+  it("reports a running or booting clone as alive", async () => {
+    const { fetch } = fakeFetch({ [`GET /game-servers/${CLONE}`]: (_c, n) => ({ json: n === 1 ? running : { ...running, on: false, booting: true } }) })
+    const { d, store } = driver(fetch)
+    await store.set(MATCH_ID, CLONE)
+    expect(await d.status!(MATCH_ID)).toBe("alive")
+    expect(await d.status!(MATCH_ID)).toBe("alive")
+  })
+
+  it("reports a deleted, stopped or untracked clone as gone", async () => {
+    const { fetch } = fakeFetch({ [`GET /game-servers/other`]: () => ({ json: { ...running, id: "other", on: false } }) })
+    const { d, store } = driver(fetch)
+    expect(await d.status!(MATCH_ID)).toBe("gone")
+    await store.set(MATCH_ID, CLONE)
+    expect(await d.status!(MATCH_ID)).toBe("gone")
+    await store.set(MATCH_ID, "other")
+    expect(await d.status!(MATCH_ID)).toBe("gone")
+  })
+
+  it("reports unknown when DatHost cannot answer", async () => {
+    const { fetch } = fakeFetch({ [`GET /game-servers/${CLONE}`]: () => ({ status: 503, text: "down" }) })
+    const { d, store } = driver(fetch)
+    await store.set(MATCH_ID, CLONE)
+    expect(await d.status!(MATCH_ID)).toBe("unknown")
   })
 })
 

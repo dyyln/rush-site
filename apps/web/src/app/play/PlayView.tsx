@@ -14,7 +14,6 @@ import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { readFlag, writeFlag } from "@/components/profile/flags";
 import { InvitePopover } from "@/components/party/InvitePopover";
 import { FriendsCard } from "@/components/friends/FriendsCard";
-import { RematchButton } from "@/components/challenges/RematchButton";
 import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
@@ -24,12 +23,13 @@ import { Throbber } from "@/components/ui/Throbber";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatTile } from "@/components/ui/StatTile";
+import { FormDots } from "@/components/ui/FormDots";
 import { TierChip } from "@/components/ui/TierChip";
 import { Timer } from "@/components/ui/Timer";
 import { useToast } from "@/components/ui/Toast";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { ApiError, api } from "@/lib/api";
-import { formatStat, signed } from "@/lib/format";
+import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { TRUST_NAMES } from "@/lib/trust";
@@ -38,6 +38,8 @@ import { useSession } from "@/lib/session";
 import { usePlay, type Warmup } from "@/lib/usePlay";
 import { StartCountdown } from "@/components/play/StartCountdown";
 import { VetoSummary } from "@/components/play/VetoSummary";
+import { ResultCard } from "@/components/play/ResultCard";
+import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import styles from "./play.module.css";
@@ -54,8 +56,14 @@ export function PlayView() {
   const { user, loading } = useSession();
   const toast = useToast();
   const play = usePlay({
-    onCancelled: (c) => toast.push({ title: "Match cancelled", body: c.reason, tone: "error" }),
-    onError: (e) => toast.push({ title: "Something went wrong", body: e.message, tone: "error" }),
+    onCancelled: (c) => {
+      const copy = cancelCopy(c.reason);
+      toast.push({ title: copy.title, body: copy.body, tone: "error", durationMs: 8000 });
+    },
+    onError: (e) => {
+      const copy = describeError(e);
+      toast.push({ title: copy.title, body: copy.body, tone: "error" });
+    },
   });
   const [selected, setSelected] = useState<Mode[]>([]);
   const [minTrust, setMinTrust] = useState<TrustLevel>("new");
@@ -104,7 +112,8 @@ export function PlayView() {
 
   const queuedModes = useMemo(() => play.queue.modes.map((m) => m.mode), [play.queue.modes]);
   const queued = play.queue.state === "queued" && queuedModes.length > 0;
-  const partySize = Math.max(1, play.party?.members.length ?? 1);
+  // Signed out viewers see the cards as a solo player
+  const partySize = user ? Math.max(1, play.party?.members.length ?? 1) : 1;
   const isLeader = !play.party?.partyId || play.party.leaderSteamId === user?.steamId;
   const inMatch = play.match.phase !== "none" && play.match.phase !== "result";
 
@@ -123,40 +132,10 @@ export function PlayView() {
   }, []);
   const playAgain = useRef<() => void>(() => {});
 
+  // Starting a new queue clears the last result card
   useEffect(() => {
-    if (play.match.phase === "result") {
-      const r = play.match.result;
-      const change = r.ratingChanges.find((c) => c.steamId === user?.steamId);
-      const resultToast = { id: 0 };
-      resultToast.id = toast.push({
-        title: r.status === "abandoned" ? "Match abandoned" : `${modeLabel(r.mode)} match finished`,
-        body: (
-          <>
-            {change && (
-              <span className={styles.change}>
-                <TierChip tier={change.tierAfter} rating={change.after} size="sm" />
-                <span className={`mono ${change.after >= change.before ? styles.up : styles.down}`}>{signed(change.after - change.before)}</span>
-              </span>
-            )}
-            {r.status === "completed" && <RematchButton matchId={r.matchId} mode={r.mode} />}
-            {isLeader && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  playAgain.current();
-                  toast.dismiss(resultToast.id);
-                }}
-              >
-                Start queue
-              </Button>
-            )}
-          </>
-        ),
-        tone: r.status === "abandoned" ? "error" : "success",
-        durationMs: r.status === "completed" ? 20_000 : undefined,
-      });
-    }
-  }, [play.match, toast, user?.steamId]);
+    if (queued && play.match.phase === "result") play.dismissMatch();
+  }, [queued, play.match.phase]);
 
   // A cooldown right after a match found means this player declined or let the window lapse
   const lastFound = useRef(0);
@@ -185,9 +164,9 @@ export function PlayView() {
 
   function disabledReason(mode: Mode): string | null {
     const size = MODE_CONFIGS[mode].teamSize;
-    if (partySize > size) return `Party of ${partySize} is too big for ${MODE_COPY[mode].players}`;
+    if (partySize > size) return `Party too big. ${MODE_COPY[mode].label} fits ${size === 1 ? "1 player" : `${size} players`}`;
     const down = modeUnavailable(service, mode);
-    if (down) return `${MODE_COPY[mode].label} unavailable: ${down}`;
+    if (down) return `${down}. See server status below`;
     return null;
   }
 
@@ -231,15 +210,16 @@ export function PlayView() {
   async function createParty() {
     try {
       play.setParty(await api.party.create());
-    } catch {
-      toast.push({ title: "Could not create a party", tone: "error" });
+    } catch (e) {
+      partyError(e, "Could not create a party");
     }
   }
 
   // Party changes are refused while the party is in a match
   function partyError(e: unknown, title: string) {
-    if (e instanceof ApiError && e.code === "party_locked") toast.push({ title: "Party is in a match", body: "Try again after the match.", tone: "error" });
-    else toast.push({ title, tone: "error" });
+    const known = e instanceof ApiError && knownError(e.code);
+    const copy = describeError(e, { title, body: "Try again in a moment." });
+    toast.push({ title: known ? copy.title : title, body: copy.body, tone: "error" });
   }
 
   async function leaveParty() {
@@ -252,38 +232,46 @@ export function PlayView() {
   }
 
   if (loading) return <PlaySkeleton />;
-  if (!user) {
-    return (
-      <div className="container page">
-        <Card title="Sign in to play" tone="raised">
-          <p className="muted">Sign in with Steam to queue.</p>
-          <div className={styles.signIn}>
-            <SignInLink />
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   const found = play.match.phase === "found" ? play.match : null;
+  const result = play.match.phase === "result" ? play.match : null;
   const inviteUrl = play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null;
   async function ensureInvite(): Promise<string | null> {
     const p = await api.party.create();
     play.setParty(p);
     return p.inviteCode ? `${window.location.origin}/invite/${p.inviteCode}` : null;
   }
+  const readOnly = !user;
 
   return (
     <div className="container page">
       <header className="page-header">
         <div>
           <h1>Play</h1>
-          <p>Pick your modes.</p>
+          <p>{user ? "Pick your modes." : "Sign in with Steam to queue. These are the modes you can play."}</p>
         </div>
       </header>
 
       <div className="grid-2">
         <div className="stack">
+          {result && user && (
+            <ResultCard
+              result={result.result}
+              mapId={result.mapId}
+              veto={result.veto}
+              mySteamId={user.steamId}
+              onQueueAgain={
+                isLeader
+                  ? () => {
+                      play.dismissMatch();
+                      playAgain.current();
+                    }
+                  : undefined
+              }
+              onDismiss={play.dismissMatch}
+            />
+          )}
+
           {play.match.phase === "veto" && user && (
             <Card tone="accent">
               <VetoBoard
@@ -309,44 +297,43 @@ export function PlayView() {
 
           {!inMatch && (
             <>
-              <fieldset className={styles.picker} disabled={locked}>
+              <fieldset className={styles.picker} disabled={locked || readOnly}>
                 <legend className={styles.legend}>Modes</legend>
                 <ul className={styles.modes}>
                   {MODES.map((mode) => {
                     const reason = disabledReason(mode);
-                    const checked = selected.includes(mode) && !reason;
+                    const checked = !readOnly && selected.includes(mode) && !reason;
                     const q = play.queue.modes.find((m) => m.mode === mode);
                     const st = play.stats?.modes.find((m) => m.mode === mode);
                     const copy = MODE_COPY[mode];
                     return (
                       <li key={mode}>
                         <label
-                          className={`${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""}`}
-                          title={reason ?? undefined}
+                          className={`${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""} ${readOnly ? styles.readOnly : ""}`}
                         >
                           <input
                             type="checkbox"
                             className="visually-hidden"
                             checked={checked}
-                            disabled={!!reason || !isLeader || locked}
+                            disabled={readOnly || !!reason || !isLeader || locked}
                             onChange={() => toggle(mode)}
-                            aria-describedby={`mode-${mode}-desc mode-${mode}-stats`}
+                            aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats`}
                           />
                           <span className={styles.modeTop}>
                             <span className={styles.modeName}>
-                              {copy.name}{" "}
+                              {copy.label}
                               <span className={styles.format}>
                                 <PartySize
                                   count={Math.min(partySize, MODE_CONFIGS[mode].teamSize)}
                                   capacity={MODE_CONFIGS[mode].teamSize}
                                   overflow={Math.max(0, partySize - MODE_CONFIGS[mode].teamSize)}
-                                  label={reason ? `${copy.players}. ${reason}` : copy.players}
+                                  label={copy.players}
                                 />
                               </span>
                             </span>
                             {modeUnavailable(service, mode) && !q ? (
                               <ModeCardWarning />
-                            ) : (
+                            ) : readOnly ? null : (
                               <span className={styles.check} aria-hidden="true">
                                 {q ? (
                                   <Throbber />
@@ -358,10 +345,13 @@ export function PlayView() {
                               </span>
                             )}
                           </span>
-                          <span id={`mode-${mode}-desc`} className={`${styles.modeBlurb} mono`}>
-                            {copy.format}
+                          <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
+                            {copy.blurb}
                           </span>
-                          <Standing profile={me} mode={mode} />
+                          <span id={`mode-${mode}-reason`} className={styles.reason}>
+                            {reason ?? ""}
+                          </span>
+                          {user && <Standing profile={me} mode={mode} />}
                           <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>
                             {st ? `${st.playersInQueue} in queue · ${st.matchesInProgress} in progress` : "\u00a0"}
                             {q && <span className="visually-hidden">, you are searching</span>}
@@ -372,107 +362,129 @@ export function PlayView() {
                   })}
                 </ul>
               </fieldset>
+
+              <div className={styles.actionBar}>
+                {user ? (
+                  <>
+                    {isLeader ? (
+                      <Button
+                        size="lg"
+                        variant={queued ? "danger" : "primary"}
+                        className={styles.queueButton}
+                        onClick={queued ? () => play.leaveQueue() : start}
+                        disabled={!queued && (eligible.length === 0 || cooldown)}
+                        aria-describedby="queue-hint"
+                      >
+                        {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
+                      </Button>
+                    ) : null}
+                    <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
+                    <SegmentedControl
+                      label="Opponents"
+                      value={effectiveMinTrust}
+                      onChange={changeMinTrust}
+                      disabled={locked}
+                      options={TRUST_OPTIONS.map((o) => {
+                        const allowed = trustAtLeast(trustCap.level, o.value);
+                        const why = trustCap.own ? `Reach ${TRUST_NAMES[o.value]} to use this` : `A party member needs ${TRUST_NAMES[o.value]} to use this`;
+                        return { ...o, disabled: !allowed, title: allowed ? undefined : why };
+                      })}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <SignInLink size="lg" className={styles.queueButton} />
+                    <p className={styles.hint}>Free. Sign in with your Steam account, pick modes, and we hand you a server to join.</p>
+                  </>
+                )}
+              </div>
+              {user && (
+                <p id="queue-hint" className={styles.hint}>
+                  {!isLeader
+                    ? "Leader starts the queue."
+                    : queued
+                      ? "Stop queue to change modes."
+                      : cooldown
+                        ? "On cooldown."
+                        : eligible.length === 0
+                          ? "Pick a mode."
+                          : ""}
+                </p>
+              )}
+
               <ModeAvailabilityHint status={service} />
 
-              <ProfileNudge trust={user?.trust} enabled={!!user} variant="line" />
+              {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
 
-              <GetVerifiedCard trust={user?.trust} />
+              {user && <GetVerifiedCard trust={user.trust} />}
 
               {me && <YourStats profile={me} />}
-
-              <div className={styles.queueBar}>
-                <SegmentedControl
-                  label="Opponents"
-                  value={effectiveMinTrust}
-                  onChange={changeMinTrust}
-                  disabled={locked}
-                  options={TRUST_OPTIONS.map((o) => {
-                    const allowed = trustAtLeast(trustCap.level, o.value);
-                    const why = trustCap.own ? `Reach ${TRUST_NAMES[o.value]} to use this` : `A party member needs ${TRUST_NAMES[o.value]} to use this`;
-                    return { ...o, disabled: !allowed, title: allowed ? undefined : why };
-                  })}
-                />
-                {isLeader ? (
-                  <Button
-                    size="lg"
-                    variant={queued ? "danger" : "primary"}
-                    className={styles.queueButton}
-                    onClick={queued ? () => play.leaveQueue() : start}
-                    disabled={!queued && (eligible.length === 0 || cooldown)}
-                    aria-describedby="queue-hint"
-                  >
-                    {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
-                  </Button>
-                ) : null}
-                <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
-              </div>
-              <p id="queue-hint" className={styles.hint}>
-                {!isLeader
-                  ? "Leader starts the queue."
-                  : queued
-                    ? "Stop queue to change modes."
-                    : cooldown
-                      ? "On cooldown."
-                      : eligible.length === 0
-                        ? "Pick a mode."
-                        : ""}
-              </p>
             </>
           )}
         </div>
 
-        <aside className="stack" aria-label="Party">
-          {user && (
-            <PartyPanel
-              party={play.party}
-              mySteamId={user.steamId}
-              me={{ steamId: user.steamId, displayName: user.displayName, avatarUrl: user.avatarUrl }}
-              maxSize={MAX_PARTY}
-              inviteUrl={inviteUrl}
-              onCreate={createParty}
-              onLeave={play.party && play.party.members.length > 1 ? leaveParty : undefined}
-              onKick={async (id) => {
-                try {
-                  await api.party.kick(id);
-                  play.setParty((p) => p && { ...p, members: p.members.filter((m) => m.steamId !== id) });
-                } catch (e) {
-                  partyError(e, "Could not remove player");
-                }
-              }}
-              onMakeLeader={async (id) => {
-                try {
-                  await api.party.setLeader(id);
-                  play.setParty((p) => p && { ...p, leaderSteamId: id });
-                } catch {
-                  toast.push({ title: "Could not change the leader", tone: "error" });
-                }
-              }}
-              onRotateInvite={async () => {
-                try {
-                  const next = await api.party.rotateInvite();
-                  play.setParty((p) => p && { ...p, inviteCode: next.inviteCode });
-                } catch {
-                  toast.push({ title: "Could not make a new link", tone: "error" });
-                }
-              }}
-              locked={queued || inMatch}
-              renderInvite={(close, anchor) => (
-                <InvitePopover
-                  inviteUrl={inviteUrl}
-                  ensureInvite={ensureInvite}
-                  onParty={play.setParty}
-                  onClose={close}
-                  returnFocus={anchor}
-                />
-              )}
-            />
+        <aside className="stack" aria-label={user ? "Party" : "How it works"}>
+          {user ? (
+            <>
+              <PartyPanel
+                party={play.party}
+                mySteamId={user.steamId}
+                me={{ steamId: user.steamId, displayName: user.displayName, avatarUrl: user.avatarUrl }}
+                maxSize={MAX_PARTY}
+                inviteUrl={inviteUrl}
+                onCreate={createParty}
+                onLeave={play.party && play.party.members.length > 1 ? leaveParty : undefined}
+                onKick={async (id) => {
+                  try {
+                    await api.party.kick(id);
+                    play.setParty((p) => p && { ...p, members: p.members.filter((m) => m.steamId !== id) });
+                  } catch (e) {
+                    partyError(e, "Could not remove player");
+                  }
+                }}
+                onMakeLeader={async (id) => {
+                  try {
+                    await api.party.setLeader(id);
+                    play.setParty((p) => p && { ...p, leaderSteamId: id });
+                  } catch (e) {
+                    partyError(e, "Could not change the leader");
+                  }
+                }}
+                onRotateInvite={async () => {
+                  try {
+                    const next = await api.party.rotateInvite();
+                    play.setParty((p) => p && { ...p, inviteCode: next.inviteCode });
+                  } catch (e) {
+                    partyError(e, "Could not make a new link");
+                  }
+                }}
+                locked={queued || inMatch}
+                renderInvite={(close, anchor) => (
+                  <InvitePopover
+                    inviteUrl={inviteUrl}
+                    ensureInvite={ensureInvite}
+                    onParty={play.setParty}
+                    onClose={close}
+                    returnFocus={anchor}
+                  />
+                )}
+              />
+              <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} canJoinQueue={partySize === 1 && !locked && !inMatch} />
+            </>
+          ) : (
+            <Card title="How it works" tone="raised">
+              <ol className={styles.howTo}>
+                <li>Sign in with Steam.</li>
+                <li>Pick one or more modes and start the queue. Friends can join your party.</li>
+                <li>Accept the match, ban maps with your team, then join the server we start for you.</li>
+              </ol>
+            </Card>
           )}
-          {user && <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} canJoinQueue={partySize === 1 && !locked && !inMatch} />}
         </aside>
       </div>
 
       <Modal
-        open={!!found}
+        open={!!found && !!user}
         blocking
         title="Match found"
         footer={
@@ -481,7 +493,7 @@ export function PlayView() {
               <Button variant="ghost" onClick={() => play.respond(false)}>
                 Decline
               </Button>
-              <Button onClick={() => play.respond(true)} autoFocus>
+              <Button onClick={() => play.respond(true)} data-autofocus>
                 Accept
               </Button>
             </>
@@ -495,7 +507,7 @@ export function PlayView() {
               <p className={styles.foundMode}>{modeLabel(found.found.mode)}</p>
               {(() => {
                 const mine = me?.modes.find((m) => m.mode === found.found.mode);
-                return mine && mine.matches > 0 ? <TierChip tier={mine.tier} rating={mine.rating} size="sm" /> : null;
+                return mine && mine.matches > 0 ? <TierChip tier={mine.tier} rating={mine.rating} size="sm" link={false} /> : null;
               })()}
               <p className="muted" aria-live="polite">
                 {found.found.accepted} of {found.found.required} accepted
@@ -536,11 +548,9 @@ function ServerReady({ server, mode, veto, mySteamId, warmup, step = "allocating
   const map = mode ? mapName(mode, server.mapId) : server.mapId;
 
   return (
-    <Card tone="accent" eyebrow="Server ready" title={`Connect now, ${map}`}>
+    <Card tone="accent" eyebrow="Connect now" title={`Server ready on ${map}`}>
       <div className="stack">
-        <p className="muted">
-          Join now or forfeit.
-        </p>
+        <p className="muted">Join the server now. If you do not connect in time you forfeit the match and lose rating.</p>
         {veto && mySteamId && <VetoSummary mode={veto.mode} state={veto.state} mySteamId={mySteamId} />}
         <ConnectSteps step="waiting" connected={warmup?.connected} expected={warmup?.expected} />
         <label htmlFor="connect-string" className="visually-hidden">
@@ -597,13 +607,7 @@ function YourStats({ profile }: { profile: Profile }) {
       <StatTile size="sm" label="Matches" value={matches} />
       <div className={styles.form}>
         <p className={styles.formLabel}>Last 5</p>
-        <ol className={styles.dots}>
-          {last.map((m) => (
-            <li key={m.matchId} className={m.result === "win" ? styles.dotWin : styles.dotLoss}>
-              <span className="visually-hidden">{m.result === "win" ? "Win" : m.result === "loss" ? "Loss" : "Forfeit"}</span>
-            </li>
-          ))}
-        </ol>
+        <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} label="Last 5" />
       </div>
     </section>
   );

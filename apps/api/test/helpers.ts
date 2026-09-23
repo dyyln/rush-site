@@ -14,6 +14,7 @@ import { testEnv, type Env } from "../src/env.js"
 import type { AgentApi } from "../src/modules/match/agent.js"
 import { DisabledDemoStorage } from "../src/modules/match/storage.js"
 import { MemoryNotifier } from "../src/modules/ws/hub.js"
+import { validateLikeAgent } from "./agent-contract.js"
 
 // One migrated PGlite per test file. Each harness truncates it instead of booting a new one
 let shared: Promise<{ client: PGlite; db: Db }> | null = null
@@ -46,20 +47,39 @@ export class FakeAgent implements AgentApi {
   stopped: string[] = []
   failWith: Error | null = null
   health_: AgentHealth = { ok: true, cs2Version: "1.0", slots: { total: 4, free: 4 }, updating: false }
+  // Servers GET /servers reports. start adds, stop and lose remove
+  running = new Set<string>()
+  listFailsWith: Error | null = null
+  listCalls = 0
 
   async health(): Promise<AgentHealth> {
     return this.health_
   }
 
+  // Checks each request the way the Go agent does, so a bad launch block fails the test
   async start(_url: string, req: StartServerRequest): Promise<StartServerResponse> {
     if (this.failWith) throw this.failWith
+    validateLikeAgent(req)
     this.started.push(req)
+    this.running.add(req.matchId)
     const port = 27015 + this.started.length
     return { matchId: req.matchId, ip: "10.0.0.1", port, connect: `connect 10.0.0.1:${port}` }
   }
 
   async stop(_url: string, matchId: string): Promise<void> {
     this.stopped.push(matchId)
+    this.running.delete(matchId)
+  }
+
+  async list(): Promise<{ matchId: string; status: string }[]> {
+    this.listCalls++
+    if (this.listFailsWith) throw this.listFailsWith
+    return [...this.running].map((matchId) => ({ matchId, status: "running" }))
+  }
+
+  // The process died without telling anyone, like a box reboot
+  lose(matchId: string): void {
+    this.running.delete(matchId)
   }
 }
 
@@ -103,7 +123,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const notifier = new MemoryNotifier()
   const agent = new FakeAgent()
   const clock = new TestClock()
-  const env = testEnv({ ALLOW_UNRESOLVED_MODES: "true", AGENT_URLS: "http://agent.test:8080", GSLT_TOKENS: "tok1,tok2", ...opts.env })
+  const env = testEnv({ ALLOW_UNRESOLVED_MODES: "true", AGENT_URLS: "http://agent.test:8080", GSLT_TOKENS: "GSLTTOKEN0001,GSLTTOKEN0002", ...opts.env })
   const ctx = buildContext({
     env,
     db,
@@ -128,7 +148,7 @@ export async function createAppHarness(opts: HarnessOptions = {}) {
   const notifier = new MemoryNotifier()
   const agent = new FakeAgent()
   const clock = new TestClock()
-  const env = testEnv({ ALLOW_UNRESOLVED_MODES: "true", AGENT_URLS: "http://agent.test:8080", GSLT_TOKENS: "tok1,tok2", ...opts.env })
+  const env = testEnv({ ALLOW_UNRESOLVED_MODES: "true", AGENT_URLS: "http://agent.test:8080", GSLT_TOKENS: "GSLTTOKEN0001,GSLTTOKEN0002", ...opts.env })
   const { app, ctx } = await buildApp({
     env,
     db,

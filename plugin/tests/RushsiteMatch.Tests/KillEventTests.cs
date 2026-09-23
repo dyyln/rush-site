@@ -18,14 +18,14 @@ public class KillEventTests
         foreach (var id in new[] { A1, A2, A3 })
         {
             m.OnPlayerConnected(id, 1);
-            _game.Sides[id] = Side.T;
-            m.OnPlayerTeam(id, Side.T);
+            _game.Sides[id] = Side.CT;
+            m.OnPlayerTeam(id, Side.CT);
         }
         foreach (var id in new[] { B1, B2, B3 })
         {
             m.OnPlayerConnected(id, 2);
-            _game.Sides[id] = Side.CT;
-            m.OnPlayerTeam(id, Side.CT);
+            _game.Sides[id] = Side.T;
+            m.OnPlayerTeam(id, Side.T);
         }
         m.OnRoundFreezeEnd(isWarmup: false);
         return m;

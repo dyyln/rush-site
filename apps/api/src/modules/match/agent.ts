@@ -19,7 +19,11 @@ export interface AgentApi {
   health(agentUrl: string): Promise<AgentHealth>
   start(agentUrl: string, req: StartServerRequest): Promise<StartServerResponse>
   stop(agentUrl: string, matchId: string): Promise<void>
+  // GET /servers. Servers the agent runs now. Exited ones are left out
+  list?(agentUrl: string): Promise<AgentServer[]>
 }
+
+export type AgentServer = { matchId: string; status: string; port?: number }
 
 // HTTP client for the Go host agent
 export class HttpAgentClient implements AgentApi {
@@ -56,6 +60,15 @@ export class HttpAgentClient implements AgentApi {
   async start(agentUrl: string, req: StartServerRequest): Promise<StartServerResponse> {
     const res = await this.call(agentUrl, "/servers", { method: "POST", body: JSON.stringify(req) })
     return StartServerResponseSchema.parse(await res.json())
+  }
+
+  async list(agentUrl: string): Promise<AgentServer[]> {
+    const res = await this.call(agentUrl, "/servers")
+    const body = (await res.json()) as unknown
+    if (!Array.isArray(body)) throw new AgentError(`agent ${agentUrl} sent a bad server list`)
+    return body
+      .filter((s): s is AgentServer => !!s && typeof (s as AgentServer).matchId === "string")
+      .map((s) => ({ matchId: s.matchId, status: String(s.status ?? ""), ...(typeof s.port === "number" ? { port: s.port } : {}) }))
   }
 
   async stop(agentUrl: string, matchId: string): Promise<void> {

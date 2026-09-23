@@ -9,7 +9,8 @@ type AvatarProps = {
 };
 
 export function Avatar({ name, src, size = "md", status }: AvatarProps) {
-  const initials = name.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
+  // Cup team names start with "Team", so the initials skip it
+  const initials = name.replace(/^team\s+/i, "").replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
   return (
     <span className={cx(styles.avatar, styles[size])}>
       {src ? (

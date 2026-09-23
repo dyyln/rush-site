@@ -1,5 +1,5 @@
 import { defaultRating, updateRating, updateTeamMatch } from "@rushsite/shared"
-import { and, eq, isNotNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createHarness, makeUsers, type Harness } from "../../../test/helpers.js"
 import { matchPlayers, matches, ratingEvents, ratings } from "../../db/schema.js"
@@ -138,6 +138,39 @@ describe("RatingService", () => {
     // Running it again changes nothing
     const again = await h.ctx.ratings.rollbackCheater(cheater!, new Date(0))
     expect(again.players).toHaveLength(0)
+  })
+
+  it("a second cheater's rollback keeps the first one applied", async () => {
+    const [x1, x2, honest, victim] = await makeUsers(h.db, 4)
+    const { matchId: m1 } = await recordMatch([x1!], [victim!], 0)
+    const { matchId: m2 } = await recordMatch([honest!], [victim!], 0)
+    const { matchId: m3 } = await recordMatch([x2!], [victim!], 0)
+    const { matchId: m4 } = await recordMatch([victim!], [honest!], 0)
+
+    const first = await h.ctx.ratings.rollbackCheater(x1!, new Date(0))
+    expect(first.voidedMatches).toEqual([m1])
+    const second = await h.ctx.ratings.rollbackCheater(x2!, new Date(0))
+    expect(second.voidedMatches).toEqual([m3])
+
+    // A clean replay of m2 and m4 with the stored opponent values
+    const kept = await h.db
+      .select()
+      .from(ratingEvents)
+      .where(and(eq(ratingEvents.steamId, victim!), inArray(ratingEvents.matchId, [m2, m4])))
+      .orderBy(asc(ratingEvents.seq))
+    let expected = defaultRating()
+    for (const e of kept) expected = updateRating(expected, [{ opponent: { rating: e.oppRating!, rd: e.oppRd! }, score: e.score! }])
+    const after = (await h.ctx.ratings.get([victim!], "aim1v1")).get(victim!)!
+    expect(after.rating).toBeCloseTo(expected.rating, 6)
+    expect(after.rating).toBeGreaterThan(1550)
+
+    // Running either rollback again finds nothing left to do
+    const again = await h.ctx.ratings.rollbackCheater(x1!, new Date(0))
+    expect(again.voidedMatches).toEqual([])
+    expect(again.players).toEqual([])
+    expect((await h.ctx.ratings.get([victim!], "aim1v1")).get(victim!)!.rating).toBeCloseTo(expected.rating, 6)
+    const [row] = await h.db.select().from(ratings).where(and(eq(ratings.steamId, victim!), eq(ratings.mode, "aim1v1")))
+    expect(row).toMatchObject({ matchesPlayed: 2, wins: 1, losses: 1 })
   })
 
   it("ratingValues leaves out players with no rating in the mode", async () => {

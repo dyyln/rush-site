@@ -16,6 +16,7 @@ import { PresenceService } from "./modules/friends/presence.js"
 import { HttpAgentClient, type AgentApi } from "./modules/match/agent.js"
 import { Allocator } from "./modules/match/allocator.js"
 import { MatchFlow } from "./modules/match/flow.js"
+import { MatchWatchdog } from "./modules/match/watchdog.js"
 import { createDemoStorage, type DemoStorage } from "./modules/match/storage.js"
 import { PartyService } from "./modules/parties/service.js"
 import { CooldownService } from "./modules/queue/cooldowns.js"
@@ -114,15 +115,29 @@ export function buildContext(deps: ContextDeps): AppContext {
   const allowUnresolvedModes = env.NODE_ENV !== "production" && env.ALLOW_UNRESOLVED_MODES
   const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, { allowUnresolvedModes })
   const storage = deps.storage ?? createDemoStorage(env)
+  const agent = deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn)
   const allocator = new Allocator(
     db,
-    deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn),
+    agent,
     storage,
     { webhookBaseUrl: env.API_PUBLIC_URL, surgeWaitSec: env.SURGE_WAIT_SEC },
     log,
     deps.surgeDriver ?? null,
   )
   const events = new EventLog(redis, notifier)
+  const watchdog = new MatchWatchdog({
+    db,
+    redis,
+    allocator,
+    agent,
+    log,
+    now,
+    options: {
+      maxDurationMin: { aim1v1: env.MATCH_MAX_MIN_AIM, aim2v2: env.MATCH_MAX_MIN_AIM, rush3v3: env.MATCH_MAX_MIN_RUSH },
+      silenceSec: env.MATCH_SILENCE_SEC,
+      intervalSec: env.WATCHDOG_INTERVAL_SEC,
+    },
+  })
   const flow = new MatchFlow({
     db,
     redis,
@@ -134,6 +149,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     allocator,
     log,
     events,
+    watchdog,
     now,
     ...(deps.rng ? { rng: deps.rng } : {}),
     options: {

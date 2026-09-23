@@ -31,8 +31,11 @@ func req(id string) match.StartRequest {
 		Teams:           []match.Team{{Name: "A", SteamIDs: []string{a}}, {Name: "B", SteamIDs: []string{b}}},
 		WebhookURL:      "http://api.local/webhooks/match/" + id,
 		WebhookSecret:   "secret",
+		CS2:             &match.CS2Settings{GameType: intp(0), GameMode: intp(1), ExecCfg: "rushsite_aim1v1.cfg", MapName: "aim_map"},
 	}
 }
+
+func intp(n int) *int { return &n }
 
 func newManager(t *testing.T, runner procrun.Runner, lo, hi int) *Manager {
 	t.Helper()
@@ -59,7 +62,7 @@ func TestStartWritesFilesAndLaunches(t *testing.T) {
 		t.Fatalf("resp %+v", resp)
 	}
 	dir := filepath.Join(m.MatchesRoot(), idA)
-	for _, f := range []string{"server.cfg", "rushsite_aim1v1.cfg", "match.json"} {
+	for _, f := range []string{"server.cfg", "mode.cfg", "match.json"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("missing %s: %v", f, err)
 		}
@@ -180,11 +183,12 @@ func TestLaunchFailureReleasesSlot(t *testing.T) {
 	}
 }
 
-func TestUnconfiguredModeRefused(t *testing.T) {
+func TestUnknownExecCfgRefused(t *testing.T) {
 	m := newManager(t, &procrun.FakeRunner{}, 27015, 27015)
-	m.modes = match.ModeTable{match.Aim1v1: {TeamSize: 1, ExecCfg: "rushsite_aim1v1.cfg"}}
-	if _, err := m.Start(req(idA)); !errors.Is(err, match.ErrModeNotConfigured) {
-		t.Fatalf("want ErrModeNotConfigured, got %v", err)
+	rq := req(idA)
+	rq.CS2.ExecCfg = "gamemode_rush.cfg"
+	if _, err := m.Start(rq); !match.IsValidation(err) {
+		t.Fatalf("want validation error, got %v", err)
 	}
 	if _, free := m.Slots(); free != 1 {
 		t.Fatalf("free=%d", free)
@@ -197,6 +201,7 @@ func TestRushLaunchLine(t *testing.T) {
 	rq := req(idA)
 	rq.Mode = match.Rush3v3
 	rq.Map = match.MapEntry{ID: "rush_001", MapName: "rush_001"}
+	rq.CS2 = &match.CS2Settings{GameType: intp(0), GameMode: intp(6), ExecCfg: "rushsite_rush3v3.cfg", MapName: "rush_001"}
 	if _, err := m.Start(rq); err != nil {
 		t.Fatal(err)
 	}

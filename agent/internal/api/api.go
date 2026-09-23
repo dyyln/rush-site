@@ -100,8 +100,6 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, resp)
 	case match.IsValidation(err):
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-	case errors.Is(err, match.ErrModeNotConfigured):
-		writeError(w, http.StatusUnprocessableEntity, "mode_not_configured", err.Error())
 	case errors.Is(err, manager.ErrExists):
 		writeError(w, http.StatusConflict, "exists", err.Error())
 	case errors.Is(err, manager.ErrUpdating):

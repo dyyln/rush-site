@@ -33,7 +33,8 @@ type ModeConfig = {
   vetoFormat: "none" | "bo1-ban" | "ban-to-7" | "bo3-pickban"
   // none: no veto, single map (rush ladder for now). bo1-ban: alternate bans to one map (aim ladder). ban-to-7: alternate bans over 15 arenas to 7 (rush ladder). bo3-pickban: tournament finals only
   winCondition: string         // "first_to_16" or "valve_rush"
-  cs2: { gameType: number; gameMode: number; workshopCollection?: string; execCfg: string }
+  cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[] }
+  // execCfg is our cfg, shipped by the agent in agent/internal/match/cfgs. Never a Valve gamemode cfg, the game runs those itself
 }
 type MapEntry = { id: string; displayName: string; workshopId?: string; mapName?: string }
 ```
@@ -55,11 +56,13 @@ type StartServerRequest = {
   gslt: string
   password: string
   allowedSteamIds: string[]
-  teams: { name: string; steamIds: string[] }[]
+  teams: { name: string; steamIds: string[]; displayName?: string; side?: "ct" | "t" }[]   // side is optional, teams[0] defaults to CT and teams[1] to T, the plugin refuses two teams on one side
   webhookUrl: string           // api endpoint the plugin posts to
   webhookSecret: string
   demoUpload: { bucket: string; key: string; presignedPutUrl: string }
-  cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[] }   // from MODE_CONFIGS, the agent prefers this over its own table
+  cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[]; workshopId?: string; mapName?: string }
+  // Required. Built by resolveLaunch(mode, map) from MODE_CONFIGS, with exactly one of workshopId or mapName matching map.
+  // This is the only launch table. The agent refuses (400) an execCfg it does not ship, and DatHost maps from the same block
 }
 type StartServerResponse = { matchId: string; ip: string; port: number; connect: string }
 ```
@@ -67,6 +70,10 @@ type StartServerResponse = { matchId: string; ip: string; port: number; connect:
 If a CS2 process crashes, the agent POSTs `{ event: { type: "match_abandoned", reason: "server_crashed", missingSteamIds: [] } }` to the match's webhookUrl, signed with webhookSecret like the plugin does.
 
 The plugin reads its config path from the env var `RUSHSITE_MATCH_JSON` set by the agent.
+
+Both drivers write the mode settings to `cfg/rushsite/matches/<matchId>/mode.cfg`. The agent's launch line ends with `+exec rushsite/matches/<matchId>/server.cfg +exec rushsite/matches/<matchId>/mode.cfg`. Valve's gamemode cfg runs on map load after that, so the plugin runs `exec rushsite/matches/<matchId>/mode.cfg` again at aim match start.
+
+`agent/testdata/modes.json` is generated from shared config (`pnpm -C packages/shared export:modes`). A shared test fails when it is stale and the Go tests render every launch in it.
 
 Agent env: `RUSHSITE_AGENT_TOKEN`, `RUSHSITE_CS2_DIR`, `RUSHSITE_PORT_RANGE` (e.g. `27015-27030`), `RUSHSITE_PUBLIC_IP`.
 
@@ -89,6 +96,7 @@ type PlayerStats = { steamId: string; kills: number; deaths: number; headshots: 
 
 The plugin reads its match config from `match.json` written by the agent next to the server cfg:
 `{ matchId, mode, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition }`.
+In Rush the plugin holds warmup until every player is on their team's side, redirects wrong joins, and kicks after 3 refusals. It writes `match_state.json` beside match.json so a hot reload with the same matchId resumes without a second `server_ready`.
 
 ## API -> Web (WebSocket at `/ws`, JSON messages, auth via session cookie)
 
@@ -107,6 +115,7 @@ Ladder matches are one map. The API randomises firstTeam and builds the veto wit
 ## Rating
 
 Glicko-2 per mode. `rating_events` stores before and after for every player per match so rollback is a replay. Team rating is the mean.
+A cheater rollback records each voided match in `rating_rollbacks` and skips matches already there, so it is idempotent. Each victim is replayed over their whole history in the mode, skipping every voided event, so an earlier rollback stays applied.
 
 ## Git
 
@@ -143,9 +152,14 @@ interface ServerDriver {
   start(req: StartServerRequest): Promise<StartServerResponse>
   stop(matchId: string): Promise<void>
   fetchDemo?(matchId: string): Promise<ReadableStream | Buffer | null>   // dathost only, after match_end
+  status?(matchId: string): Promise<"alive" | "gone" | "unknown">          // dathost. Hetzner liveness comes from the agent's GET /servers
 }
 ```
 Allocator order: every Hetzner host first. If none has a free slot, wait `SURGE_WAIT_SEC` (default 20) polling, then use DatHost. Matches record `driver` and `driverRef` on the matches table so stop and demo fetch route correctly. Env: `DATHOST_EMAIL` and `DATHOST_PASSWORD` (DatHost uses HTTP Basic, use a dedicated account), `DATHOST_TEMPLATE_SERVER_ID` (a prepared server with our plugin installed, cloned per match), `DATHOST_LOCATION` (default `dusseldorf`, their Frankfurt site), `SURGE_WAIT_SEC`. The API must call fetchDemo before stop, deleting the clone deletes its files.
+
+Match watchdog (apps/api/src/modules/match/watchdog.ts): every `WATCHDOG_INTERVAL_SEC` (default 30) inside the allocation loop, and once at API boot, every `starting`, `ready` or `live` match is checked. A Hetzner match whose id is missing from its agent's `GET /servers`, or a DatHost match whose `status()` is `gone`, ends `abandoned` with `cancelReason` `server_lost`. A match past `MATCH_MAX_MIN_AIM` (45) or `MATCH_MAX_MIN_RUSH` (40) minutes from its start ends `abandoned` with `timeout`. A `live` match whose server state is unknown and that sent no webhook for `MATCH_SILENCE_SEC` (900) ends as `server_lost`. None of these change ratings or issue cooldowns. Slot and GSLT are released and the result listeners get `abandoned` with no missing players.
+`server_ready` that arrives while the match is still `allocating` (a DatHost boot) is held: the API records it and sends `server_ready` to players when `start()` returns connect info. The per-match allocation lock is a lease renewed while the start call runs.
+No-show penalties: a missing player gets a cooldown only when someone on the other team connected. A forfeit is rated only when the winning team connected, and winners who never connected stay unrated. When nobody connected the match ends with `cancelReason` `server_unreachable` and nobody is penalised.
 
 ## Match pages
 
@@ -210,7 +224,7 @@ Parties details (owner: party-qa): all party mutations run in a transaction that
 
 - POST, PUT, PATCH and DELETE from a browser must carry an `Origin` of PUBLIC_URL or API_PUBLIC_URL. Anything else gets 403 `bad_origin`. Webhooks are exempt and requests without `Origin` (tools, server side) pass.
 - `/ws` upgrades with a foreign `Origin` get 403 and upgrades without a valid session get 401. At most 8 sockets per user per instance, 429 `too_many_connections` above that. The web opens the socket only after `GET /me` succeeds.
-- Bans: a player with an active ban gets no session. The Steam callback redirects to `${PUBLIC_URL}/banned?until=<ISO or empty for permanent>&reason=<text>`. A session that belongs to a banned player answers 401 `banned` on every route and on `/ws`, and `GET /me` answers 403 `{ error: "banned", details: { reason, until } }` so the web can show `/banned`. The check reads a Redis marker `ban:<steamId>` written by `BanService.ban`, cleared by unban, and refreshed from Postgres at every sign in.
+- Bans: a player with an active ban gets no session. The Steam callback redirects to `${PUBLIC_URL}/banned?until=<ISO or empty for permanent>&reason=<text>`, plus `&permanent=1` when the ban has no end. The page says "permanent" only when that flag is set. A session that belongs to a banned player answers 401 `banned` on every route and on `/ws`, and `GET /me` answers 403 `{ error: "banned", details: { reason, until } }` so the web can show `/banned`. The check reads a Redis marker `ban:<steamId>` written by `BanService.ban`, cleared by unban, and refreshed from Postgres at every sign in.
 - Session end: logout and ban close every open socket of that player on every instance with close code 4001 (reason `logged_out` or `banned`), sent through the `rs:ws` channel as audience `{ kind: "disconnect", steamIds, reason }`. The web does not reconnect blindly after 4001. It re-checks `GET /me` and reopens only when the session is still valid.
 - HTTP rate limits live in `apps/api/src/lib/security.ts` (`RATE_RULES`), Redis backed, keyed per session or per IP. Over the limit answers 429 `rate_limited` with `Retry-After`. Socket messages are limited to a burst of 30 then 3 per second, over that the client gets an `error` with code `rate_limited`, and 100 strikes close the socket with 1008.
 

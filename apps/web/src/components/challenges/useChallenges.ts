@@ -5,6 +5,7 @@ import type { Challenge } from "@rushsite/shared";
 import { ApiError } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { getRealtime } from "@/lib/ws";
+import { describeError } from "@/lib/errors";
 
 // Calls handler for every challenge_update. Opens the socket so updates arrive on any page
 export function useChallengeUpdates(handler: (c: Challenge) => void, enabled = true) {
@@ -47,6 +48,6 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function challengeError(e: unknown): string {
-  if (e instanceof ApiError) return MESSAGES[e.code] ?? e.message;
-  return e instanceof Error ? e.message : "Something went wrong";
+  if (e instanceof ApiError && MESSAGES[e.code]) return MESSAGES[e.code]!;
+  return describeError(e).body;
 }

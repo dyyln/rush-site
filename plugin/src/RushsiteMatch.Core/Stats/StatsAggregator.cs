@@ -47,6 +47,19 @@ public sealed class StatsAggregator
         foreach (var l in _lines.Values) l.Kills = l.Deaths = l.Headshots = l.Damage = 0;
     }
 
+    // Used after a plugin reload.
+    public void Restore(IEnumerable<PlayerStats> players)
+    {
+        foreach (var p in players)
+        {
+            if (!_lines.TryGetValue(p.SteamId, out var l)) continue;
+            l.Kills = p.Kills;
+            l.Deaths = p.Deaths;
+            l.Headshots = p.Headshots;
+            l.Damage = p.Damage;
+        }
+    }
+
     public IReadOnlyList<PlayerStats> Snapshot() =>
         _order.Select(id =>
         {

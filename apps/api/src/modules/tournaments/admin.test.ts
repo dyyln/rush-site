@@ -239,9 +239,62 @@ describe("scheduler reads cup_schedules", () => {
       await store.updateTournament(open.find((t) => t.cupKey === "daily-aim1v1")!.id, { status: "cancelled" })
       await service.tick()
       expect(await store.listTournaments({ status: ["open"] })).toHaveLength(5)
+
+      // Preview takes the first five live entries per cup in one query
+      const [c1, c2] = open.filter((t) => t.cupKey !== "daily-aim1v1") as [(typeof open)[number], (typeof open)[number]]
+      const made: Awaited<ReturnType<typeof store.insertEntry>>[] = []
+      for (let i = 0; i < 7; i++) {
+        made.push(await store.insertEntry({ tournamentId: c1.id, captainSteamId: `7656119800000010${i}`, steamIds: [`7656119800000010${i}`], teamName: i === 0 ? "Night Owls" : null }))
+      }
+      await store.insertEntry({ tournamentId: c2.id, captainSteamId: "76561198000000200", steamIds: ["76561198000000200"] })
+      await store.disqualifyEntry(made[1]!.id, "alt", T0)
+      const preview = await store.previewEntries([c1.id, c2.id], 5)
+      expect(preview.filter((e) => e.tournamentId === c1.id).map((e) => e.id)).toEqual([0, 2, 3, 4, 5].map((i) => made[i]!.id))
+      expect(preview.filter((e) => e.tournamentId === c2.id)).toHaveLength(1)
+      expect(preview[0]?.teamName).toBe("Night Owls")
+      expect((await store.getEntries([made[6]!.id, "nope"])).map((e) => e.id)).toEqual([made[6]!.id])
     } finally {
       await client.close()
     }
+  })
+})
+
+describe("list extras", () => {
+  it("fills entrantPreview and winner on list and detail", async () => {
+    const x = await harness([cup("daily-aim2v2")])
+    h = x
+    await x.tick()
+    const t = x.only()
+    const names = ["Alpha Squad", null, "Gamma Crew", null, "Epsilon", "Zeta"]
+    for (let i = 0; i < names.length; i++) {
+      x.parties.push({ partyId: `p${i}`, leaderSteamId: `c${i}`, memberSteamIds: [`c${i}`, `m${i}`] })
+      const name = names[i]
+      expect((await x.enter(t.id, `c${i}`, name ? { teamName: name } : undefined)).statusCode).toBe(201)
+    }
+    const row = (await x.app.inject({ url: "/tournaments" })).json().tournaments[0]
+    expect(row.entrantPreview).toHaveLength(5)
+    expect(row.entrantPreview.slice(0, 2)).toEqual([
+      { steamId: "c0", displayName: "Alpha Squad", avatarUrl: null },
+      { steamId: "c1", displayName: "N-c1", avatarUrl: null },
+    ])
+    expect(row.winner).toBeNull()
+
+    // Finish the cup by forcing every series
+    await x.startNow(t.startsAt)
+    for (;;) {
+      const open = bracketOf(x.store, t.id).matches.find((m) => ["ready", "provisioning", "live"].includes(m.status))
+      if (!open) break
+      await x.admin("POST", `/admin/tournaments/${t.id}/matches/${open.id}/force-result`, { winnerEntryId: open.a, reason: "r" })
+    }
+    const done = x.only()
+    expect(done.status).toBe("completed")
+    const champ = x.store.entries.get(done.winnerEntryId!)!
+    const expected = { entryId: champ.id, name: champ.teamName ?? `N-${champ.captainSteamId}`, avatarUrl: null }
+    const listed = (await x.app.inject({ url: "/tournaments?status=completed" })).json().tournaments[0]
+    expect(listed.winner).toEqual(expected)
+    const detail = (await x.app.inject({ url: `/tournaments/${t.id}` })).json().tournament
+    expect(detail.winner).toEqual(expected)
+    expect(detail.entrantPreview).toHaveLength(5)
   })
 })
 

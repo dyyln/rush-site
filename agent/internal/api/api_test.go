@@ -65,7 +65,8 @@ const startBody = `{
   "teams": [{"name": "A", "steamIds": ["76561198000000001"]}, {"name": "B", "steamIds": ["76561198000000002"]}],
   "webhookUrl": "http://api:3000/webhooks/match/` + matchID + `",
   "webhookSecret": "whsec",
-  "demoUpload": {"bucket": "demos", "key": "x.dem", "presignedPutUrl": "https://s3/put"}
+  "demoUpload": {"bucket": "demos", "key": "x.dem", "presignedPutUrl": "https://s3/put"},
+  "cs2": {"gameType": 0, "gameMode": 6, "execCfg": "rushsite_rush3v3.cfg", "mapName": "rush_001"}
 }`
 
 func TestAuthRequired(t *testing.T) {
@@ -150,5 +151,9 @@ func TestStartValidationErrors(t *testing.T) {
 	resp, body = do(t, "POST", ts.URL+"/servers", bearer, strings.Replace(startBody, `"abc123"`, `"a b"`, 1))
 	if resp.StatusCode != 400 || body["error"] != "bad_request" {
 		t.Fatalf("bad password %d %v", resp.StatusCode, body)
+	}
+	resp, body = do(t, "POST", ts.URL+"/servers", bearer, strings.Replace(startBody, "rushsite_rush3v3.cfg", "gamemode_rush.cfg", 1))
+	if resp.StatusCode != 400 || body["error"] != "bad_request" {
+		t.Fatalf("unknown execCfg %d %v", resp.StatusCode, body)
 	}
 }

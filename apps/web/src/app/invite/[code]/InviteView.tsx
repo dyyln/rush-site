@@ -73,7 +73,10 @@ export function InviteView({ code }: { code: string }) {
 
   return (
     <div className="container page">
-      <Card title="Party invite" tone="raised">
+      <header className="page-header">
+        <h1>Party invite</h1>
+      </header>
+      <Card tone="raised">
         <div className="stack">
           {preview && !problem && (
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>

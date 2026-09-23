@@ -76,6 +76,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     if (ban) {
       req.log.info({ steamId }, "banned player sign in refused")
       const q = new URLSearchParams({ until: ban.until ?? "", reason: ban.reason })
+      if (!ban.until) q.set("permanent", "1")
       return reply.redirect(`${web}/banned?${q.toString()}`, 302)
     }
     let summary = null

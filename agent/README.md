@@ -33,8 +33,7 @@ Install on a fresh box with `scripts/bootstrap.sh`. Paths:
 | `RUSHSITE_CS2_BIN` | `$CS2_DIR/game/bin/linuxsteamrt64/cs2` | |
 | `RUSHSITE_TV_PORT_OFFSET` | `100` | GOTV port is the game port plus this |
 | `RUSHSITE_STOP_GRACE` | `10s` | Time between SIGTERM and SIGKILL |
-| `RUSHSITE_MODES_FILE` | none | JSON that overrides mode launch settings. See `RUSH.md` |
-| `RUSHSITE_MODE_CFG_DIR` | none | Dir of mode cfgs that replace the embedded ones |
+| `RUSHSITE_MODE_CFG_DIR` | none | Dir of mode cfgs that add to or replace the embedded ones |
 | `RUSHSITE_STEAMCMD` | `/usr/games/steamcmd` | |
 | `RUSHSITE_UPDATE_CHECK` | `steamapi` | `steamapi`, `steamcmd` or `off` |
 | `RUSHSITE_UPDATE_INTERVAL` | `5m` | How often to check while idle |
@@ -50,12 +49,18 @@ Every route needs `Authorization: Bearer <token>`. Errors look like `{ "error": 
 | Route | Result |
 |---|---|
 | `GET /health` | `{ ok, cs2Version, slots: { total, free }, updating, update: { state, lastCheck, lastUpdate, lastError, attempts } }` |
-| `POST /servers` | 201 `{ matchId, ip, port, connect }`. 400 `bad_request`, 409 `exists`, 422 `mode_not_configured`, 503 `updating` or `no_free_slots`, 500 `start_failed` |
+| `POST /servers` | 201 `{ matchId, ip, port, connect }`. 400 `bad_request`, 409 `exists`, 503 `updating` or `no_free_slots`, 500 `start_failed` |
 | `DELETE /servers/:matchId` | 204 once the process is gone and the slot is free. Unknown ids also get 204 |
 | `GET /servers` | Array of `{ matchId, mode, mapId, port, tvPort, pid, connect, status, startedAt, logPath }`. `?include=exited` adds the last 50 ended servers with `status` `exited`, `crashed` or `stopped`, plus `endedAt` and `exitCode` |
 | `POST /update` | Operator hook. Drains and runs SteamCMD now. 202 with the update status |
 
-`POST /servers` accepts an optional `cs2: { gameType, gameMode, execCfg, extraArgs? }`. Fields that are present override the agent's mode table and missing ones fall back to it. `extraArgs` entries must be a flag such as `+mapgroup` or a plain value, and `execCfg` must be a mode cfg the agent has.
+`POST /servers` requires `cs2: { gameType, gameMode, execCfg, extraArgs?, workshopId | mapName }`, built by `resolveLaunch` in `packages/shared` from `MODE_CONFIGS`. That is the only launch table. The agent keeps just team size and win condition per mode, and it checks the block:
+
+- `execCfg` must name a cfg the agent ships in `internal/match/cfgs/` or finds in `RUSHSITE_MODE_CFG_DIR`, otherwise 400
+- exactly one of `workshopId` and `mapName`, and it must match `map`
+- `extraArgs` entries must be a flag such as `+mapgroup` or a plain value
+
+`testdata/modes.json` is exported from shared with `pnpm -C packages/shared export:modes`. The Go tests render a launch line for every mode and map in it, and check that the agent ships exactly the cfgs shared names. A shared vitest fails when the file is stale.
 
 ## Crash webhook
 
@@ -63,7 +68,7 @@ When a server exits without a `DELETE`, the agent posts `{ "event": { "type": "m
 
 ## Per match files
 
-`$CS2_DIR/game/csgo/cfg/rushsite/matches/<matchId>/` holds `server.cfg`, the mode cfg (for example `rushsite_rush3v3.cfg`) and `match.json` for the plugin. The dir is removed when the server exits. The CS2 process gets `RUSHSITE_MATCH_ID`, `RUSHSITE_MATCH_DIR` and `RUSHSITE_MATCH_JSON` in its environment, so the plugin can find `match.json`. The agent's own `RUSHSITE_*` settings, including the token, are removed from that environment.
+`$CS2_DIR/game/csgo/cfg/rushsite/matches/<matchId>/` holds `server.cfg`, `mode.cfg` (a copy of the shipped cfg named by `execCfg`) and `match.json` for the plugin. The launch line ends with `+exec rushsite/matches/<matchId>/server.cfg +exec rushsite/matches/<matchId>/mode.cfg`. Valve's gamemode cfg runs on map load after that, which for aim resets money and gives C4, so the plugin runs `exec rushsite/matches/<matchId>/mode.cfg` again at match start. The dir is removed when the server exits. The CS2 process gets `RUSHSITE_MATCH_ID`, `RUSHSITE_MATCH_DIR` and `RUSHSITE_MATCH_JSON` in its environment, so the plugin can find `match.json`. The agent's own `RUSHSITE_*` settings, including the token, are removed from that environment.
 
 ## Restarts
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef } from "react";
-import { useToast } from "@/components/ui/Toast";
+import { useSocialToast } from "@/components/play/socialHold";
 import { isMock } from "@/lib/env";
 import { modeLabel } from "@/lib/modes";
 import { useSession } from "@/lib/session";
@@ -13,7 +13,7 @@ import styles from "./challenges.module.css";
 // Site wide notice for incoming challenges and for your own challenge being answered
 export function ChallengeInbox() {
   const { user } = useSession();
-  const toast = useToast();
+  const toast = useSocialToast();
   const pathname = usePathname();
   const seen = useRef(new Set<string>());
   const me = user?.steamId;

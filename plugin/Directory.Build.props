@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Target runtime for every project in plugin/.
+    net8 builds against CounterStrikeSharp.API 1.0.368, the last net8.0 package.
+    net10 builds against the newest CounterStrikeSharp.API 1.0.x on NuGet, which targets net10.0.
+    Switch with this one line, or pass -p:RushsiteRuntime=net10 on the command line.
+  -->
+  <PropertyGroup>
+    <RushsiteRuntime Condition="'$(RushsiteRuntime)' == ''">net8</RushsiteRuntime>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RushsiteRuntime)' == 'net10'">
+    <TargetFramework>net10.0</TargetFramework>
+    <CounterStrikeSharpVersion Condition="'$(CounterStrikeSharpVersion)' == ''">1.0.*</CounterStrikeSharpVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RushsiteRuntime)' != 'net10'">
+    <TargetFramework>net8.0</TargetFramework>
+    <CounterStrikeSharpVersion Condition="'$(CounterStrikeSharpVersion)' == ''">1.0.368</CounterStrikeSharpVersion>
+  </PropertyGroup>
+</Project>

@@ -23,6 +23,16 @@ public sealed class FirstToScoreTracker
         if (_wins[winnerTeam] >= _target) DecidedWinner = winnerTeam;
         return DecidedWinner;
     }
+
+    // Used after a plugin reload.
+    public void Restore(IReadOnlyDictionary<string, int> wins)
+    {
+        foreach (var t in _wins.Keys.ToList())
+        {
+            _wins[t] = wins.TryGetValue(t, out var w) ? w : 0;
+            if (_wins[t] >= _target) DecidedWinner = t;
+        }
+    }
 }
 
 // Mirrors the round and match logic of Valve's rush_001.js without changing anything in game.
@@ -65,5 +75,18 @@ public sealed class RushScoreTracker
 
         if (DecidedWinner is null && _wins[winner] >= Config.WinCondition.RushRoundsToWin) DecidedWinner = winner;
         return DecidedWinner;
+    }
+
+    // Used after a plugin reload.
+    public void Restore(int frontSlot, int tWins, int ctWins, int roundsPlayed, Side? decided)
+    {
+        if (decided is Side d && d.IsPlaying()) DecidedWinner = d;
+        _slot = Math.Clamp(frontSlot, TCastleSlot, CtCastleSlot);
+        _wins[Side.T] = Math.Max(0, tWins);
+        _wins[Side.CT] = Math.Max(0, ctWins);
+        RoundsPlayed = Math.Max(0, roundsPlayed);
+        if (DecidedWinner is not null) return;
+        if (_wins[Side.T] >= Config.WinCondition.RushRoundsToWin) DecidedWinner = Side.T;
+        else if (_wins[Side.CT] >= Config.WinCondition.RushRoundsToWin) DecidedWinner = Side.CT;
     }
 }

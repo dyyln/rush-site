@@ -65,6 +65,16 @@ public static class MatchConfigLoader
         foreach (var id in cfg.AllowedSteamIds)
             if (!teamIds.Contains(id)) errors.Add($"allowed steamId {id} is not on any team");
 
+        foreach (var t in cfg.Teams)
+            if (t.Side is not null && TeamConfig.NormalizeSide(t.Side) is null)
+                errors.Add($"team {t.Name} side '{t.Side}' must be 'ct' or 't'");
+        if (cfg.Teams.Count == 2)
+        {
+            var s0 = TeamConfig.NormalizeSide(cfg.Teams[0].Side);
+            var s1 = TeamConfig.NormalizeSide(cfg.Teams[1].Side);
+            if (s0 is not null && s0 == s1) errors.Add("both teams have the same side");
+        }
+
         if (string.IsNullOrEmpty(cfg.Password)) errors.Add("password is required");
         if (!Uri.TryCreate(cfg.WebhookUrl, UriKind.Absolute, out var hook) || (hook.Scheme != "http" && hook.Scheme != "https"))
             errors.Add("webhookUrl must be an absolute http(s) URL");

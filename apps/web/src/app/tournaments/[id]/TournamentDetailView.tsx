@@ -6,6 +6,7 @@ import { TEAM_NAME_MAX, TeamNameSchema, trustAtLeast } from "@rushsite/shared";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import { LocalTime } from "@/components/tournaments/LocalTime";
+import { VerifiedNote } from "@/components/tournaments/VerifiedNote";
 import { WithdrawDialog } from "@/components/tournaments/WithdrawDialog";
 import { registeredToast } from "@/components/tournaments/toasts";
 import { Avatar } from "@/components/ui/Avatar";
@@ -19,15 +20,21 @@ import { Card } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
+import { describeError } from "@/lib/errors";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
-import { trustProgressLine } from "@/lib/trust";
+import { TRUST_NAMES, trustProgressLine } from "@/lib/trust";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
-import type { TournamentBracket, TournamentDetail } from "@/lib/types";
+import type { EntryView, TournamentBracket, TournamentDetail } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useVisibleInterval } from "@/lib/useVisibleInterval";
 import { getRealtime } from "@/lib/ws";
 import styles from "./detail.module.css";
+
+// Team entries show the captain's Steam avatar. Initials are the fallback
+function captainAvatar(e: EntryView): string | null {
+  return e.players?.find((p) => p.steamId === e.captainSteamId)?.avatarUrl ?? e.players?.[0]?.avatarUrl ?? null;
+}
 
 // Signed out viewers have no socket, so the bracket is polled by version instead
 const BRACKET_POLL_MS = 5000;
@@ -167,7 +174,8 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
       toast.push(entered ? { title: "Withdrawn", tone: "success" } : registeredToast(t));
       reload();
     } catch (e) {
-      toast.push({ title: "Could not update entry", body: e instanceof Error ? e.message : undefined, tone: "error" });
+      const copy = describeError(e, { title: "Could not update entry", body: "Try again in a moment." });
+      toast.push({ ...copy, tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -194,7 +202,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
           {t.entries.length > 0 && (
             <a href="#entrants-heading" className={styles.stackLink}>
               <AvatarStack
-                people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: e.players?.[0]?.avatarUrl ?? null }))}
+                people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: captainAvatar(e) }))}
                 total={t.entrantCount}
                 size="md"
               />
@@ -224,19 +232,24 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
                 onClick={entered ? () => setConfirmWithdraw(true) : toggleEntry}
                 loading={busy && !confirmWithdraw}
                 disabled={!eligible || (!entered && full)}
+                aria-describedby={!eligible ? "enter-why" : undefined}
               >
-                {entered ? "Withdraw" : full ? "Full" : "Enter cup"}
+                {entered ? "Withdraw" : !eligible ? `Needs ${TRUST_NAMES[t.minTrust]}` : full ? "Full" : "Enter cup"}
               </Button>
               {!eligible && (
-                <p className={styles.note}>
-                  {user.trust ? trustProgressLine(user.trust) : `Requires a ${t.minTrust} account`}.{" "}
-                  <Link href="/play">How to get Verified</Link>
+                <p className={styles.note} id="enter-why">
+                  You need a {TRUST_NAMES[t.minTrust]} account to enter.{" "}
+                  {user.trust ? `You are ${trustProgressLine(user.trust)}. ` : null}
+                  <Link href="/play">Play ladder matches to get there</Link>
                 </p>
               )}
               {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
             </div>
           ) : (
-            <SignInLink size="lg">Sign in to enter</SignInLink>
+            <div className={styles.cta}>
+              <SignInLink size="lg">Sign in to enter</SignInLink>
+              <VerifiedNote minTrust={t.minTrust} />
+            </div>
           ))}
       </header>
       <WithdrawDialog
@@ -273,7 +286,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
             {t.entries.map((e) => (
               <li key={e.id} className={styles.entrant}>
                 <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
-                  <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
+                  <Avatar name={entryName(e)} src={captainAvatar(e)} size="sm" />
                   <span className={styles.entrantName}>{entryName(e)}</span>
                 </TeamCard>
                 {e.disqualified && <Badge tone="loss">DQ</Badge>}

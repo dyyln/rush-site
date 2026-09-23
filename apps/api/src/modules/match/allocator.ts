@@ -1,5 +1,5 @@
 import {
-  getModeConfig,
+  resolveLaunch,
   type DemoUpload,
   type MapEntry,
   type Mode,
@@ -229,7 +229,7 @@ export class Allocator {
       webhookUrl: `${this.opts.webhookBaseUrl.replace(/\/+$/, "")}/webhooks/match/${p.matchId}`,
       webhookSecret: p.webhookSecret,
       demoUpload,
-      cs2: { ...getModeConfig(p.mode).cs2 },
+      cs2: resolveLaunch(p.mode, p.map),
     }
   }
 

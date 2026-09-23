@@ -31,7 +31,8 @@ export type MatchPhase =
   | { phase: "ready"; server: ServerReadyPayload; veto: VetoStatePayload | null }
   // Server is being allocated. Seen on load, for example right after a challenge is accepted
   | { phase: "starting"; matchId: string; mode: Mode; status?: "allocating" | "starting" }
-  | { phase: "result"; result: MatchResultPayload };
+  // mapId and veto come from the phase before the result, when known
+  | { phase: "result"; result: MatchResultPayload; mapId?: string; veto?: VetoStatePayload | null };
 
 // Warm-up progress on the connect card
 export type Warmup = { matchId: string; connected: number; expected: number };
@@ -69,7 +70,13 @@ export function usePlay(notices: Notices = {}) {
       rt.on("server_ready", (server) =>
         setMatch((m) => ({ phase: "ready", server, veto: m.phase === "veto" ? m.veto : null })),
       ),
-      rt.on("match_result", (result) => setMatch({ phase: "result", result })),
+      rt.on("match_result", (result) =>
+        setMatch((m) => {
+          const ready = m.phase === "ready" && m.server.matchId === result.matchId ? m : null;
+          const veto = ready?.veto ?? (m.phase === "veto" && m.veto.matchId === result.matchId ? m.veto : null);
+          return { phase: "result", result, mapId: ready?.server.mapId ?? (veto?.state.done ? veto.state.maps[0] : undefined), veto };
+        }),
+      ),
       rt.on("match_cancelled", (p) => {
         setMatch({ phase: "none" });
         noticesRef.current.onCancelled?.(p);

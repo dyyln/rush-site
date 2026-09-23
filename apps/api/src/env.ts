@@ -86,6 +86,13 @@ export const EnvSchema = z.object({
   ALLOCATION_TIMEOUT_SEC: z.coerce.number().int().positive().default(120),
   // Backstop for players who never connect when the plugin does not report it
   CONNECT_TIMEOUT_SEC: z.coerce.number().int().positive().default(600),
+  // Watchdog caps per mode in minutes. A match past its cap ends with no rating change
+  MATCH_MAX_MIN_AIM: z.coerce.number().int().positive().default(45),
+  MATCH_MAX_MIN_RUSH: z.coerce.number().int().positive().default(40),
+  // A live match with no webhook this long and no answer from its server driver counts as lost
+  MATCH_SILENCE_SEC: z.coerce.number().int().positive().default(900),
+  // Seconds between watchdog passes in the allocation loop
+  WATCHDOG_INTERVAL_SEC: z.coerce.number().int().positive().default(30),
   // Servers stay up after the match until the demo upload is reported or this long passes
   DEMO_WAIT_SEC: z.coerce.number().int().nonnegative().default(180),
   // Lets modes with placeholder map or game ids queue outside production

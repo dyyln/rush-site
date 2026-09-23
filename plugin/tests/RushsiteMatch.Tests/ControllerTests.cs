@@ -51,19 +51,21 @@ public class ControllerTests
     }
 
     [Fact]
-    public void RushNeverTouchesRoundRulesWarmupOrTeams()
+    public void RushNeverTouchesRoundRulesOrPauses()
     {
         var m = New(Rush());
-        foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.T);
-        foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.CT);
+        foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.CT);
+        foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.T);
         Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
         Assert.Contains("Rush", m.OnReady(A1));
         m.OnRoundFreezeEnd(isWarmup: false);
         m.OnPlayerDisconnected(B1);
         _clock.Advance(10);
         m.Tick();
-        Assert.DoesNotContain(_game.Commands, c => RoundConVars.Any(c.StartsWith));
+        // Holding warmup until the lineup is complete is the only mp_ command Rush sends.
+        Assert.DoesNotContain(_game.Commands, c => RoundConVars.Any(c.StartsWith) && !c.StartsWith("mp_warmup_pausetimer"));
         Assert.Empty(_game.Moves);
+        Assert.Empty(_game.ForcedJoins);
     }
 
     [Fact]
@@ -89,8 +91,8 @@ public class ControllerTests
     private MatchController LiveRush()
     {
         var m = New(Rush());
-        foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.T);
-        foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.CT);
+        foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.CT);
+        foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.T);
         _game.Arena = "102";
         m.OnRoundFreezeEnd(isWarmup: false);
         return m;
@@ -103,7 +105,7 @@ public class ControllerTests
         var m = LiveRush();
         m.OnPlayerHurt(A1, B1, 100);
         m.OnPlayerDeath(new DeathInfo(A1, B1, null, "ak47", true, 0, 100));
-        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.T, false, false);
+        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.CT, false, false);
 
         var rounds = _sink.Events.OfType<RoundEnd>().ToList();
         Assert.Equal(new[] { 1, 2, 3, 4 }, rounds.Select(r => r.Round));
@@ -120,7 +122,7 @@ public class ControllerTests
         var a1 = end.Players.Single(p => p.SteamId == A1);
         Assert.Equal((1, 1, 100), (a1.Kills, a1.Headshots, a1.Damage));
 
-        m.OnRoundEnd(Side.CT, false, false);
+        m.OnRoundEnd(Side.T, false, false);
         m.OnWinPanelMatch();
         Assert.Equal(4, _sink.Events.OfType<RoundEnd>().Count());
         Assert.Single(_sink.Types, "match_end");
@@ -149,10 +151,10 @@ public class ControllerTests
         var m = LiveRush();
         for (var i = 0; i < 7; i++)
         {
-            m.OnRoundEnd(Side.T, false, false);
             m.OnRoundEnd(Side.CT, false, false);
+            m.OnRoundEnd(Side.T, false, false);
         }
-        m.OnRoundEnd(Side.CT, false, false);
+        m.OnRoundEnd(Side.T, false, false);
         Assert.Equal(MatchPhase.Live, m.Phase);
         _clock.Advance(10);
         m.Tick();
@@ -168,7 +170,7 @@ public class ControllerTests
     {
         _uploader.Result = DemoUploadResult.Failed("HTTP 403", 2048);
         var m = LiveRush();
-        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.CT, false, false);
+        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.T, false, false);
         m.OnWinPanelMatch();
         _clock.Advance(5);
         m.Tick();
@@ -353,6 +355,28 @@ public class ControllerTests
         Assert.False(demo.Ok);
         Assert.Null(demo.Bytes);
         Assert.Contains("presignedPutUrl", demo.Error);
+    }
+
+    [Fact]
+    public void AimExecsPerMatchModeCfgFirstAndRushNever()
+    {
+        var m = New(Aim1v1());
+        Join(m, A1, Side.CT);
+        Join(m, B1, Side.T);
+        m.ForceStart();
+        var exec = "exec rushsite/matches/5f0c7a3e-1b2c-4d5e-8f90-1234567890ab/mode.cfg";
+        var start = _game.Commands.SkipWhile(c => c != exec).ToList();
+        Assert.Equal(new[] { exec, "mp_maxrounds 31" }, start.Take(2));
+        Assert.True(start.IndexOf("mp_warmup_pausetimer 0") > 0);
+        Assert.True(start.IndexOf("mp_warmup_end") > start.IndexOf("mp_warmup_pausetimer 0"));
+
+        _game.Commands.Clear();
+        var rush = New(Rush());
+        foreach (var id in new[] { A1, A2, A3 }) Join(rush, id, Side.CT);
+        foreach (var id in new[] { B1, B2, B3 }) Join(rush, id, Side.T);
+        rush.Tick();
+        rush.OnRushMatchLive();
+        Assert.DoesNotContain(_game.Commands, c => c.StartsWith("exec "));
     }
 
     [Fact]

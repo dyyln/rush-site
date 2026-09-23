@@ -56,6 +56,7 @@ function showBanned(details: unknown) {
   if (typeof window === "undefined" || window.location.pathname === "/banned") return;
   const d = (details ?? {}) as { reason?: string; until?: string | null };
   const q = new URLSearchParams({ until: d.until ?? "", reason: d.reason ?? "" });
+  if (d.until === null) q.set("permanent", "1");
   window.location.assign(`/banned?${q.toString()}`);
 }
 

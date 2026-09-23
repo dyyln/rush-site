@@ -9,7 +9,7 @@ import {
 } from "@rushsite/shared"
 import { and, asc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
-import { matchPlayers, ratingEvents, ratings } from "../../db/schema.js"
+import { matchPlayers, ratingEvents, ratingRollbacks, ratings } from "../../db/schema.js"
 import { replayRatings, type ReplayEvent } from "./replay.js"
 
 export type TeamMatchInput = {
@@ -142,7 +142,9 @@ export class RatingService {
     return changes
   }
 
-  // Voids every win the cheater had since `since` for the players they beat, then replays those players
+  // Voids every win the cheater had since `since` for the players they beat, then replays those players.
+  // Matches already rolled back are skipped, so a second run or a second cheater in the same match is a no-op.
+  // Each victim is replayed over their whole history in the mode so earlier rollbacks stay applied
   async rollbackCheater(cheater: string, since: Date): Promise<RollbackSummary> {
     return this.db.transaction(async (txRaw) => {
       const tx = txRaw as unknown as Db
@@ -158,9 +160,23 @@ export class RatingService {
             inArray(ratingEvents.reason, ["match", "forfeit"]),
           ),
         )
-      const matchIds = [...new Set(wins.map((w) => w.matchId).filter((m): m is string => !!m))]
+      const candidates = [...new Set(wins.map((w) => w.matchId).filter((m): m is string => !!m))]
+      const done =
+        candidates.length === 0
+          ? []
+          : await tx
+              .select({ matchId: ratingRollbacks.matchId })
+              .from(ratingRollbacks)
+              .where(inArray(ratingRollbacks.matchId, candidates))
+      const skip = new Set(done.map((d) => d.matchId))
+      const matchIds = candidates.filter((m) => !skip.has(m))
       const summary: RollbackSummary = { cheater, voidedMatches: matchIds, players: [] }
       if (matchIds.length === 0) return summary
+      const nowDate = new Date(this.now())
+      await tx
+        .insert(ratingRollbacks)
+        .values(matchIds.map((matchId) => ({ matchId, cheaterSteamId: cheater, rolledBackAt: nowDate })))
+        .onConflictDoNothing()
 
       const cheaterTeams = await tx
         .select({ matchId: matchPlayers.matchId, team: matchPlayers.team })
@@ -190,26 +206,18 @@ export class RatingService {
         byPlayerMode.set(key, [...(byPlayerMode.get(key) ?? []), ev])
       }
 
-      const nowDate = new Date(this.now())
       for (const [key, voidList] of byPlayerMode) {
         const [steamId, mode] = key.split("|") as [string, Mode]
-        const firstSeq = Math.min(...voidList.map((e) => e.seq))
-        const first = voidList.find((e) => e.seq === firstSeq)!
         const rows = await this.lockRows(tx, [steamId], mode)
         const row = rows.get(steamId)!
+        // Replaying only from the newly voided event would restore what an earlier rollback removed
         const history = await tx
           .select()
           .from(ratingEvents)
-          .where(
-            and(
-              eq(ratingEvents.steamId, steamId),
-              eq(ratingEvents.mode, mode),
-              gte(ratingEvents.seq, firstSeq),
-              isNull(ratingEvents.voidedAt),
-            ),
-          )
+          .where(and(eq(ratingEvents.steamId, steamId), eq(ratingEvents.mode, mode)))
           .orderBy(asc(ratingEvents.seq))
-        const voided = new Set(voidList.map((e) => e.id))
+        const first = history.find((e) => e.reason !== "rollback") ?? voidList[0]!
+        const voided = new Set([...voidList.map((e) => e.id), ...history.filter((e) => e.voidedAt).map((e) => e.id)])
         const replayed = replayRatings(
           { rating: first.ratingBefore, rd: first.rdBefore, volatility: first.volBefore },
           history.map(toReplayEvent),
@@ -218,7 +226,7 @@ export class RatingService {
         await tx
           .update(ratingEvents)
           .set({ voidedAt: nowDate, voidReason: `rollback:${cheater}` })
-          .where(inArray(ratingEvents.id, [...voided]))
+          .where(inArray(ratingEvents.id, voidList.map((e) => e.id)))
         await tx.insert(ratingEvents).values({
           matchId: null,
           steamId,

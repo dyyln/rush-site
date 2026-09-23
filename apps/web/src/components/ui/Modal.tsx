@@ -23,7 +23,11 @@ export function Modal({ open, title, onClose, children, footer, blocking, size =
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      // The browser focuses the first control. An element marked data-autofocus wins
+      d.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    }
     if (!open && d.open) d.close();
   }, [open]);
 
@@ -32,6 +36,10 @@ export function Modal({ open, title, onClose, children, footer, blocking, size =
       ref={ref}
       className={cx(styles.dialog, styles[size])}
       aria-labelledby={titleId}
+      onKeyDown={(e) => {
+        // Chrome closes a dialog on a second Escape even when cancel is prevented
+        if (blocking && e.key === "Escape") e.preventDefault();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         if (!blocking) onClose?.();

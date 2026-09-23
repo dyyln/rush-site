@@ -46,8 +46,22 @@ export function hasLadderVeto(mode: Mode): boolean {
   return LADDER_VETO_FORMATS.includes(MODE_CONFIGS[mode].vetoFormat);
 }
 
+// Player facing map names. Used until the shared config carries real display names
+const MAP_NAMES: Record<string, string> = {
+  aim_map: "Aim Map",
+  aim_redline: "Redline",
+  aim_ag_texture2: "AG Texture 2",
+  aim_usp: "USP",
+  aim_deagle7k: "Deagle 7k",
+  awp_india: "AWP India",
+  rush_001: "Complex",
+};
+
 export function mapName(mode: Mode, mapId: string): string {
-  return MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName ?? mapId;
+  const configured = MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName;
+  // A lower case name with underscores is still a raw map id
+  if (configured && !/^[a-z0-9_]+$/.test(configured)) return configured;
+  return MAP_NAMES[mapId] ?? configured ?? mapId;
 }
 
 export function isMode(value: string | null | undefined): value is Mode {

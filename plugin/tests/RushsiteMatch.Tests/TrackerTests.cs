@@ -148,6 +148,35 @@ public class SideMapTests
         m.SetPlayerSide(B1, Side.CT);
         Assert.Equal("alpha", m.TeamOnSide(Side.T));
     }
+
+    [Fact]
+    public void OnePlayerOnTheWrongSideDoesNotFlipTheTeam()
+    {
+        var m = new SideMap(Aim2v2());
+        m.SetPlayerSide(A1, Side.CT);
+        m.SetPlayerSide(A2, Side.CT);
+        m.SetPlayerSide(B1, Side.T);
+        m.SetPlayerSide(A2, Side.T);
+        Assert.Equal("alpha", m.TeamOnSide(Side.CT));
+        Assert.Equal("bravo", m.TeamOnSide(Side.T));
+    }
+
+    [Fact]
+    public void FixedModeIgnoresWherePlayersStand()
+    {
+        var m = new SideMap(Rush(), fixedFromConfig: true);
+        Assert.Equal("alpha", m.TeamOnSide(Side.CT));
+        foreach (var id in new[] { A1, A2, A3 }) m.SetPlayerSide(id, Side.T);
+        foreach (var id in new[] { B1, B2, B3 }) m.SetPlayerSide(id, Side.CT);
+        Assert.Equal("alpha", m.TeamOnSide(Side.CT));
+        Assert.Equal("bravo", m.TeamOnSide(Side.T));
+        Assert.Equal(Side.CT, m.RequiredSide(A1));
+        Assert.False(m.IsOnRequiredSide(A1));
+        Assert.False(m.TeamsAreValid(Rush().AllowedSteamIds));
+        foreach (var id in new[] { A1, A2, A3 }) m.SetPlayerSide(id, Side.CT);
+        foreach (var id in new[] { B1, B2, B3 }) m.SetPlayerSide(id, Side.T);
+        Assert.True(m.TeamsAreValid(Rush().AllowedSteamIds));
+    }
 }
 
 public class ScoreTrackerTests

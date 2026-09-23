@@ -7,6 +7,8 @@
   --color-surface-3: #282435;
   --color-border: #2c2838;
   --color-border-strong: #433d55;
+  /* Edge of outlined controls. At least 3:1 on every surface */
+  --color-border-control: #7a7292;
 
   /* Disabled. Neutral grey with no purple tint */
   --color-disabled-surface: #1b1b1f;

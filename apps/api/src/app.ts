@@ -236,6 +236,16 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics,
   }
   app.addHook("onReady", async () => {
     await ctx.allocator.seedGslt(ctx.env.GSLT_TOKENS)
+    // Matches whose server died while the API was down end before the loops start
+    try {
+      await withLock(ctx.redis, "lock:match_alloc", 30_000, async () => {
+        await ctx.allocator.syncHosts(ctx.env.AGENT_URLS)
+        const ended = await ctx.flow.recover()
+        if (ended.length > 0) app.log.warn({ matchIds: ended }, "boot recovery ended matches with no server")
+      })
+    } catch (err) {
+      app.log.error({ err }, "boot recovery failed")
+    }
     let tick = 0
     loop("matchmaker", ctx.env.MATCHMAKER_INTERVAL_MS, (ttl) =>
       metrics.time("matchmaker", ttl, () => matchmakeAll(ctx.queue, ctx.flow, ctx.now(), app.log, tick++), (ids) => ({

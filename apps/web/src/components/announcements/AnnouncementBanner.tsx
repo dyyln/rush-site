@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Announcement } from "@rushsite/shared";
+import Link from "next/link";
+import type { Announcement, Mode, ServiceStatus } from "@rushsite/shared";
+import { useServiceStatus } from "@/components/stats/useServiceStatus";
+import { MODE_COPY } from "@/lib/modes";
 import { WarningIcon } from "@/components/stats/WarningIcon";
 import { api } from "@/lib/api";
 import { isMock } from "@/lib/env";
@@ -48,10 +51,32 @@ async function load(): Promise<Announcement[]> {
   return (await api.get<{ announcements: Announcement[] }>("/announcements")).announcements;
 }
 
+// Words that name each mode in announcement text
+const MODE_WORDS: Record<Mode, RegExp> = {
+  aim1v1: /\b1\s*v\s*1\b/i,
+  aim2v2: /\b2\s*v\s*2\b/i,
+  rush3v3: /\b(3\s*v\s*3|rush)\b/i,
+};
+
+function availabilityPhrase(reason?: string): string {
+  if (reason === "not_configured") return "is not open yet";
+  if (reason === "no_servers") return "has no servers online right now";
+  if (reason === "servers_updating") return "is paused while servers update";
+  if (reason === "closed") return "is closed for now";
+  return "cannot be queued right now";
+}
+
+// Modes the text names that cannot queue right now
+function blockedModes(text: string, status: ServiceStatus | null) {
+  if (!status) return [];
+  return status.modes.filter((m) => !m.available && MODE_WORDS[m.mode].test(text));
+}
+
 // Site wide notices from GET /announcements. Dismissal is remembered per announcement id
 export function AnnouncementBanner() {
   const [items, setItems] = useState<Announcement[]>([]);
   const [dismissed, setDismissed] = useState<string[] | null>(null);
+  const status = useServiceStatus();
 
   const refresh = useCallback(() => {
     load().then(setItems, () => undefined);
@@ -86,7 +111,15 @@ export function AnnouncementBanner() {
         <section key={a.id} className={`${styles.banner} ${a.level === "warn" ? styles.warn : styles.info}`} aria-label="Announcement">
           <div className={`container ${styles.inner}`}>
             {a.level === "warn" ? <WarningIcon className={styles.icon} /> : <InfoIcon />}
-            <p className={styles.text}>{a.text}</p>
+            <div className={styles.text}>
+              <p className={styles.line}>{a.text}</p>
+              {blockedModes(a.text, status).map((m) => (
+                <p key={m.mode} className={styles.availability}>
+                  {MODE_COPY[m.mode].label} {availabilityPhrase(m.reason)}.{" "}
+                  <Link href="/status">Server status</Link>
+                </p>
+              ))}
+            </div>
             {a.dismissible && (
               <button type="button" className={styles.close} onClick={() => dismiss(a.id)} aria-label="Dismiss announcement">
                 <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">

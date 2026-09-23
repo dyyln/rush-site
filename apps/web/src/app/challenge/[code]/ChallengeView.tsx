@@ -57,7 +57,10 @@ export function ChallengeView({ code }: { code: string }) {
   if (loadError) {
     return (
       <div className="container page">
-        <Card title={loadError === "not_found" ? "Challenge not found" : "Could not load the challenge"} tone="raised">
+        <header className="page-header">
+          <h1>{loadError === "not_found" ? "Challenge not found" : "Could not load the challenge"}</h1>
+        </header>
+        <Card tone="raised">
           <p className="muted">{loadError === "not_found" ? "The link is wrong or the challenge was removed." : "Try again in a moment."}</p>
           <div className={styles.actions}>
             <ButtonLink href="/play" variant="secondary">
@@ -72,6 +75,9 @@ export function ChallengeView({ code }: { code: string }) {
   if (!challenge) {
     return (
       <div className="container page" aria-busy="true">
+        <header className="page-header">
+          <h1>Challenge</h1>
+        </header>
         <p className="muted">Loading challenge</p>
       </div>
     );

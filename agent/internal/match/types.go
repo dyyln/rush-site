@@ -53,16 +53,18 @@ type StartRequest struct {
 	WebhookURL      string     `json:"webhookUrl"`
 	WebhookSecret   string     `json:"webhookSecret"`
 	DemoUpload      DemoUpload `json:"demoUpload"`
-	// CS2 overrides the agent's mode table when present.
-	CS2 *CS2Settings `json:"cs2,omitempty"`
+	// CS2 is the launch block built from shared config. It is required.
+	CS2 *CS2Settings `json:"cs2"`
 }
 
-// CS2Settings is the optional cs2 block of StartRequest.
+// CS2Settings is the cs2 block of StartRequest. It mirrors the shared Cs2Start type.
 type CS2Settings struct {
-	GameType  *int     `json:"gameType"`
-	GameMode  *int     `json:"gameMode"`
-	ExecCfg   string   `json:"execCfg"`
-	ExtraArgs []string `json:"extraArgs,omitempty"`
+	GameType   *int     `json:"gameType"`
+	GameMode   *int     `json:"gameMode"`
+	ExecCfg    string   `json:"execCfg"`
+	ExtraArgs  []string `json:"extraArgs,omitempty"`
+	WorkshopID string   `json:"workshopId,omitempty"`
+	MapName    string   `json:"mapName,omitempty"`
 }
 
 // StartResponse is the POST /servers reply.

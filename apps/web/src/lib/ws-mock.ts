@@ -214,7 +214,7 @@ export class MockRealtime extends Emitter implements Realtime {
       this.later(6000, () => {
         this.clear();
         this.mode = null;
-        this.emit("match_cancelled", { matchId: MATCH_ID, reason: "An opponent did not accept" });
+        this.emit("match_cancelled", { matchId: MATCH_ID, reason: "timeout" });
         this.idle();
       });
       return;

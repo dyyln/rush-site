@@ -35,12 +35,18 @@ describe("schemas", () => {
       webhookUrl: "http://api:3000/webhooks/match/" + MID,
       webhookSecret: "0123456789abcdef",
       demoUpload: { bucket: "demos", key: "k", presignedPutUrl: "https://s3.example/put" },
+      cs2: { ...MODE_CONFIGS.rush3v3.cs2, mapName: "rush_001" },
     }
     expect(StartServerRequestSchema.parse(req)).toEqual(req)
     expect(() => StartServerRequestSchema.parse({ ...req, mode: "wingman" })).toThrow()
-    const withCs2 = { ...req, cs2: { ...MODE_CONFIGS.rush3v3.cs2, extraArgs: ["+tv_enable", "1"] } }
-    expect(StartServerRequestSchema.parse(withCs2).cs2).toEqual(withCs2.cs2)
-    expect(StartServerRequestSchema.parse({ ...req, cs2: MODE_CONFIGS.aim1v1.cs2 }).cs2).toEqual(MODE_CONFIGS.aim1v1.cs2)
+    const withArgs = { ...req, cs2: { ...req.cs2, extraArgs: ["+tv_enable", "1"] } }
+    expect(StartServerRequestSchema.parse(withArgs).cs2).toEqual(withArgs.cs2)
+    const { cs2: _cs2, ...noCs2 } = req
+    expect(() => StartServerRequestSchema.parse(noCs2)).toThrow()
+    expect(() => StartServerRequestSchema.parse({ ...req, cs2: MODE_CONFIGS.aim1v1.cs2 })).toThrow()
+    expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, workshopId: "123" } })).toThrow()
+    expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, execCfg: "../x.cfg" } })).toThrow()
+    expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, extraArgs: ["+map de_dust2"] } })).toThrow()
   })
 
   it("parses match events", () => {
@@ -264,7 +270,7 @@ describe("config", () => {
     expect(Object.keys(MODE_CONFIGS)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
     expect(MODE_CONFIGS.aim1v1.maps).toHaveLength(6)
     expect(MODE_CONFIGS.rush3v3.maps).toEqual([{ id: "rush_001", displayName: "Complex", mapName: "rush_001" }])
-    expect(MODE_CONFIGS.rush3v3.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "gamemode_rush.cfg" })
+    expect(MODE_CONFIGS.rush3v3.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg" })
     expect(MODE_CONFIGS.rush3v3.winCondition).toBe("valve_rush")
     expect(unresolvedConfig("rush3v3")).toEqual([])
     expect(MODE_CONFIGS.aim1v1.vetoFormat).toBe("bo1-ban")

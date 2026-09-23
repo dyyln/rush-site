@@ -79,6 +79,41 @@ public sealed class CssGameServer : IGameServer
         }
     }
 
+    // Runs jointeam as the player on the next frame so the jointeam listener sees it as a normal pick.
+    public void ForceJoinTeam(string steamId, Side side)
+    {
+        if (!side.IsPlaying()) return;
+        var team = (int)side;
+        Server.NextFrame(() =>
+        {
+            var p = FindPlayer(steamId);
+            if (p is null) return;
+            try
+            {
+                p.ExecuteClientCommandFromServer($"jointeam {team}");
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning("jointeam for {SteamId} failed: {Message}", steamId, e.Message);
+            }
+        });
+    }
+
+    public void KickPlayer(string steamId, string reason)
+    {
+        var p = FindPlayer(steamId);
+        if (p?.UserId is int uid) Kick(uid, reason);
+    }
+
+    public IReadOnlyList<ConnectedPlayer> ConnectedPlayers() =>
+        HumanPlayers()
+            .Where(p => p.UserId is not null && p.SteamID != 0)
+            .Select(p => new ConnectedPlayer(
+                p.AuthorizedSteamID?.SteamId64.ToString() ?? p.SteamID.ToString(),
+                p.UserId!.Value,
+                p.AuthorizedSteamID is not null))
+            .ToList();
+
     // Finds the room whose t1room.<id> target is nearest the living T players.
     // Falls back to info_player_terrorist spawns when no pawn is available.
     public string? DetectRushArena()
@@ -137,8 +172,10 @@ public sealed class CssGameServer : IGameServer
         return v is null ? null : new Vec3(v.X, v.Y, v.Z);
     }
 
+    // Fully connected humans. Controllers of players who left can linger, so the connection state is checked.
     public static IEnumerable<CCSPlayerController> HumanPlayers() =>
-        Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
+        Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false }
+                                          && p.Connected == PlayerConnectedState.Connected);
 
     private static IEnumerable<CCSPlayerController> HumanAndBotPlayers() =>
         Utilities.GetPlayers().Where(p => p is { IsValid: true, IsHLTV: false });

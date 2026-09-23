@@ -10,19 +10,20 @@ import { useAsync } from "@/lib/useAsync";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { REASON } from "./copy";
 import { reviewApi } from "./api";
+import styles from "./review.module.css";
 
 const columns: Column<MyReport>[] = [
   {
     key: "player",
     header: "Player",
-    cell: (r) => <Link href={`/profile/${r.reported.steamId}`}>{r.reported.displayName}</Link>,
+    cell: (r) => <Link href={`/profile/${r.reported.steamId}`} className={styles.cellLink}>{r.reported.displayName}</Link>,
   },
   { key: "reason", header: "Reason", cell: (r) => REASON[r.reason] },
   {
     key: "match",
     header: "Match",
     hideOnMobile: true,
-    cell: (r) => (r.matchId ? <Link href={`/matches/${r.matchId}`}>{r.match ? MODE_COPY[r.match.mode].short : "Match"}</Link> : "--"),
+    cell: (r) => (r.matchId ? <Link href={`/matches/${r.matchId}`} className={styles.cellLink}>{r.match ? MODE_COPY[r.match.mode].short : "Match"}</Link> : "--"),
   },
   { key: "outcome", header: "Outcome", cell: (r) => <OutcomeBadge outcome={r.outcome} /> },
   { key: "date", header: "Reported", align: "right", hideOnMobile: true, cell: (r) => shortDate(r.createdAt) },

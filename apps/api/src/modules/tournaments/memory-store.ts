@@ -92,6 +92,25 @@ export class MemoryTournamentStore implements TournamentStore {
     return out
   }
 
+  async previewEntries(ids: string[], limit: number) {
+    const out: EntryRecord[] = []
+    for (const id of ids) {
+      const rows = [...this.entries.values()]
+        .filter((e) => e.tournamentId === id && !e.disqualifiedAt)
+        .sort((a, b) => +a.createdAt - +b.createdAt)
+        .slice(0, limit)
+      out.push(...rows.map((e) => ({ ...e })))
+    }
+    return out
+  }
+
+  async getEntries(ids: string[]) {
+    return ids.flatMap((id) => {
+      const e = this.entries.get(id)
+      return e ? [{ ...e }] : []
+    })
+  }
+
   async insertEntry(e: NewEntry) {
     const row: EntryRecord = {
       ...e,
