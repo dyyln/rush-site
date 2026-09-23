@@ -1,0 +1,14 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+.git
+.env
+.env.*
+!.env.example
+agent/
+plugin/
+worker/
+infra/terraform/
+**/*.log

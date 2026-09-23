@@ -1,0 +1,104 @@
+/* Design tokens. Every colour, size and font used by the web app lives here. */
+:root {
+  /* Surfaces */
+  --color-bg: #0f0e13;
+  --color-surface-1: #17151f;
+  --color-surface-2: #1f1c2a;
+  --color-surface-3: #282435;
+  --color-border: #2c2838;
+  --color-border-strong: #433d55;
+
+  /* Text */
+  --color-text: #ecedef;
+  --color-text-muted: #9aa0ab;
+  --color-text-on-accent: #0f0e13;
+
+  /* Accent */
+  --color-accent: #9b8ac4;
+  --color-accent-hover: #b3a4d6;
+  --color-accent-subtle: #2a2540;
+
+  /* Status */
+  --color-win: #3dd68c;
+  --color-win-subtle: #14291f;
+  --color-loss: #ff7a7a;
+  --color-loss-subtle: #2e1719;
+  --color-info: #7fd1e0;
+  --color-info-subtle: #13262b;
+  --color-credits: #e0c36a;
+  --color-warn: #e0c36a;
+  --color-warn-subtle: #2a2414;
+
+  /* Tiers. Each passes 4.5:1 on surface-1 */
+  --tier-iron: #a7a9b0;
+  --tier-bronze: #d19a6a;
+  --tier-silver: #c9d1dc;
+  --tier-gold: #e0c36a;
+  --tier-platinum: #7fd1e0;
+  --tier-elite: #c3b2f0;
+
+  /* Focus */
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent-hover);
+
+  /* Type */
+  --font-display: var(--font-chakra), "Chakra Petch", system-ui, sans-serif;
+  --font-body: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* Space, 4px grid */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  /* Sizing */
+  --target-min: 44px;
+  --content-max: 1200px;
+  --gutter: 16px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layers */
+  --z-header: 10;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  color-scheme: dark;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+  }
+}

@@ -1,0 +1,14 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+# API and WebSocket at /ws. Caddy proxies upgrades without extra config.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:3001
+}

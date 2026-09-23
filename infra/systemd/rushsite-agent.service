@@ -1,0 +1,23 @@
+# Sample unit for the Go host agent. Copy to /etc/systemd/system/.
+# The agent listens on 0.0.0.0:8080. The firewall keeps it private.
+# The agent binary and env file paths below match infra/hetzner/README.md.
+[Unit]
+Description=rushsite host agent
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cs2
+Group=cs2
+EnvironmentFile=/etc/rushsite/agent.env
+ExecStart=/opt/rushsite/agent
+Restart=always
+RestartSec=3
+# CS2 servers are children of the agent. Let them finish on agent restart.
+KillMode=process
+LimitNOFILE=1048576
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,75 @@
+# Production override for the Hetzner AX box.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Caddy terminates TLS on 80 and 443 with automatic Let's Encrypt certs.
+# Demos go to Hetzner Object Storage so minio is left out.
+
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  minio:
+    profiles: ["local-s3"]
+
+  minio-init:
+    profiles: ["local-s3"]
+
+  api:
+    environment:
+      NODE_ENV: production
+      S3_ENDPOINT: ${S3_ENDPOINT:?set S3_ENDPOINT for production}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-${S3_ENDPOINT}}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      STEAM_API_KEY: ${STEAM_API_KEY:?set STEAM_API_KEY}
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+      # Web and api sit on sibling subdomains so the session cookie needs a parent domain.
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN, for example .rushsite.example}
+    # Stays on loopback so the CS2 plugin on the host can post webhooks locally.
+    ports: !override ["127.0.0.1:3001:3001"]
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  web:
+    environment:
+      NODE_ENV: production
+    ports: !reset []
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging: *logging
+
+volumes:
+  caddydata:
+  caddyconfig:

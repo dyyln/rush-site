@@ -1,0 +1,260 @@
+import {
+  defaultRating,
+  teamComposite,
+  tierForRating,
+  updateRating,
+  type Glicko2Rating,
+  type Mode,
+  type RatingChange,
+} from "@rushsite/shared"
+import { and, asc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm"
+import type { Db } from "../../db/client.js"
+import { matchPlayers, ratingEvents, ratings } from "../../db/schema.js"
+import { replayRatings, type ReplayEvent } from "./replay.js"
+
+export type TeamMatchInput = {
+  matchId: string
+  mode: Mode
+  teams: [string[], string[]]
+  // Team 0 result. 1 win, 0.5 draw, 0 loss
+  scoreA: number
+  // Players recorded as forfeits. They still take the normal loss
+  forfeiters?: string[]
+}
+
+export type RollbackSummary = {
+  cheater: string
+  voidedMatches: string[]
+  players: { steamId: string; mode: Mode; before: number; after: number; voidedEvents: number }[]
+}
+
+const toRating = (r: { rating: number; rd: number; volatility: number }): Glicko2Rating => ({
+  rating: r.rating,
+  rd: r.rd,
+  volatility: r.volatility,
+})
+
+export class RatingService {
+  constructor(
+    private readonly db: Db,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async get(steamIds: string[], mode: Mode, db: Db = this.db): Promise<Map<string, Glicko2Rating>> {
+    const out = new Map<string, Glicko2Rating>()
+    for (const id of steamIds) out.set(id, defaultRating())
+    if (steamIds.length === 0) return out
+    const rows = await db
+      .select()
+      .from(ratings)
+      .where(and(inArray(ratings.steamId, steamIds), eq(ratings.mode, mode)))
+    for (const r of rows) out.set(r.steamId, toRating(r))
+    return out
+  }
+
+  async ratingValues(steamIds: string[], mode: Mode): Promise<Record<string, number>> {
+    const map = await this.get(steamIds, mode)
+    return Object.fromEntries([...map].map(([k, v]) => [k, v.rating]))
+  }
+
+  private async lockRows(tx: Db, steamIds: string[], mode: Mode): Promise<Map<string, typeof ratings.$inferSelect>> {
+    const d = defaultRating()
+    await tx
+      .insert(ratings)
+      .values(steamIds.map((steamId) => ({ steamId, mode, rating: d.rating, rd: d.rd, volatility: d.volatility })))
+      .onConflictDoNothing()
+    const rows = await tx
+      .select()
+      .from(ratings)
+      .where(and(inArray(ratings.steamId, steamIds), eq(ratings.mode, mode)))
+      .orderBy(asc(ratings.steamId))
+      .for("update")
+    return new Map(rows.map((r) => [r.steamId, r]))
+  }
+
+  // Updates every player against the mean of the other team and writes rating_events
+  async applyMatch(input: TeamMatchInput, tx: Db = this.db): Promise<RatingChange[]> {
+    const [a, b] = input.teams
+    const all = [...a, ...b]
+    const rows = await this.lockRows(tx, all, input.mode)
+    const cur = (id: string) => toRating(rows.get(id)!)
+    const compA = teamComposite(a.map(cur))
+    const compB = teamComposite(b.map(cur))
+    const forfeit = new Set(input.forfeiters ?? [])
+    const changes: RatingChange[] = []
+    const now = new Date(this.now())
+    for (const [team, opp, score] of [
+      [a, compB, input.scoreA],
+      [b, compA, 1 - input.scoreA],
+    ] as const) {
+      for (const steamId of team) {
+        const before = cur(steamId)
+        const after = updateRating(before, [{ opponent: opp, score }])
+        await tx.insert(ratingEvents).values({
+          matchId: input.matchId,
+          steamId,
+          mode: input.mode,
+          reason: forfeit.has(steamId) ? "forfeit" : "match",
+          ratingBefore: before.rating,
+          rdBefore: before.rd,
+          volBefore: before.volatility,
+          ratingAfter: after.rating,
+          rdAfter: after.rd,
+          volAfter: after.volatility,
+          oppRating: opp.rating,
+          oppRd: opp.rd,
+          score,
+          createdAt: now,
+        })
+        await tx
+          .update(ratings)
+          .set({
+            rating: after.rating,
+            rd: after.rd,
+            volatility: after.volatility,
+            matchesPlayed: sql`${ratings.matchesPlayed} + 1`,
+            wins: score === 1 ? sql`${ratings.wins} + 1` : ratings.wins,
+            losses: score === 0 ? sql`${ratings.losses} + 1` : ratings.losses,
+            updatedAt: now,
+          })
+          .where(and(eq(ratings.steamId, steamId), eq(ratings.mode, input.mode)))
+        changes.push({
+          steamId,
+          before: before.rating,
+          after: after.rating,
+          tierBefore: tierForRating(before.rating).id,
+          tierAfter: tierForRating(after.rating).id,
+        })
+      }
+    }
+    return changes
+  }
+
+  // Voids every win the cheater had since `since` for the players they beat, then replays those players
+  async rollbackCheater(cheater: string, since: Date): Promise<RollbackSummary> {
+    return this.db.transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Db
+      const wins = await tx
+        .select({ matchId: ratingEvents.matchId, mode: ratingEvents.mode })
+        .from(ratingEvents)
+        .where(
+          and(
+            eq(ratingEvents.steamId, cheater),
+            gte(ratingEvents.createdAt, since),
+            eq(ratingEvents.score, 1),
+            isNull(ratingEvents.voidedAt),
+            inArray(ratingEvents.reason, ["match", "forfeit"]),
+          ),
+        )
+      const matchIds = [...new Set(wins.map((w) => w.matchId).filter((m): m is string => !!m))]
+      const summary: RollbackSummary = { cheater, voidedMatches: matchIds, players: [] }
+      if (matchIds.length === 0) return summary
+
+      const cheaterTeams = await tx
+        .select({ matchId: matchPlayers.matchId, team: matchPlayers.team })
+        .from(matchPlayers)
+        .where(and(eq(matchPlayers.steamId, cheater), inArray(matchPlayers.matchId, matchIds)))
+      const teamOf = new Map(cheaterTeams.map((r) => [r.matchId, r.team]))
+      const victims = (
+        await tx
+          .select({ matchId: matchPlayers.matchId, steamId: matchPlayers.steamId, team: matchPlayers.team })
+          .from(matchPlayers)
+          .where(and(inArray(matchPlayers.matchId, matchIds), ne(matchPlayers.steamId, cheater)))
+      ).filter((v) => teamOf.has(v.matchId) && v.team !== teamOf.get(v.matchId))
+
+      const victimEvents = await tx
+        .select()
+        .from(ratingEvents)
+        .where(
+          and(
+            inArray(ratingEvents.matchId, matchIds),
+            inArray(ratingEvents.steamId, [...new Set(victims.map((v) => v.steamId))]),
+            isNull(ratingEvents.voidedAt),
+          ),
+        )
+      const byPlayerMode = new Map<string, typeof victimEvents>()
+      for (const ev of victimEvents) {
+        const key = `${ev.steamId}|${ev.mode}`
+        byPlayerMode.set(key, [...(byPlayerMode.get(key) ?? []), ev])
+      }
+
+      const nowDate = new Date(this.now())
+      for (const [key, voidList] of byPlayerMode) {
+        const [steamId, mode] = key.split("|") as [string, Mode]
+        const firstSeq = Math.min(...voidList.map((e) => e.seq))
+        const first = voidList.find((e) => e.seq === firstSeq)!
+        const rows = await this.lockRows(tx, [steamId], mode)
+        const row = rows.get(steamId)!
+        const history = await tx
+          .select()
+          .from(ratingEvents)
+          .where(
+            and(
+              eq(ratingEvents.steamId, steamId),
+              eq(ratingEvents.mode, mode),
+              gte(ratingEvents.seq, firstSeq),
+              isNull(ratingEvents.voidedAt),
+            ),
+          )
+          .orderBy(asc(ratingEvents.seq))
+        const voided = new Set(voidList.map((e) => e.id))
+        const replayed = replayRatings(
+          { rating: first.ratingBefore, rd: first.rdBefore, volatility: first.volBefore },
+          history.map(toReplayEvent),
+          voided,
+        )
+        await tx
+          .update(ratingEvents)
+          .set({ voidedAt: nowDate, voidReason: `rollback:${cheater}` })
+          .where(inArray(ratingEvents.id, [...voided]))
+        await tx.insert(ratingEvents).values({
+          matchId: null,
+          steamId,
+          mode,
+          reason: "rollback",
+          ratingBefore: row.rating,
+          rdBefore: row.rd,
+          volBefore: row.volatility,
+          ratingAfter: replayed.final.rating,
+          rdAfter: replayed.final.rd,
+          volAfter: replayed.final.volatility,
+          createdAt: nowDate,
+        })
+        const lossesVoided = voidList.filter((e) => e.score === 0).length
+        const winsVoided = voidList.filter((e) => e.score === 1).length
+        await tx
+          .update(ratings)
+          .set({
+            rating: replayed.final.rating,
+            rd: replayed.final.rd,
+            volatility: replayed.final.volatility,
+            matchesPlayed: sql`greatest(${ratings.matchesPlayed} - ${voidList.length}, 0)`,
+            losses: sql`greatest(${ratings.losses} - ${lossesVoided}, 0)`,
+            wins: sql`greatest(${ratings.wins} - ${winsVoided}, 0)`,
+            updatedAt: nowDate,
+          })
+          .where(and(eq(ratings.steamId, steamId), eq(ratings.mode, mode)))
+        summary.players.push({
+          steamId,
+          mode,
+          before: row.rating,
+          after: replayed.final.rating,
+          voidedEvents: voidList.length,
+        })
+      }
+      return summary
+    })
+  }
+}
+
+function toReplayEvent(e: typeof ratingEvents.$inferSelect): ReplayEvent {
+  return {
+    id: e.id,
+    reason: e.reason,
+    before: { rating: e.ratingBefore, rd: e.rdBefore, volatility: e.volBefore },
+    after: { rating: e.ratingAfter, rd: e.rdAfter, volatility: e.volAfter },
+    oppRating: e.oppRating,
+    oppRd: e.oppRd,
+    score: e.score,
+  }
+}

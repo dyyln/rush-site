@@ -1,0 +1,12 @@
+.home {
+  padding-top: var(--space-8);
+  max-width: 760px;
+  margin-left: 0;
+}
+.title {
+  font-size: var(--text-3xl);
+}
+.lede {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
