@@ -1,4 +1,5 @@
 import {
+  ACTIVE_MATCH_STATUSES,
   MODES,
   allowedModesForParty,
   maxRatingDiffAfter,
@@ -29,8 +30,6 @@ export type LiveTicket = {
   region: string
   enqueuedAt: number
 }
-
-export const ACTIVE_MATCH_STATUSES = ["accepting", "veto", "allocating", "starting", "ready", "live"] as const
 
 const K = {
   queue: (mode: Mode) => `q:${mode}`,

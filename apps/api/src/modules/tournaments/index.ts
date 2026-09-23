@@ -6,7 +6,6 @@ import { DrizzleTournamentStore, type TournamentStore } from "./store.js"
 import type { TournamentsPluginOptions } from "./types.js"
 
 export type { TournamentsPluginOptions } from "./types.js"
-export * as tournamentsSchema from "./schema.js"
 
 export interface TournamentsPluginInternals {
   // Tests pass an in-memory store and take the service to drive ticks.

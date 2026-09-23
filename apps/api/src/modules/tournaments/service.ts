@@ -14,14 +14,15 @@ import {
   seedEntries,
   startGame,
 } from "./bracket.js"
-import { type CupDefinition, TEAM_SIZE, nextStart } from "./config.js"
+import { type CupDefinition, nextStart } from "./config.js"
 import type {
   BadgeRecord,
   EntryRecord,
   TournamentRecord,
   TournamentStore,
 } from "./store.js"
-import { tierForRating, trustAtLeast } from "@rushsite/shared"
+import { getModeConfig, tierForRating, trustAtLeast } from "@rushsite/shared"
+import { eachLimit } from "../../lib/async.js"
 import {
   type BadgeKind,
   type EmitAudience,
@@ -181,17 +182,17 @@ export class TournamentService {
     this.assertRegistrationOpen(t)
 
     let members = [steamId]
-    if (TEAM_SIZE[t.mode] > 1) {
+    if (getModeConfig(t.mode).teamSize > 1) {
       const party = await this.d.getParty(steamId)
       if (!party) throw new TournamentError(400, "party_required", "Enter with a full party")
       if (party.leaderSteamId !== steamId) {
         throw new TournamentError(403, "not_party_leader", "Only the party leader can enter")
       }
-      if (party.memberSteamIds.length !== TEAM_SIZE[t.mode]) {
+      if (party.memberSteamIds.length !== getModeConfig(t.mode).teamSize) {
         throw new TournamentError(
           400,
           "party_size",
-          `This cup needs a party of ${TEAM_SIZE[t.mode]}`,
+          `This cup needs a party of ${getModeConfig(t.mode).teamSize}`,
         )
       }
       members = [...new Set(party.memberSteamIds)]
@@ -425,7 +426,7 @@ export class TournamentService {
       if (changed) await s.saveBracket(tournamentId, { ...stored, bracket, provisioningAt: at })
       return out
     })
-    await runLimited(claims, PROVISION_CONCURRENCY, (c) => this.startClaim(tournamentId, c))
+    await eachLimit(claims, PROVISION_CONCURRENCY, (c) => this.startClaim(tournamentId, c))
   }
 
   private async startClaim(tournamentId: string, c: Claim): Promise<void> {
@@ -569,18 +570,6 @@ interface Claim {
   bracketMatchId: string
   claimedAt: number
   params: StartMatchParams
-}
-
-// Runs fn over items with at most limit calls in flight.
-async function runLimited<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const item = items[next++] as T
-      await fn(item)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
 }
 
 function mean(xs: number[]): number {

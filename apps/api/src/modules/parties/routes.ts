@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify"
+import { SteamId64Schema } from "@rushsite/shared"
 import { z } from "zod"
 import type { AppContext } from "../../context.js"
 import { badRequest } from "../../lib/errors.js"
 import { requireUser } from "../auth/session.js"
 
-const TargetBody = z.object({ steamId: z.string().regex(/^\d{17}$/) })
+const TargetBody = z.object({ steamId: SteamId64Schema })
 
 export function registerPartyRoutes(app: FastifyInstance, ctx: AppContext): void {
   // Every party route answers with the same PartyUpdatePayload the socket sends

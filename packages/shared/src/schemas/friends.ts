@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { TierIdSchema } from "../config/tiers.js"
-import { SteamId64Schema, UuidSchema } from "./common.js"
+import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./common.js"
 import { ModeSchema } from "./mode.js"
 
 // In-site party invites expire after this long
@@ -32,11 +32,7 @@ export type FriendRequestStatus = z.infer<typeof FriendRequestStatusSchema>
 export const PartyInviteStatusSchema = z.enum(["pending", "accepted", "declined", "expired"])
 export type PartyInviteStatus = z.infer<typeof PartyInviteStatusSchema>
 
-export const FriendCardSchema = z.object({
-  steamId: SteamId64Schema,
-  displayName: z.string(),
-  avatarUrl: z.string().nullable(),
-})
+export const FriendCardSchema = PlayerCardSchema
 export type FriendCard = z.infer<typeof FriendCardSchema>
 
 export const FriendTierSchema = z.union([TierIdSchema, z.literal("unranked")])

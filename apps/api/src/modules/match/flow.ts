@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import {
+  ACTIVE_MATCH_STATUSES,
   ACCEPT_WINDOW_SEC,
   DRAW_WINNER,
   VETO_STEP_SEC,
@@ -35,7 +36,7 @@ import type { EventLog } from "../../lib/event-log.js"
 import { randomPassword, randomToken } from "../../lib/hmac.js"
 import { withLock } from "../../lib/redis.js"
 import type { CooldownService } from "../queue/cooldowns.js"
-import { ACTIVE_MATCH_STATUSES, type LiveTicket, type QueueService } from "../queue/service.js"
+import type { LiveTicket, QueueService } from "../queue/service.js"
 import type { RatingService } from "../rating/service.js"
 import type { TrustService } from "../trust/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
@@ -44,6 +45,7 @@ import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
 import { demoKey } from "./storage.js"
+import { eachLimit } from "../../lib/async.js"
 
 type MatchRow = typeof matches.$inferSelect
 type PlayerRow = typeof matchPlayers.$inferSelect
@@ -90,15 +92,6 @@ export const SERVER_CRASHED = "server_crashed"
 const TERMINAL = new Set(["finished", "abandoned", "cancelled"])
 
 export const ALLOCATION_CONCURRENCY = 4
-
-// Runs fn over items with at most limit calls in flight
-async function eachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) await fn(items[next++]!)
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-}
 
 // Match lifecycle from match found to result. Postgres rows are the state, row locks serialise changes
 export class MatchFlow {
@@ -979,14 +972,6 @@ export class MatchFlow {
 
   async playersOf(matchId: string): Promise<PlayerRow[]> {
     return this.players(this.d.db, matchId)
-  }
-
-  async activeMatches(): Promise<MatchRow[]> {
-    return this.d.db
-      .select()
-      .from(matches)
-      .where(inArray(matches.status, [...ACTIVE_MATCH_STATUSES]))
-      .orderBy(desc(matches.createdAt))
   }
 
   // Re-sends the live match state to one player, used when a socket connects

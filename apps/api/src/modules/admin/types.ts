@@ -1,8 +1,8 @@
 import type { FastifyRequest } from "fastify"
 import type { PgDatabase } from "drizzle-orm/pg-core"
-import type { Mode, TrustLevel } from "@rushsite/shared"
+import type { AdminEventKind, Mode, TrustLevel } from "@rushsite/shared"
 
-export type { Mode, TrustLevel }
+export type { AdminEventKind, Mode, TrustLevel }
 
 // Any drizzle postgres database, node-postgres, postgres-js or PGlite.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -10,15 +10,6 @@ export type Db = PgDatabase<any, any, any>
 
 // Hook inputs accept any of these and responses always carry ISO strings.
 export type Timestamp = Date | string | number
-
-export const ADMIN_EVENT_KINDS = ["queue", "match", "host", "webhook", "error", "user"] as const
-export type AdminEventKind = (typeof ADMIN_EVENT_KINDS)[number]
-
-// Payload of the admin_event WS message. The api wraps it as { type: "admin_event", payload, ts }.
-export interface AdminEventMessage<P = unknown> {
-  kind: AdminEventKind
-  payload: P
-}
 
 // Hook shapes the api supplies
 
@@ -34,32 +25,6 @@ export interface QueueTicketSnapshot {
   enqueuedAt: Timestamp
 }
 
-export interface ActiveMatchPlayerSnapshot {
-  steamId: string
-  accepted?: boolean
-  connected?: boolean
-}
-
-// One match that has not finished yet, with allocation info when a server is assigned.
-export interface ActiveMatchSnapshot {
-  id: string
-  mode: Mode
-  status: string
-  source?: "queue" | "tournament"
-  region?: string
-  teams: { name: string; steamIds: string[] }[]
-  mapId?: string | null
-  hostId?: string | null
-  serverIp?: string | null
-  serverPort?: number | null
-  connect?: string | null
-  createdAt: Timestamp
-  startedAt?: Timestamp | null
-  acceptDeadline?: Timestamp | null
-  tournamentId?: string | null
-  players?: ActiveMatchPlayerSnapshot[]
-}
-
 export interface HostServerSnapshot {
   slotIndex: number
   port: number | null
@@ -70,7 +35,6 @@ export interface HostServerSnapshot {
 export interface HostSnapshot {
   id: string
   name: string
-  agentUrl?: string
   publicIp: string | null
   status: string
   cs2Version: string | null
@@ -108,8 +72,6 @@ export interface AdminPluginOptions {
   authenticate(request: FastifyRequest): Promise<string | null>
   // Every waiting ticket across all modes.
   getQueueSnapshot(): Promise<QueueTicketSnapshot[]>
-  // Matches in accepting, veto, allocating, starting, ready or live.
-  getActiveMatches(): Promise<ActiveMatchSnapshot[]>
   getHosts(): Promise<HostSnapshot[]>
   // Removes the ticket from every mode and tells its party. False when the ticket is gone.
   removeTicket(ticketId: string): Promise<boolean>

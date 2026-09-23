@@ -24,6 +24,28 @@ export type SocketLike = BufferedSocket
 export const MAX_MATCH_SUBSCRIPTIONS = 20
 export const MAX_TOURNAMENT_SUBSCRIPTIONS = 10
 
+type IdsBySocket = Map<SocketLike, Set<string>>
+type SocketsById = Map<string, Set<SocketLike>>
+
+function follow(bySocket: IdsBySocket, byId: SocketsById, socket: SocketLike, id: string, max: number): boolean {
+  const mine = bySocket.get(socket) ?? new Set<string>()
+  if (!mine.has(id) && mine.size >= max) return false
+  mine.add(id)
+  bySocket.set(socket, mine)
+  const subs = byId.get(id) ?? new Set<SocketLike>()
+  subs.add(socket)
+  byId.set(id, subs)
+  return true
+}
+
+function unfollow(bySocket: IdsBySocket, byId: SocketsById, socket: SocketLike, id: string): void {
+  bySocket.get(socket)?.delete(id)
+  const subs = byId.get(id)
+  if (!subs) return
+  subs.delete(socket)
+  if (subs.size === 0) byId.delete(id)
+}
+
 // Sockets connected to this process
 export class LocalHub {
   private readonly byUser = new Map<string, Set<SocketLike>>()
@@ -35,42 +57,20 @@ export class LocalHub {
 
   // Returns false when the socket already follows the maximum number of tournaments
   subscribeTournament(socket: SocketLike, tournamentId: string): boolean {
-    const mine = this.socketTournaments.get(socket) ?? new Set<string>()
-    if (!mine.has(tournamentId) && mine.size >= MAX_TOURNAMENT_SUBSCRIPTIONS) return false
-    mine.add(tournamentId)
-    this.socketTournaments.set(socket, mine)
-    const subs = this.tournamentSubs.get(tournamentId) ?? new Set<SocketLike>()
-    subs.add(socket)
-    this.tournamentSubs.set(tournamentId, subs)
-    return true
+    return follow(this.socketTournaments, this.tournamentSubs, socket, tournamentId, MAX_TOURNAMENT_SUBSCRIPTIONS)
   }
 
   unsubscribeTournament(socket: SocketLike, tournamentId: string): void {
-    this.socketTournaments.get(socket)?.delete(tournamentId)
-    const subs = this.tournamentSubs.get(tournamentId)
-    if (!subs) return
-    subs.delete(socket)
-    if (subs.size === 0) this.tournamentSubs.delete(tournamentId)
+    unfollow(this.socketTournaments, this.tournamentSubs, socket, tournamentId)
   }
 
   // Returns false when the socket already follows the maximum number of matches
   subscribeMatch(socket: SocketLike, matchId: string): boolean {
-    const mine = this.socketMatches.get(socket) ?? new Set<string>()
-    if (!mine.has(matchId) && mine.size >= MAX_MATCH_SUBSCRIPTIONS) return false
-    mine.add(matchId)
-    this.socketMatches.set(socket, mine)
-    const subs = this.matchSubs.get(matchId) ?? new Set<SocketLike>()
-    subs.add(socket)
-    this.matchSubs.set(matchId, subs)
-    return true
+    return follow(this.socketMatches, this.matchSubs, socket, matchId, MAX_MATCH_SUBSCRIPTIONS)
   }
 
   unsubscribeMatch(socket: SocketLike, matchId: string): void {
-    this.socketMatches.get(socket)?.delete(matchId)
-    const subs = this.matchSubs.get(matchId)
-    if (!subs) return
-    subs.delete(socket)
-    if (subs.size === 0) this.matchSubs.delete(matchId)
+    unfollow(this.socketMatches, this.matchSubs, socket, matchId)
   }
 
   // Drops every match subscription of a closed socket

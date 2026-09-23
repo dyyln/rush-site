@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto"
 import type { Redis } from "ioredis"
+import type { AdminEventKind } from "@rushsite/shared"
 import type { Notifier } from "../modules/ws/hub.js"
-
-export type AdminEventKind = "queue" | "match" | "host" | "webhook" | "error" | "user"
 
 export type RecordedEvent = {
   id: string

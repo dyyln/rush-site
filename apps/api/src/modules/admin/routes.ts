@@ -3,13 +3,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { z } from "zod"
 import { fallbackCard, iso, type AdminStore } from "./store.js"
 import type {
-  ActiveMatchSnapshot,
   AdminPluginOptions,
   AuditAction,
   EventView,
   Health,
   HostView,
-  MatchSummaryView,
   OverviewView,
   QueueTicketSnapshot,
   QueueView,
@@ -30,6 +28,8 @@ export class AdminError extends Error {
 const ACTIVE_STATUSES = ["accepting", "veto", "allocating", "starting", "ready", "live"]
 const RECENT_STATUSES = ["finished", "abandoned", "cancelled"]
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...RECENT_STATUSES]
+// Cap for the active list. Far above what one box can run
+const ACTIVE_LIMIT = 1000
 const HOUR_MS = 60 * 60 * 1000
 
 const ReasonSchema = z.string().trim().min(1).max(500)
@@ -116,27 +116,6 @@ function queueView(tickets: QueueTicketSnapshot[], cards: Map<string, UserCard>,
   }
 }
 
-function activeView(m: ActiveMatchSnapshot, cards: Map<string, UserCard>): MatchSummaryView {
-  return {
-    id: m.id,
-    mode: m.mode,
-    status: m.status,
-    source: m.source ?? "queue",
-    region: m.region ?? "eu",
-    teams: m.teams.map((t) => ({ name: t.name, players: t.steamIds.map((id) => cards.get(id) ?? fallbackCard(id)) })),
-    mapId: m.mapId ?? null,
-    hostId: m.hostId ?? null,
-    server: m.serverIp && m.serverPort ? { ip: m.serverIp, port: m.serverPort, connect: m.connect ?? null } : null,
-    winnerTeam: null,
-    score: null,
-    tournamentId: m.tournamentId ?? null,
-    cancelReason: null,
-    createdAt: iso(m.createdAt)!,
-    startedAt: iso(m.startedAt),
-    endedAt: null,
-  }
-}
-
 function hostView(h: Awaited<ReturnType<Hooks["getHosts"]>>[number]): HostView {
   return {
     id: h.id,
@@ -191,13 +170,7 @@ export function registerRoutes(
     return fn(await store.userCards(steamIds))
   }
 
-  const activeMatches = async () => {
-    const list = await hooks.getActiveMatches()
-    return withCards(
-      list.flatMap((m) => m.teams.flatMap((t) => t.steamIds)),
-      (cards) => list.map((m) => activeView(m, cards)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    )
-  }
+  const activeMatches = () => store.listMatches(ACTIVE_STATUSES, ACTIVE_LIMIT)
 
   app.get("/admin/overview", async (): Promise<OverviewView> => {
     const at = now()
@@ -206,7 +179,7 @@ export function registerRoutes(
       timed(() => store.ping()),
       timed(() => deps.pingRedis()),
       safe(() => hooks.getQueueSnapshot(), []),
-      safe(() => hooks.getActiveMatches(), []),
+      safe(activeMatches, []),
       safe(() => hooks.getHosts(), []),
       safe(() => hooks.recentEvents(200), []),
       store.counts(at).catch(() => null),
@@ -286,16 +259,6 @@ export function registerRoutes(
     checkUuid(req.params.id, "Match")
     const match = await store.getMatch(req.params.id)
     if (!match) throw new AdminError(404, "not_found", "Match not found")
-    // Live allocation data can be newer than the row
-    if (ACTIVE_STATUSES.includes(match.status)) {
-      const live = (await hooks.getActiveMatches().catch(() => [])).find((m) => m.id === match.id)
-      if (live) {
-        match.status = live.status
-        if (live.serverIp && live.serverPort) {
-          match.server = { ip: live.serverIp, port: live.serverPort, connect: live.connect ?? null }
-        }
-      }
-    }
     return { match }
   })
 

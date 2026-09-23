@@ -102,9 +102,3 @@
   color: var(--color-win);
   min-height: 1em;
 }
-.friends {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target-min);
-  font-size: var(--text-sm);
-}

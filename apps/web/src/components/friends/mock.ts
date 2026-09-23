@@ -12,8 +12,7 @@ import {
   type SteamOnlyFriend,
 } from "@rushsite/shared";
 import { MOCK_ME, mockParty, mockSteamId, mockUser, mockUserBySteamId, mockUuid } from "@/lib/mock";
-import { getRealtime } from "@/lib/ws";
-import { MockRealtime } from "@/lib/ws-mock";
+import { mockRealtime as rt } from "@/lib/ws";
 
 const LIVE_MATCH_ID = "3c7e2a10-5d4b-4f8e-9a61-7b2c0d1e4f53";
 
@@ -39,11 +38,6 @@ type Store = {
 
 let store: Store | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
-
-function rt(): MockRealtime | null {
-  const r = getRealtime();
-  return r instanceof MockRealtime ? r : null;
-}
 
 function request(from: ReturnType<typeof card>, to: ReturnType<typeof card>, minutesAgo: number): FriendRequest {
   return {

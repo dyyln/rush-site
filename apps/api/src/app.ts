@@ -1,12 +1,11 @@
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import websocket from "@fastify/websocket"
-import { MODES, type Mode, type TrustLevel } from "@rushsite/shared"
+import { MODES, type AdminEventKind, type Mode, type TrustLevel } from "@rushsite/shared"
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify"
 import { buildContext, type AppContext, type ContextDeps } from "./context.js"
 import { realtimeMetrics } from "./lib/backpressure.js"
 import { ApiError } from "./lib/errors.js"
-import type { AdminEventKind } from "./lib/event-log.js"
 import { withLock } from "./lib/redis.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
 import challengesPlugin from "./modules/challenges/index.js"
@@ -147,38 +146,11 @@ export function adminOptions(ctx: AppContext) {
     isAdmin: ctx.isAdmin,
     authenticate: ctx.auth,
     getQueueSnapshot: () => queueSnapshot(ctx),
-    getActiveMatches: async () => {
-      const ms = await ctx.flow.activeMatches()
-      return Promise.all(
-        ms.map(async (m) => {
-          const players = await ctx.flow.playersOf(m.id)
-          return {
-            id: m.id,
-            mode: m.mode,
-            status: m.status,
-            source: m.source,
-            region: m.region,
-            teams: m.teams,
-            mapId: m.mapId,
-            hostId: m.hostId,
-            serverIp: m.serverIp,
-            serverPort: m.serverPort,
-            connect: m.connect,
-            createdAt: m.createdAt,
-            startedAt: m.startedAt,
-            acceptDeadline: m.acceptDeadline,
-            tournamentId: m.tournamentId,
-            players: players.map((p) => ({ steamId: p.steamId, accepted: p.accepted, connected: p.connected })),
-          }
-        }),
-      )
-    },
     getHosts: async () => {
       const hosts = await ctx.allocator.hostsWithSlots()
       return hosts.map((h) => ({
         id: h.id,
         name: h.name,
-        agentUrl: h.agentUrl,
         publicIp: h.publicIp,
         status: h.status,
         cs2Version: h.cs2Version,

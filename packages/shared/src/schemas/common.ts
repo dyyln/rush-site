@@ -3,6 +3,14 @@ import { z } from "zod"
 export const SteamId64Schema = z.string().regex(/^\d{17}$/, "expected a 17 digit SteamID64")
 export type SteamId64 = z.infer<typeof SteamId64Schema>
 
+// A player as shown in lists: id, name and avatar
+export const PlayerCardSchema = z.object({
+  steamId: SteamId64Schema,
+  displayName: z.string(),
+  avatarUrl: z.string().nullable(),
+})
+export type PlayerCard = z.infer<typeof PlayerCardSchema>
+
 export const UuidSchema = z.uuid()
 export type Uuid = z.infer<typeof UuidSchema>
 

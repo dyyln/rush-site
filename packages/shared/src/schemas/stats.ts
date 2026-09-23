@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { TierIdSchema } from "../config/tiers.js"
-import { SteamId64Schema, UuidSchema } from "./common.js"
+import { PlayerCardSchema, UuidSchema } from "./common.js"
 import { MatchStatusSchema } from "./match.js"
 import { ModeSchema } from "./mode.js"
 
@@ -67,11 +67,7 @@ export const ServiceStatusSchema = z.object({
 export type ServiceStatus = z.infer<typeof ServiceStatusSchema>
 
 // GET /matches/live
-export const LiveMatchPlayerSchema = z.object({
-  steamId: SteamId64Schema,
-  displayName: z.string(),
-  avatarUrl: z.string().nullable(),
-})
+export const LiveMatchPlayerSchema = PlayerCardSchema
 export type LiveMatchPlayer = z.infer<typeof LiveMatchPlayerSchema>
 
 export const LiveMatchSchema = z.object({

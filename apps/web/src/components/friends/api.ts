@@ -8,16 +8,10 @@ import type {
   RecentPlayer,
 } from "@rushsite/shared";
 import { isMock } from "@/lib/env";
+import { mockCall as mocked } from "@/lib/mock";
 import * as mock from "./mock";
 
 type Request = <T>(method: string, path: string, body?: unknown) => Promise<T>;
-
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
-
-async function mocked<T>(fn: () => T): Promise<T> {
-  await delay();
-  return fn();
-}
 
 export type InviteResult = { invite: PartyInvite; party: PartyUpdatePayload };
 

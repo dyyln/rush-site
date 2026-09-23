@@ -1,6 +1,6 @@
 import type { PartyUpdatePayload } from "@rushsite/shared"
 import { and, asc, eq, inArray, isNull } from "drizzle-orm"
-import type { MatchStatus } from "@rushsite/shared"
+import { ACTIVE_MATCH_STATUSES } from "@rushsite/shared"
 import type { Db } from "../../db/client.js"
 import { matches, matchPlayers, parties, partyMembers } from "../../db/schema.js"
 import { randomToken } from "../../lib/hmac.js"
@@ -10,9 +10,6 @@ import { toUsers, type Notifier } from "../ws/hub.js"
 
 // Largest team size across modes
 export const MAX_PARTY_SIZE = 3
-
-// Match phases during which the party roster is frozen
-export const LOCKED_MATCH_STATUSES: MatchStatus[] = ["accepting", "veto", "allocating", "starting", "ready", "live"]
 
 export type PartyInfo = { partyId: string; leaderSteamId: string; memberSteamIds: string[]; inviteToken: string }
 
@@ -94,7 +91,7 @@ export class PartyService {
       .select({ id: matches.id })
       .from(matchPlayers)
       .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
-      .where(and(inArray(matchPlayers.steamId, steamIds), inArray(matches.status, LOCKED_MATCH_STATUSES)))
+      .where(and(inArray(matchPlayers.steamId, steamIds), inArray(matches.status, [...ACTIVE_MATCH_STATUSES])))
       .limit(1)
     if (busy) throw conflict("party_locked", "the party is in a match")
   }

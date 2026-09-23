@@ -17,6 +17,9 @@ export const MatchStatusSchema = z.enum([
 ])
 export type MatchStatus = z.infer<typeof MatchStatusSchema>
 
+// Matches that are not over yet. Players in them cannot queue and their party roster is frozen
+export const ACTIVE_MATCH_STATUSES = ["accepting", "veto", "allocating", "starting", "ready", "live"] as const satisfies readonly MatchStatus[]
+
 // ISO 8601 timestamp string
 const IsoDateSchema = z.string()
 

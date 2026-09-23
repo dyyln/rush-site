@@ -1,11 +1,11 @@
-import { PRESENCE_TTL_SEC, type FriendUpdatePayload, type Presence, type PresenceDetail } from "@rushsite/shared"
+import { ACTIVE_MATCH_STATUSES, PRESENCE_TTL_SEC, type FriendUpdatePayload, type Presence, type PresenceDetail } from "@rushsite/shared"
 import { and, desc, eq, inArray, or } from "drizzle-orm"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "../../db/client.js"
 import { matchPlayers, matches } from "../../db/schema.js"
 import type { PartyService } from "../parties/service.js"
-import { ACTIVE_MATCH_STATUSES, type QueueService } from "../queue/service.js"
+import type { QueueService } from "../queue/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
 import { friendships } from "./schema.js"
 

@@ -4,8 +4,6 @@ import { DrizzleAdminStore, type AdminStore } from "./store.js"
 import type { AdminPluginOptions } from "./types.js"
 
 export type * from "./types.js"
-export { ADMIN_EVENT_KINDS } from "./types.js"
-export * as adminSchema from "./schema.js"
 
 export interface AdminPluginInternals {
   // Tests pass an in-memory store.

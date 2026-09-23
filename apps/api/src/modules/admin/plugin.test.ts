@@ -4,7 +4,6 @@ import adminPlugin from "./index.js"
 import { MemoryAdminStore } from "./memory-store.js"
 import type { UserRecord } from "./store.js"
 import type {
-  ActiveMatchSnapshot,
   AdminEventKind,
   HostSnapshot,
   MatchDetailView,
@@ -81,7 +80,16 @@ async function harness() {
   store.users.set(PLAYER, userRecord(PLAYER, "vexa"))
   store.users.set(OTHER, userRecord(OTHER, "kolt"))
   store.users.set(ADMIN, userRecord(ADMIN, "boss"))
-  store.matches.push({ ...finishedMatch(), id: MATCH, status: "live", winnerTeam: null, score: null })
+  store.matches.push({
+    ...finishedMatch(),
+    id: MATCH,
+    status: "live",
+    server: { ip: "203.0.113.5", port: 27015, connect: "connect 203.0.113.5:27015; password x" },
+    createdAt: T0.toISOString(),
+    endedAt: null,
+    winnerTeam: null,
+    score: null,
+  })
   store.matches.push(finishedMatch())
 
   const queue: QueueTicketSnapshot[] = [
@@ -93,21 +101,6 @@ async function harness() {
       ratings: { aim1v1: 1510, aim2v2: 1490 },
       region: "eu",
       enqueuedAt: T0.getTime() - 90_000,
-    },
-  ]
-  const active: ActiveMatchSnapshot[] = [
-    {
-      id: MATCH,
-      mode: "aim1v1",
-      status: "live",
-      teams: [
-        { name: "team_a", steamIds: [PLAYER] },
-        { name: "team_b", steamIds: [OTHER] },
-      ],
-      serverIp: "203.0.113.5",
-      serverPort: 27015,
-      connect: "connect 203.0.113.5:27015; password x",
-      createdAt: T0.toISOString(),
     },
   ]
   const hosts: HostSnapshot[] = [
@@ -154,7 +147,6 @@ async function harness() {
     isAdmin: (id) => id === ADMIN,
     authenticate: async (req) => (req.headers["x-steam-id"] as string | undefined) ?? null,
     getQueueSnapshot: async () => queue,
-    getActiveMatches: async () => active,
     getHosts: async () => hosts,
     removeTicket: async (id) => {
       calls.removeTicket.push(id)
@@ -165,7 +157,7 @@ async function harness() {
     },
     cancelMatch: async (id, reason) => {
       calls.cancelMatch.push([id, reason])
-      return active.some((m) => m.id === id)
+      return store.matches.some((m) => m.id === id && m.status === "live")
     },
     setTrustLevel: async (id, level) => {
       calls.setTrustLevel.push([id, level])
@@ -257,7 +249,6 @@ describe("auth gating", () => {
         throw new Error("bad cookie")
       },
       getQueueSnapshot: async () => [],
-      getActiveMatches: async () => [],
       getHosts: async () => [],
       removeTicket: async () => true,
       cancelMatch: async () => true,
@@ -316,7 +307,7 @@ describe("read routes", () => {
     expect(q.modes.find((m: { mode: string }) => m.mode === "rush3v3").tickets).toEqual([])
   })
 
-  it("matches lists active from the hook and recent from the store", async () => {
+  it("matches lists active and recent from the store", async () => {
     h = await harness()
     const active = (await h.admin.get("/admin/matches?status=active")).json()
     expect(active.matches).toHaveLength(1)
@@ -333,7 +324,7 @@ describe("read routes", () => {
     expect((await h.admin.get("/admin/matches?status=bogus")).statusCode).toBe(400)
   })
 
-  it("match detail merges live server info and 404s on unknown ids", async () => {
+  it("match detail shows server info and 404s on unknown ids", async () => {
     h = await harness()
     const m = (await h.admin.get(`/admin/matches/${MATCH}`)).json().match
     expect(m.server).toMatchObject({ ip: "203.0.113.5", port: 27015 })

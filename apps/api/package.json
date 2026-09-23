@@ -19,6 +19,8 @@
     "@aws-sdk/s3-request-presigner": "^3.700.0",
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.0.0",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.0.0",
     "@rushsite/dathost": "workspace:*",
     "@rushsite/faceit": "workspace:*",
@@ -26,7 +28,6 @@
     "drizzle-orm": "^0.45.0",
     "fastify": "^5.6.0",
     "ioredis": "^5.4.0",
-    "pino": "^9.0.0",
     "postgres": "^3.4.5",
     "zod": "^4.6.5"
   },
@@ -36,6 +37,7 @@
     "@types/ws": "^8.5.0",
     "drizzle-kit": "^0.31.0",
     "ioredis-mock": "^8.13.0",
+    "pino": "^9.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1"

@@ -40,6 +40,8 @@ export class BanService {
         rollbackFrom: rollback ? from : null,
       })
       .returning({ id: bans.id })
+    // Signs the player out everywhere so the ban takes effect at once
+    await this.sessions.destroyAll(steamId)
     const party = await this.parties.partyOf(steamId)
     if (party) await this.queue.cancelParty(party.partyId, "banned")
     const summary = rollback ? await this.ratings.rollbackCheater(steamId, from) : null
@@ -63,9 +65,5 @@ export class BanService {
       .insert(trustLevels)
       .values({ steamId, level, reason: "admin", locked })
       .onConflictDoUpdate({ target: trustLevels.steamId, set: { level, reason: "admin", locked, updatedAt: sql`now()` } })
-  }
-
-  async logoutEverywhere(steamId: string): Promise<void> {
-    await this.sessions.destroyAll(steamId)
   }
 }

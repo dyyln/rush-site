@@ -169,4 +169,15 @@ describe("RatingService", () => {
     await expect(h.ctx.queue.join(cheater!, ["aim1v1"])).rejects.toMatchObject({ code: "banned" })
     expect((await h.ctx.trust.levels([cheater!]))[cheater!]).toBe("new")
   })
+
+  it("a ban signs the player out of every session", async () => {
+    const [cheater, other] = await makeUsers(h.db, 2)
+    const a = await h.ctx.sessions.create(cheater!)
+    const b = await h.ctx.sessions.create(cheater!)
+    const keep = await h.ctx.sessions.create(other!)
+    await h.ctx.bans.ban(cheater!, "aimbot confirmed", { until: new Date(Date.now() + 86400_000) })
+    expect(await h.ctx.sessions.get(a)).toBeNull()
+    expect(await h.ctx.sessions.get(b)).toBeNull()
+    expect(await h.ctx.sessions.get(keep)).toBe(other)
+  })
 })

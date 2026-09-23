@@ -1,8 +1,7 @@
-import { MODES, REGIONS, unresolvedConfig, type Mode, type ModeUnavailableReason, type ServiceStatus } from "@rushsite/shared"
+import { ACTIVE_MATCH_STATUSES, MODES, REGIONS, unresolvedConfig, type Mode, type ModeUnavailableReason, type ServiceStatus } from "@rushsite/shared"
 import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 import type { AppContext } from "../../context.js"
 import { matches } from "../../db/schema.js"
-import { ACTIVE_MATCH_STATUSES } from "../queue/service.js"
 
 export type HostView = {
   region?: string

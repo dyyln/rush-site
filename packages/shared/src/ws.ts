@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { SteamId64Schema, UuidSchema } from "./schemas/common.js"
+import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./schemas/common.js"
 import { ModeSchema } from "./schemas/mode.js"
 import { TrustLevelSchema } from "./schemas/trust.js"
 import { VetoStateSchema } from "./schemas/veto.js"
@@ -99,11 +99,7 @@ export const MatchResultPayloadSchema = z.object({
 })
 export type MatchResultPayload = z.infer<typeof MatchResultPayloadSchema>
 
-export const PartyMemberSchema = z.object({
-  steamId: SteamId64Schema,
-  displayName: z.string(),
-  avatarUrl: z.string().nullable(),
-})
+export const PartyMemberSchema = PlayerCardSchema
 export type PartyMember = z.infer<typeof PartyMemberSchema>
 
 export const PartyUpdatePayloadSchema = z.object({

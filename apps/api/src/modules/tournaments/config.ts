@@ -1,7 +1,5 @@
 import type { CupCadence, Mode, TrustLevel } from "./types.js"
 
-export const TEAM_SIZE: Record<Mode, number> = { aim1v1: 1, aim2v2: 2, rush3v3: 3 }
-
 const MODE_LABEL: Record<Mode, string> = {
   aim1v1: "1v1 Aim",
   aim2v2: "2v2 Aim",

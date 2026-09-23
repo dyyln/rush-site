@@ -81,7 +81,7 @@ export class TrustService {
       .from(flags)
       .where(eq(flags.steamId, steamId))
       .groupBy(flags.status)
-    const activeBan = await this.hasActiveBan(steamId)
+    const activeBan = (await this.activeBans([steamId])).has(steamId)
     return {
       steamBans: steamRaw === undefined ? "unknown" : steamRaw.missing ? null : steamRaw,
       faceit: faceitRaw === undefined ? "unknown" : faceitRaw.account === false ? null : faceitRaw,
@@ -94,21 +94,6 @@ export class TrustService {
         activeBan,
       },
     }
-  }
-
-  async hasActiveBan(steamId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select({ id: bans.id })
-      .from(bans)
-      .where(
-        and(
-          eq(bans.steamId, steamId),
-          isNull(bans.revokedAt),
-          or(isNull(bans.expiresAt), gt(bans.expiresAt, new Date(this.now()))),
-        ),
-      )
-      .limit(1)
-    return !!row
   }
 
   // Re-evaluates from stored signals and writes the level unless an admin locked it

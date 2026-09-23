@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { SteamId64Schema, UuidSchema } from "./common.js"
+import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./common.js"
 import { ModeSchema } from "./mode.js"
 
 // Open challenges expire after this long
@@ -8,11 +8,7 @@ export const CHALLENGE_TTL_SEC = 600
 export const ChallengeStatusSchema = z.enum(["open", "accepted", "declined", "expired", "cancelled"])
 export type ChallengeStatus = z.infer<typeof ChallengeStatusSchema>
 
-export const ChallengePlayerSchema = z.object({
-  steamId: SteamId64Schema,
-  displayName: z.string(),
-  avatarUrl: z.string().nullable(),
-})
+export const ChallengePlayerSchema = PlayerCardSchema
 export type ChallengePlayer = z.infer<typeof ChallengePlayerSchema>
 
 export const ChallengeSchema = z.object({

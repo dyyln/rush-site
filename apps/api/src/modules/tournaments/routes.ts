@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { isUuid } from "./store.js"
 import { TournamentError, type TournamentService } from "./service.js"
+import { MODES, TournamentStatusSchema } from "@rushsite/shared"
 import type { Mode, TournamentStatus } from "./types.js"
 
-const MODES: Mode[] = ["aim1v1", "aim2v2", "rush3v3"]
-const STATUSES: TournamentStatus[] = ["open", "running", "completed", "cancelled"]
+const STATUSES = TournamentStatusSchema.options
 
 type IdParams = { Params: { id: string } }
 type ListQuery = { Querystring: { status?: string; mode?: string; limit?: string } }

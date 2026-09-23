@@ -8,7 +8,14 @@ import { TierChip } from "./TierChip";
 import { cx } from "./cx";
 import styles from "./TeamCard.module.css";
 
-export type TeamCardPlayer = { steamId: string; displayName: string; avatarUrl: string | null; rating?: number; tier?: TierId };
+// rating is null and tier is "unranked" when the player has no rating in the mode
+export type TeamCardPlayer = { steamId: string; displayName: string; avatarUrl: string | null; rating?: number | null; tier?: TierId | "unranked" };
+
+type RatedPlayer = TeamCardPlayer & { rating: number; tier?: TierId };
+
+function isRated(p: TeamCardPlayer): p is RatedPlayer {
+  return p.rating !== undefined && p.rating !== null && p.tier !== "unranked";
+}
 
 type TeamCardProps = {
   title: string;
@@ -35,8 +42,8 @@ export function TeamCard({ title, players, meanRating, children, className }: Te
   const openedAt = useRef(0);
   const id = useId();
 
-  const rated = players.filter((p) => p.rating !== undefined);
-  const mean = meanRating ?? (rated.length ? Math.round(rated.reduce((n, p) => n + p.rating!, 0) / rated.length) : null);
+  const rated = players.filter(isRated);
+  const mean = meanRating ?? (rated.length ? Math.round(rated.reduce((n, p) => n + p.rating, 0) / rated.length) : null);
 
   const show = useCallback(() => {
     clearTimeout(timer.current);
@@ -141,7 +148,7 @@ export function TeamCard({ title, players, meanRating, children, className }: Te
                 <li key={p.steamId} className={styles.player}>
                   <Avatar name={p.displayName} src={p.avatarUrl} size="sm" />
                   <span className={styles.name}>{p.displayName}</span>
-                  {p.rating !== undefined ? <TierChip tier={p.tier} rating={p.rating} size="sm" /> : <TierChip unranked size="sm" />}
+                  {isRated(p) ? <TierChip tier={p.tier} rating={p.rating} size="sm" /> : <TierChip unranked size="sm" />}
                 </li>
               ))}
             </ul>
