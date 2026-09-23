@@ -1,7 +1,8 @@
 import type { PartyUpdatePayload } from "@rushsite/shared"
 import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import type { MatchStatus } from "@rushsite/shared"
 import type { Db } from "../../db/client.js"
-import { parties, partyMembers } from "../../db/schema.js"
+import { matches, matchPlayers, parties, partyMembers } from "../../db/schema.js"
 import { randomToken } from "../../lib/hmac.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { UsersService } from "../auth/users.js"
@@ -9,6 +10,9 @@ import { toUsers, type Notifier } from "../ws/hub.js"
 
 // Largest team size across modes
 export const MAX_PARTY_SIZE = 3
+
+// Match phases during which the party roster is frozen
+export const LOCKED_MATCH_STATUSES: MatchStatus[] = ["accepting", "veto", "allocating", "starting", "ready", "live"]
 
 export type PartyInfo = { partyId: string; leaderSteamId: string; memberSteamIds: string[]; inviteToken: string }
 
@@ -81,6 +85,18 @@ export class PartyService {
       await tx.select({ id: parties.id }).from(parties).where(inArray(parties.id, ids)).orderBy(asc(parties.id)).for("update")
       return fn(tx)
     })
+  }
+
+  // Refuses roster changes while any member is in an active match
+  private async assertUnlocked(tx: Db, steamIds: string[]): Promise<void> {
+    if (steamIds.length === 0) return
+    const [busy] = await tx
+      .select({ id: matches.id })
+      .from(matchPlayers)
+      .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
+      .where(and(inArray(matchPlayers.steamId, steamIds), inArray(matches.status, LOCKED_MATCH_STATUSES)))
+      .limit(1)
+    if (busy) throw conflict("party_locked", "the party is in a match")
   }
 
   // Removes one member inside a locked transaction. Promotes the earliest joiner or disbands when empty
@@ -187,6 +203,8 @@ export class PartyService {
         if (party.memberSteamIds.includes(steamId)) return { from: null, party }
         if (party.memberSteamIds.length >= MAX_PARTY_SIZE) throw conflict("party_full")
         if ((await this.partyIdOf(steamId, tx)) !== currentId) throw conflict("party_changed")
+        await this.assertUnlocked(tx, [...party.memberSteamIds, steamId])
+        if (currentId) await this.assertUnlocked(tx, (await this.get(currentId, tx))?.memberSteamIds ?? [])
         if (currentId) await this.removeMember(tx, currentId, steamId)
         await tx.insert(partyMembers).values({ partyId: party.partyId, steamId })
         return { from: currentId, party: (await this.get(party.partyId, tx))! }
@@ -207,7 +225,10 @@ export class PartyService {
       if (!opts.silentSelf) toUsers(this.notifier, [steamId], "party_update", emptyParty())
       return
     }
-    const removed = await this.locked([partyId], (tx) => this.removeMember(tx, partyId, steamId))
+    const removed = await this.locked([partyId], async (tx) => {
+      await this.assertUnlocked(tx, (await this.get(partyId, tx))?.memberSteamIds ?? [])
+      return this.removeMember(tx, partyId, steamId)
+    })
     // Someone else moved this player first. Their change already notified everyone
     if (!removed) return
     await this.afterRemoval(partyId, steamId, "member_left", !!opts.silentSelf)
@@ -236,7 +257,10 @@ export class PartyService {
       if (!party || !party.memberSteamIds.includes(steamId)) throw conflict("party_changed")
       if (party.leaderSteamId !== steamId) throw forbidden("not_leader")
       if (target === steamId || !party.memberSteamIds.includes(target)) throw badRequest("not_member")
+      await this.assertUnlocked(tx, party.memberSteamIds)
       await this.removeMember(tx, partyId, target)
+      // The kicked player must not be able to walk back in with the old link
+      await tx.update(parties).set({ inviteToken: randomToken(12) }).where(eq(parties.id, partyId))
     })
     await this.afterRemoval(partyId, target, "member_kicked", false)
     return (await this.get(partyId))!

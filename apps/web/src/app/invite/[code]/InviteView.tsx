@@ -22,6 +22,7 @@ function problemFor(e: unknown): Problem {
   if (e instanceof ApiError) {
     if (e.status === 404 || e.status === 410 || e.code === "invite_not_found" || e.code === "invite_expired") return INVALID;
     if (e.code === "party_full") return FULL;
+    if (e.code === "party_locked") return { title: "Party is in a match", body: "You can join after the match ends." };
     if (e.code === "party_changed") return { title: "Your party changed while joining", body: "Try again." };
     if (e.status === 401) return { title: "Sign in to join", body: "Your session ended. Sign in again." };
   }

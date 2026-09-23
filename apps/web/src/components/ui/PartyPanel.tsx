@@ -71,13 +71,10 @@ export function PartyPanel({
     }
   }
 
-  async function confirmKick(rotate: boolean) {
+  async function confirmKick() {
     const target = kickTarget;
     if (!target || !onKick) return;
-    await run(rotate ? "kick-rotate" : "kick", async () => {
-      await onKick(target.steamId);
-      if (rotate && onRotateInvite) await onRotateInvite();
-    });
+    await run("kick", () => onKick(target.steamId));
     setKickTarget(null);
   }
 
@@ -244,12 +241,7 @@ export function PartyPanel({
             <Button variant="ghost" onClick={() => setKickTarget(null)} disabled={busy !== null}>
               Cancel
             </Button>
-            {onRotateInvite && (
-              <Button variant="secondary" onClick={() => confirmKick(true)} loading={busy === "kick-rotate"} disabled={busy === "kick"}>
-                Remove and new link
-              </Button>
-            )}
-            <Button variant="danger" onClick={() => confirmKick(false)} loading={busy === "kick"} disabled={busy === "kick-rotate"}>
+            <Button variant="danger" onClick={confirmKick} loading={busy === "kick"}>
               Remove
             </Button>
           </>
@@ -259,7 +251,7 @@ export function PartyPanel({
           Remove <strong>{kickTarget?.displayName}</strong> from the party?
         </p>
         <p className="muted">
-          They can rejoin with the current invite link. Choose Remove and new link to stop that.
+          This also makes a new invite link, so they cannot rejoin with the old one.
         </p>
       </Modal>
     </Card>

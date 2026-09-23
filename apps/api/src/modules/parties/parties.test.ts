@@ -2,7 +2,7 @@ import type { PartyUpdatePayload } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, makeUsers } from "../../../test/helpers.js"
-import { parties, partyMembers, queueTickets } from "../../db/schema.js"
+import { matches, matchPlayers, parties, partyMembers, queueTickets } from "../../db/schema.js"
 
 type H = Awaited<ReturnType<typeof createAppHarness>>
 
@@ -70,13 +70,16 @@ describe("parties", () => {
     expect((await call(B, "POST", "/parties/leader", { steamId: A })).body.leaderSteamId).toBe(A)
   })
 
-  it("kicks a member, who gets an empty party, and a member cannot kick", async () => {
-    await partyOf(A, B, C)
+  it("kicks a member, who gets an empty party, rotates the code, and a member cannot kick", async () => {
+    const code = await partyOf(A, B, C)
     expect((await call(B, "DELETE", `/parties/members/${C}`)).status).toBe(403)
     expect((await call(A, "DELETE", `/parties/members/${A}`)).status).toBe(400)
     expect((await call(A, "DELETE", `/parties/members/${D}`)).status).toBe(400)
     const r = await call(A, "DELETE", `/parties/members/${B}`)
     expect(ids(r.body)).toEqual([A, C])
+    expect(r.body.inviteCode).not.toBe(code)
+    expect(lastUpdate(C)!.inviteCode).toBe(r.body.inviteCode)
+    expect((await call(B, "POST", `/parties/join/${code}`)).status).toBe(404)
     expect(lastUpdate(B)!.partyId).toBeNull()
     expect(ids(lastUpdate(C)!)).toEqual([A, C])
     expect((await me(B)).partyId).toBeNull()
@@ -164,6 +167,40 @@ describe("parties", () => {
     expect((await h.ctx.queue.status(A)).state).not.toBe("queued")
     const [old] = await h.db.select().from(parties).where(eq(parties.id, bParty))
     expect(old!.disbandedAt).not.toBeNull()
+  })
+
+  async function inMatch(status: (typeof matches.$inferInsert)["status"], ...players: string[]) {
+    const [m] = await h.db
+      .insert(matches)
+      .values({ mode: "rush3v3", status, teams: [], webhookSecret: "x" })
+      .returning({ id: matches.id })
+    await h.db.insert(matchPlayers).values(players.map((steamId, i) => ({ matchId: m!.id, steamId, team: i % 2 })))
+    return m!.id
+  }
+
+  it("refuses join, kick and leave with party_locked while the party is in a match", async () => {
+    const code = await partyOf(A, B)
+    const matchId = await inMatch("veto", A, B)
+    for (const r of [
+      await call(C, "POST", `/parties/join/${code}`),
+      await call(A, "DELETE", `/parties/members/${B}`),
+      await call(B, "POST", "/parties/leave"),
+    ]) {
+      expect(r.status).toBe(409)
+      expect(r.body.error).toBe("party_locked")
+    }
+    expect(ids(await me(A))).toEqual([A, B])
+    await h.db.update(matches).set({ status: "finished" }).where(eq(matches.id, matchId))
+    expect((await call(B, "POST", "/parties/leave")).status).toBe(204)
+  })
+
+  it("refuses to pull a player out of a party that is in a match", async () => {
+    const code = (await call(C, "POST", "/parties")).body.inviteCode!
+    await partyOf(A, B)
+    await inMatch("live", A)
+    const r = await call(B, "POST", `/parties/join/${code}`)
+    expect(r.status).toBe(409)
+    expect(r.body.error).toBe("party_locked")
   })
 
   it("cancels the ticket when a member is kicked", async () => {

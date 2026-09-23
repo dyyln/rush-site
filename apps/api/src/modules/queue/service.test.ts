@@ -148,3 +148,27 @@ describe("loop metrics", () => {
     }
   })
 })
+
+describe("queue join while the party changes", () => {
+  it("rejects with party_changed when a member joins mid queue", async () => {
+    h = await createHarness()
+    const [leader, member] = await makeUsers(h.db, 2)
+    const party = await h.ctx.parties.ensure(leader!)
+    const realGet = h.ctx.ratings.get.bind(h.ctx.ratings)
+    let joined = false
+    vi.spyOn(h.ctx.ratings, "get").mockImplementation(async (...args) => {
+      // The member arrives after the leader's roster was read but before the ticket exists
+      if (!joined) {
+        joined = true
+        await h.ctx.parties.join(member!, party.inviteToken)
+      }
+      return realGet(...args)
+    })
+    await expect(h.ctx.queue.join(leader!, ["aim1v1"])).rejects.toMatchObject({ statusCode: 409, code: "party_changed" })
+    const waiting = await h.db.select().from(queueTickets).where(eq(queueTickets.status, "waiting"))
+    expect(waiting).toHaveLength(0)
+    expect(await h.redis.zcard("q:aim1v1")).toBe(0)
+    expect(await h.ctx.queue.playersInQueue("aim1v1")).toBe(0)
+    expect((await h.ctx.queue.status(leader!)).state).toBe("idle")
+  })
+})

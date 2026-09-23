@@ -154,6 +154,7 @@ export class QueueService {
         .set({ modes: merged.modes, ratings: merged.ratings, updatedAt: new Date(this.now()) })
         .where(and(eq(queueTickets.id, existing.id), eq(queueTickets.status, "waiting")))
       await this.putLive(merged)
+      await this.assertRoster(merged)
       await this.notifyParty(merged.steamIds)
       return merged
     }
@@ -182,8 +183,21 @@ export class QueueService {
       enqueuedAt,
     }
     await this.putLive(ticket)
+    await this.assertRoster(ticket)
     await this.notifyParty(ticket.steamIds)
     return ticket
+  }
+
+  // A member may join or leave while the leader queues. The party change hook only sees tickets already in Redis,
+  // so the roster is read again once the ticket is live. Either this check or the hook catches every change
+  private async assertRoster(ticket: LiveTicket): Promise<void> {
+    const party = await this.parties.get(ticket.partyId)
+    const members = party?.memberSteamIds ?? []
+    if (members.length === ticket.steamIds.length && ticket.steamIds.every((id) => members.includes(id))) return
+    await this.dropLive(ticket)
+    await this.cancelTicket(ticket.id, "party_changed", true)
+    await this.notifyParty([...new Set([...ticket.steamIds, ...members])])
+    throw conflict("party_changed", "the party changed while joining the queue")
   }
 
   // Adds the ticket to the waiting row of another join that won the insert
@@ -210,6 +224,7 @@ export class QueueService {
         .where(and(eq(queueTickets.id, row.id), eq(queueTickets.status, "waiting")))
     }
     await this.putLive(merged)
+    await this.assertRoster(merged)
     await this.notifyParty(merged.steamIds)
     return merged
   }
@@ -379,11 +394,12 @@ export class QueueService {
     await this.notifyParty(ticket.steamIds)
   }
 
-  async cancelTicket(ticketId: string, reason: string): Promise<void> {
+  async cancelTicket(ticketId: string, reason: string, onlyWaiting = false): Promise<void> {
+    const where = onlyWaiting ? and(eq(queueTickets.id, ticketId), eq(queueTickets.status, "waiting")) : eq(queueTickets.id, ticketId)
     await this.db
       .update(queueTickets)
       .set({ status: "cancelled", cancelReason: reason, updatedAt: new Date(this.now()) })
-      .where(eq(queueTickets.id, ticketId))
+      .where(where)
   }
 
   async playersInQueue(mode: Mode): Promise<number> {

@@ -21,7 +21,7 @@ import { TierChip } from "@/components/ui/TierChip";
 import { Timer } from "@/components/ui/Timer";
 import { useToast } from "@/components/ui/Toast";
 import { VetoBoard } from "@/components/ui/VetoBoard";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { formatStat, signed } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
@@ -120,12 +120,18 @@ export function PlayView() {
     }
   }
 
+  // Party changes are refused while the party is in a match
+  function partyError(e: unknown, title: string) {
+    if (e instanceof ApiError && e.code === "party_locked") toast.push({ title: "Party is in a match", body: "Try again after the match.", tone: "error" });
+    else toast.push({ title, tone: "error" });
+  }
+
   async function leaveParty() {
     try {
       await api.party.leave();
       play.setParty(null);
-    } catch {
-      toast.push({ title: "Could not leave the party", tone: "error" });
+    } catch (e) {
+      partyError(e, "Could not leave the party");
     }
   }
 
@@ -289,8 +295,8 @@ export function PlayView() {
                 try {
                   await api.party.kick(id);
                   play.setParty((p) => p && { ...p, members: p.members.filter((m) => m.steamId !== id) });
-                } catch {
-                  toast.push({ title: "Could not remove player", tone: "error" });
+                } catch (e) {
+                  partyError(e, "Could not remove player");
                 }
               }}
               onMakeLeader={async (id) => {
