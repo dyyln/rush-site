@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MODE_CONFIGS, MODES, trustAtLeast, type Mode, type ServerReadyPayload, type TrustLevel } from "@rushsite/shared";
+import { MODE_CONFIGS, MODES, trustAtLeast, type Mode, type ServerReadyPayload, type TrustLevel, type VetoStatePayload } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
+import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
 import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
 import { GetVerifiedCard } from "@/components/trust/GetVerifiedCard";
@@ -32,7 +35,10 @@ import { useAsync } from "@/lib/useAsync";
 import { TRUST_NAMES } from "@/lib/trust";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
 import { useSession } from "@/lib/session";
-import { usePlay } from "@/lib/usePlay";
+import { usePlay, type Warmup } from "@/lib/usePlay";
+import { StartCountdown } from "@/components/play/StartCountdown";
+import { VetoSummary } from "@/components/play/VetoSummary";
+import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import styles from "./play.module.css";
 
@@ -107,11 +113,22 @@ export function PlayView() {
     if (queued) setSelected(queuedModes);
   }, [queued, queuedModes]);
 
+  // Remember the queued modes for Play again, and restore them after a reload
+  useEffect(() => {
+    if (queued) saveLastModes(queuedModes);
+  }, [queued, queuedModes]);
+  useEffect(() => {
+    const last = loadLastModes();
+    if (last.length > 0) setSelected((s) => (s.length === 0 ? last : s));
+  }, []);
+  const playAgain = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (play.match.phase === "result") {
       const r = play.match.result;
       const change = r.ratingChanges.find((c) => c.steamId === user?.steamId);
-      toast.push({
+      const resultToast = { id: 0 };
+      resultToast.id = toast.push({
         title: r.status === "abandoned" ? "Match abandoned" : `${modeLabel(r.mode)} match finished`,
         body: (
           <>
@@ -122,6 +139,17 @@ export function PlayView() {
               </span>
             )}
             {r.status === "completed" && <RematchButton matchId={r.matchId} mode={r.mode} />}
+            {isLeader && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  playAgain.current();
+                  toast.dismiss(resultToast.id);
+                }}
+              >
+                Start queue
+              </Button>
+            )}
           </>
         ),
         tone: r.status === "abandoned" ? "error" : "success",
@@ -175,6 +203,30 @@ export function PlayView() {
     if (eligible.length === 0) return;
     if (!play.joinQueue(eligible, effectiveMinTrust)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
   }
+  playAgain.current = () => {
+    if (queued || inMatch) return;
+    if (cooldown) toast.push({ title: "On cooldown", body: "Start the queue again when it ends.", tone: "info" });
+    else if (eligible.length === 0) toast.push({ title: "Pick a mode", tone: "info" });
+    else start();
+  };
+
+  // A friend's Join queue link lands here with ?modes=a,b&start=1
+  const linked = useRef<{ modes: Mode[]; start: boolean } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const modes = (q.get("modes") ?? "").split(",").filter((m): m is Mode => (MODES as readonly string[]).includes(m));
+    if (modes.length === 0) return;
+    linked.current = { modes, start: q.get("start") === "1" };
+    setSelected(modes);
+    window.history.replaceState(null, "", "/play");
+  }, []);
+  useEffect(() => {
+    const l = linked.current;
+    if (!l || !play.loaded || play.connection !== "open") return;
+    linked.current = null;
+    const ok = l.modes.filter((m) => !disabledReason(m));
+    if (l.start && isLeader && !locked && !inMatch && ok.length > 0) play.joinQueue(ok, effectiveMinTrust);
+  }, [play.loaded, play.connection]);
 
   async function createParty() {
     try {
@@ -199,7 +251,8 @@ export function PlayView() {
     }
   }
 
-  if (!loading && !user) {
+  if (loading) return <PlaySkeleton />;
+  if (!user) {
     return (
       <div className="container page">
         <Card title="Sign in to play" tone="raised">
@@ -243,8 +296,16 @@ export function PlayView() {
             </Card>
           )}
 
-          {play.match.phase === "ready" && <ServerReady server={play.match.server} mode={play.match.veto?.mode ?? null} />}
-          {play.match.phase === "starting" && <ServerReady server={null} mode={play.match.mode} />}
+          {play.match.phase === "ready" && (
+            <ServerReady
+              server={play.match.server}
+              mode={play.match.veto?.mode ?? null}
+              veto={play.match.veto}
+              mySteamId={user?.steamId ?? ""}
+              warmup={play.warmup?.matchId === play.match.server.matchId ? play.warmup : null}
+            />
+          )}
+          {play.match.phase === "starting" && <ServerReady server={null} mode={play.match.mode} step={play.match.status === "starting" ? "starting" : "allocating"} />}
 
           {!inMatch && (
             <>
@@ -340,7 +401,7 @@ export function PlayView() {
                     disabled={!queued && (eligible.length === 0 || cooldown)}
                     aria-describedby="queue-hint"
                   >
-                    {queued ? "Stop queue" : "Start queue"}
+                    {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
                   </Button>
                 ) : null}
                 <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
@@ -406,7 +467,7 @@ export function PlayView() {
               )}
             />
           )}
-          {user && <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} />}
+          {user && <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} canJoinQueue={partySize === 1 && !locked && !inMatch} />}
         </aside>
       </div>
 
@@ -453,14 +514,19 @@ export function PlayView() {
   );
 }
 
-function ServerReady({ server, mode }: { server: ServerReadyPayload | null; mode: Mode | null }) {
-  const [copied, setCopied] = useState(false);
+type ServerReadyProps = {
+  server: ServerReadyPayload | null;
+  mode: Mode | null;
+  veto?: VetoStatePayload | null;
+  mySteamId?: string;
+  warmup?: Warmup | null;
+};
+
+function ServerReady({ server, mode, veto, mySteamId, warmup, step = "allocating" }: ServerReadyProps & { step?: ConnectStep }) {
   if (!server) {
     return (
-      <Card tone="accent" eyebrow="Starting server" title={mode ? modeLabel(mode) : "Your match"}>
-        <p className="muted" aria-live="polite">
-          <Throbber /> Starting your server. Connect details appear here when it is ready.
-        </p>
+      <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={mode ? modeLabel(mode) : "Your match"}>
+        <ConnectSteps step={step} />
       </Card>
     );
   }
@@ -475,27 +541,19 @@ function ServerReady({ server, mode }: { server: ServerReadyPayload | null; mode
         <p className="muted">
           Join now or forfeit.
         </p>
+        {veto && mySteamId && <VetoSummary mode={veto.mode} state={veto.state} mySteamId={mySteamId} />}
+        <ConnectSteps step="waiting" connected={warmup?.connected} expected={warmup?.expected} />
         <label htmlFor="connect-string" className="visually-hidden">
           Console connect command
         </label>
         <input id="connect-string" className={`${styles.connect} mono`} value={server.connect} readOnly onFocus={(e) => e.currentTarget.select()} />
         <div className="row">
-          <a className={styles.steamLink} href={steamUrl}>
-            Launch CS2 and connect
+          <CopyButton variant="primary" text={server.connect}>
+            Copy connect
+          </CopyButton>
+          <a className={`${styles.steamLink} ${styles.steamLinkSecondary}`} href={steamUrl}>
+            Launch CS2
           </a>
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(server.connect);
-                setCopied(true);
-              } catch {
-                setCopied(false);
-              }
-            }}
-          >
-            {copied ? "Copied" : "Copy command"}
-          </Button>
         </div>
       </div>
     </Card>

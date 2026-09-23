@@ -7,12 +7,13 @@ import { ButtonLink } from "@/components/ui/Button";
 import { FriendAction } from "@/components/party/FriendAction";
 import type { useFriendInvite } from "@/components/party/useFriendInvite";
 import { PresenceAvatar, PresenceLine } from "./presence";
+import type { JoinableModes } from "./useJoinQueue";
 import styles from "./friends.module.css";
 
 type Actions = ReturnType<typeof useFriendInvite>;
 
 // A friend here with Invite, Challenge and Profile
-export function FriendRow({ friend, actions }: { friend: Friend; actions: Actions }) {
+export function FriendRow({ friend, actions, joinable }: { friend: Friend; actions: Actions; joinable?: JoinableModes }) {
   return (
     <li className={styles.row}>
       <span className={styles.who}>
@@ -21,7 +22,7 @@ export function FriendRow({ friend, actions }: { friend: Friend; actions: Action
           <Link href={`/profile/${friend.steamId}`} className={styles.name}>
             {friend.displayName}
           </Link>
-          <PresenceLine presence={friend.presence} detail={friend.detail} />
+          <PresenceLine presence={friend.presence} detail={friend.detail} joinable={joinable} />
         </span>
       </span>
       <span className={styles.actions}>

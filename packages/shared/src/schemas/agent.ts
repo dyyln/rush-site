@@ -3,8 +3,11 @@ import { SteamId64Schema, UuidSchema } from "./common.js"
 import { Cs2LaunchSchema, MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
 
 export const TeamRosterSchema = z.object({
+  // Team id used in results, such as A or B
   name: z.string().min(1),
   steamIds: z.array(SteamId64Schema),
+  // Shown in game and on the match page when set, such as a cup team name
+  displayName: z.string().min(1).max(32).optional(),
 })
 export type TeamRoster = z.infer<typeof TeamRosterSchema>
 

@@ -2,6 +2,9 @@ import { eq } from "drizzle-orm"
 import { afterEach, describe, expect, it } from "vitest"
 import { createAppHarness, makeUsers } from "../../../test/helpers.js"
 import { adminAudit, users } from "../../db/schema.js"
+import { DEFAULT_CUPS, cupToSchedule } from "../tournaments/config.js"
+import { MemoryTournamentStore } from "../tournaments/memory-store.js"
+import { TournamentService } from "../tournaments/service.js"
 
 const ADMIN = "76561198999999998"
 type H = Awaited<ReturnType<typeof createAppHarness>>
@@ -151,5 +154,79 @@ describe("profile lookup for manual bans", () => {
     // Tests run offline without a Steam key, so custom URLs cannot resolve
     expect((await as("GET", "/admin/users/resolve?q=https://steamcommunity.com/id/someone")).statusCode).toBe(404)
     expect((await as("GET", "/admin/users/resolve?q=hello")).statusCode).toBe(400)
+  })
+})
+
+describe("closed modes outside the queue", () => {
+  it("refuses challenge accepts with 409 mode_closed", async () => {
+    const { as } = await setup()
+    const [a, b] = await makeUsers(h.db, 2)
+    const cookie = async (id: string) => ({ rs_sid: h.app.signCookie(await h.ctx.sessions.create(id)) })
+    const created = await h.app.inject({ method: "POST", url: "/challenges", cookies: await cookie(a!), payload: { mode: "aim1v1", targetSteamId: b } })
+    const code = (created.json() as { challenge: { code: string } }).challenge.code
+
+    await as("PUT", "/admin/flags/queue.aim1v1.open", { enabled: false })
+    const refused = await h.app.inject({ method: "POST", url: `/challenges/${code}/accept`, cookies: await cookie(b!) })
+    expect(refused.statusCode).toBe(409)
+    expect(refused.json()).toMatchObject({ error: "mode_closed" })
+  })
+
+  it("stops the cup scheduler creating or starting cups in a closed mode", async () => {
+    const store = new MemoryTournamentStore()
+    for (const key of ["daily-aim1v1", "daily-rush3v3"]) await store.insertSchedule(cupToSchedule(DEFAULT_CUPS.find((c) => c.key === key)!))
+    const closed = new Set<string>(["aim1v1"])
+    const logs: string[] = []
+    let now = new Date("2026-09-23T12:00:00Z")
+    const service = new TournamentService({
+      store,
+      now: () => now,
+      log: { info: (_o, msg) => logs.push(msg ?? ""), warn() {}, error() {} },
+      startMatch: async () => ({ matchId: "x" }),
+      emit: () => {},
+      getTrustLevels: async () => ({}),
+      getRatings: async () => ({}),
+      getParty: async () => null,
+      getProfiles: async () => ({}),
+      modeGate: async (mode) => !closed.has(mode),
+    })
+
+    await service.tick()
+    await service.tick()
+    let open = await store.listTournaments({ status: ["open"] })
+    expect(open.map((t) => t.mode)).toEqual(["rush3v3"])
+    // Logged once per closure, not every tick
+    expect(logs.filter((m) => m === "mode closed, skipping cup creation")).toHaveLength(1)
+
+    closed.delete("aim1v1")
+    await service.tick()
+    open = await store.listTournaments({ status: ["open"] })
+    const aim = open.find((t) => t.mode === "aim1v1")!
+    expect(aim).toBeTruthy()
+
+    // Past its start while closed it stays open, and starts once the mode reopens
+    closed.add("aim1v1")
+    now = new Date(aim.startsAt.getTime() + 60_000)
+    await service.tick()
+    expect((await store.getTournament(aim.id))?.status).toBe("open")
+    expect(logs).toContain("mode closed, skipping cup start")
+    closed.delete("aim1v1")
+    await service.tick()
+    expect((await store.getTournament(aim.id))?.status).not.toBe("open")
+  })
+})
+
+describe("manual bans", () => {
+  it("bans a SteamID64 that never signed in by creating a bare user", async () => {
+    const { as } = await setup()
+    const NEWBIE = "76561198000000777"
+    const res = await as("POST", `/admin/users/${NEWBIE}/ban`, { reason: "known cheater" })
+    expect(res.statusCode).toBe(200)
+    const [row] = await h.db.select().from(users).where(eq(users.steamId, NEWBIE))
+    expect(row?.displayName).toBe(NEWBIE)
+    expect(await h.ctx.trust.activeBans([NEWBIE])).toEqual(new Set([NEWBIE]))
+    const [audit] = await h.db.select().from(adminAudit).where(eq(adminAudit.target, NEWBIE))
+    expect(audit?.payload).toMatchObject({ createdUser: true })
+    const resolved = await as("GET", `/admin/users/resolve?q=${NEWBIE}`)
+    expect(resolved.json()).toMatchObject({ registered: true })
   })
 })

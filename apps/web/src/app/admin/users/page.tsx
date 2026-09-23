@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { isMock } from "@/lib/env";
 import { mockAdmin } from "../_lib/mock";
+import { ManualBan } from "../_components/ManualBan";
 import { PageHeader } from "../_components/parts";
 import styles from "../admin.module.css";
 
@@ -49,6 +50,7 @@ export default function AdminUsersPage() {
           <Button type="submit">Look up</Button>
         </form>
       </Card>
+      <ManualBan />
       {isMock && (
         <Card title="Sample players">
           <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0 }}>

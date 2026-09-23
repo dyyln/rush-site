@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { copyText } from "@/components/match/copy";
+import { COPIED_MS } from "@/components/ui/CopyButton";
 import type { PartyUpdatePayload } from "@rushsite/shared";
 import { friendError } from "@/components/friends/presence";
 import { useToast } from "@/components/ui/Toast";
@@ -28,6 +30,7 @@ export function useFriendInvite(source: Partial<InviteSource> = {}) {
   const toast = useToast();
   const [sent, setSent] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [linked, setLinked] = useState<Record<string, boolean>>({});
 
   const link = useCallback(async () => inviteUrl ?? (await ensureInvite()), [inviteUrl, ensureInvite]);
 
@@ -35,7 +38,7 @@ export function useFriendInvite(source: Partial<InviteSource> = {}) {
     try {
       const url = await link();
       if (!url) throw new Error("no link");
-      await navigator.clipboard.writeText(url);
+      if (!(await copyText(url))) throw new Error("copy failed");
       return url;
     } catch {
       toast.push({ title: "Could not copy the invite link", tone: "error" });
@@ -64,11 +67,12 @@ export function useFriendInvite(source: Partial<InviteSource> = {}) {
   const sendLink = useCallback(
     async (steamId: string) => {
       if (!(await copyLink())) return;
-      toast.push({ title: "Link copied, paste it in the Steam chat", tone: "info" });
+      setLinked((l) => ({ ...l, [steamId]: true }));
+      setTimeout(() => setLinked((l) => ({ ...l, [steamId]: false })), COPIED_MS);
       window.location.href = `steam://friends/message/${steamId}`;
     },
-    [copyLink, toast],
+    [copyLink],
   );
 
-  return { sent, busy, invite, sendLink, copyLink };
+  return { sent, busy, linked, invite, sendLink, copyLink };
 }

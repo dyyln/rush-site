@@ -97,7 +97,6 @@ export class TrustService {
       cs2PlaytimeMinutes: profile?.playtime ?? null,
       platform: {
         completedMatches: completed?.n ?? 0,
-        openFlags: flagRows.filter((f) => f.status === "open" || f.status === "reviewing").reduce((n, f) => n + f.n, 0),
         confirmedFlags: flagRows.find((f) => f.status === "confirmed")?.n ?? 0,
         activeBan,
       },

@@ -13,7 +13,7 @@ export type TrustInputs = {
   faceit: FaceitSignal | null | Unknown
   platform: {
     completedMatches: number
-    openFlags: number
+    // Only confirmed flags count. Open cases must not cost a player their level
     confirmedFlags: number
     activeBan: boolean
   }
@@ -136,8 +136,7 @@ export function trustChecks(input: TrustInputs, cfg: TrustConfig, now: number): 
     hardBlock ??= "confirmed_flag"
     reasons.push("confirmed_flag")
   }
-  if (p.openFlags > 0) reasons.push("open_flag")
-  const cleanHistory = p.confirmedFlags === 0 && p.openFlags === 0 && !p.activeBan
+  const cleanHistory = p.confirmedFlags === 0 && !p.activeBan
 
   return {
     score,
@@ -193,7 +192,7 @@ export function trustProgress(
         met: c.completedMatches >= cfg.verifiedMinMatches,
         progress: { current: Math.min(c.completedMatches, cfg.verifiedMinMatches), required: cfg.verifiedMinMatches },
       },
-      { key: "clean_history", label: "No open or confirmed fair play flags", met: c.cleanHistory },
+      { key: "clean_history", label: "No confirmed fair play flags", met: c.cleanHistory },
     ]
   } else if (next === "trusted") {
     const days = c.accountDays === null ? 0 : Math.floor(c.accountDays)
@@ -233,7 +232,7 @@ export function trustLevels(cfg: TrustConfig): TrustLevelsResponse {
           { key: "steam_check", label: "Steam account has no active VAC, game or community ban" },
           { key: "faceit_check", label: "No active FACEIT ban. No FACEIT account is fine" },
           { key: "matches", label: "Finished matches without abandoning", required: cfg.verifiedMinMatches },
-          { key: "clean_history", label: "No open or confirmed fair play flags" },
+          { key: "clean_history", label: "No confirmed fair play flags" },
         ],
       },
       {

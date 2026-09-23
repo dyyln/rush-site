@@ -14,7 +14,7 @@ type ToggleProps = {
   onChange: (next: boolean) => void;
 };
 
-function Toggle({ label, hint, checked, busy, disabled, onChange }: ToggleProps) {
+export function Toggle({ label, hint, checked, busy, disabled, onChange }: ToggleProps) {
   const id = useId();
   return (
     <div className={styles.row}>

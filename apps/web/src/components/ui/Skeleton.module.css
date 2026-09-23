@@ -1,0 +1,43 @@
+.skeleton {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  background: var(--color-surface-3);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.text {
+  height: 0.9em;
+  border-radius: var(--radius-sm);
+}
+.block {
+  border-radius: var(--card-radius);
+}
+.circle {
+  border-radius: 50%;
+}
+.avatar {
+  border-radius: var(--radius-md);
+}
+.pill {
+  border-radius: var(--radius-full);
+}
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

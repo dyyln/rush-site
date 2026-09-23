@@ -57,9 +57,11 @@ export type MatchResultEvent =
 
 export type ResultListener = (result: MatchResultEvent) => Promise<void>
 
+type TournamentTeam = { name: string; steamIds: string[]; displayName?: string }
+
 export type TournamentMatchParams = {
   mode: Mode
-  teams: [{ name: string; steamIds: string[] }, { name: string; steamIds: string[] }]
+  teams: [TournamentTeam, TournamentTeam]
   source: { kind: "tournament"; tournamentId: string; bracketMatchId: string; gameNumber: number; bestOf: number }
 }
 
@@ -226,7 +228,11 @@ export class MatchFlow {
             mode: params.mode,
             status: "allocating",
             source: "tournament",
-            teams: params.teams.map((t) => ({ name: t.name, steamIds: [...t.steamIds] })),
+            teams: params.teams.map((t) => ({
+              name: t.name,
+              steamIds: [...t.steamIds],
+              ...(t.displayName ? { displayName: t.displayName } : {}),
+            })),
             tournamentId: params.source.tournamentId,
             bracketMatchKey: params.source.bracketMatchId,
             gameNumber: params.source.gameNumber,
@@ -588,6 +594,7 @@ export class MatchFlow {
           .update(matchPlayers)
           .set(connected ? { connected: true, everConnected: true } : { connected: false })
           .where(and(eq(matchPlayers.matchId, matchId), eq(matchPlayers.steamId, event.steamId)))
+        await this.sendWarmup(m)
         return
       }
       case "match_started": {
@@ -642,6 +649,19 @@ export class MatchFlow {
     }
     this.d.notifier.send({ kind: "match", matchId }, { type: "match_update", payload, ts: Date.now() })
     await this.matchChanged(m)
+  }
+
+  // Warm-up progress for the connect card
+  private async sendWarmup(m: MatchRow): Promise<void> {
+    const rows = await this.players(this.d.db, m.id)
+    const payload: MatchUpdatePayload = {
+      matchId: m.id,
+      status: m.status as MatchStatus,
+      teams: teamScores(m.teams, m.score),
+      connected: rows.filter((p) => p.connected).length,
+      expected: this.allSteamIds(m).length,
+    }
+    toUsers(this.d.notifier, this.allSteamIds(m), "match_update", payload)
   }
 
   private sendCancelled(m: MatchRow, reason: string): void {

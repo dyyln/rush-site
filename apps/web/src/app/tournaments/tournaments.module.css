@@ -17,8 +17,8 @@
   gap: var(--space-2);
   height: 100%;
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
   background: var(--color-surface-1);
 }
 .card:hover,
@@ -98,4 +98,38 @@
   color: var(--color-text-muted);
   text-transform: none;
   letter-spacing: 0;
+}
+.facts dd.entrants {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.winner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  min-width: 0;
+}
+.winnerText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--leading-tight);
+}
+.winnerLabel {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-warn);
+}
+.winnerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }

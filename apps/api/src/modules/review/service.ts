@@ -1,5 +1,6 @@
 import {
   AUTO_FLAG_MIN_REPORTS,
+  CLAIM_TIMEOUT_MINUTES,
   type FlagStatus,
   type MatchStatus,
   type MyReport,
@@ -12,7 +13,7 @@ import {
   type ReviewMatch,
   type TrustLevel,
 } from "@rushsite/shared"
-import { and, count, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
+import { and, count, desc, eq, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
 import type { AppContext } from "../../context.js"
 import type { Db } from "../../db/client.js"
 import { adminAudit, demos, flags, matchPlayers, matches, ratings, reports, reviews } from "../../db/schema.js"
@@ -29,6 +30,8 @@ const statusView = (s: FlagRow["status"]): FlagStatus => (s === "dismissed" ? "c
 
 const LIST_LIMIT = 100
 const DECIDED: FlagRow["status"][] = ["cleared", "confirmed", "dismissed"]
+// After this long any admin may release or decide a case someone else claimed
+export const CLAIM_TIMEOUT_MS = CLAIM_TIMEOUT_MINUTES * 60_000
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null)
 
@@ -39,18 +42,27 @@ export class ReviewService {
     return this.deps.db
   }
 
-  // Runs after a report is stored. Opens a flag on 2+ reports against one player in one match or on any report from a Trusted player
+  // Runs after a report is stored. Opens a flag on 2+ reports against one player in one match or on any report from a Trusted player.
+  // A Trusted report on a cleared case reopens it as a new flag, once per reporter
   async onReport(report: { reporter: string; target: string; matchId: string }): Promise<{ flagId: string | null; created: boolean }> {
     const { reporter, target, matchId } = report
-    const [existing] = await this.db
+    const cases = await this.db
       .select()
       .from(flags)
       .where(and(eq(flags.steamId, target), eq(flags.matchId, matchId)))
-    if (existing) {
+      .orderBy(desc(flags.createdAt))
+    const latest = cases[0]
+    const trustedReporter = ((await this.deps.trust.levels([reporter]))[reporter] ?? "new") === "trusted"
+
+    if (latest) {
+      const reopenedBefore = cases.some((c) => (c.detail as { reopenedBy?: string } | null)?.reopenedBy === reporter)
+      if (statusView(latest.status) === "cleared" && trustedReporter && !reopenedBefore) {
+        return this.openFlag(target, matchId, { reports: 1, trustedReporter: true, reopenedFrom: latest.id, reopenedBy: reporter })
+      }
       // Late reports follow the case they join
-      const outcome = outcomeFor(existing.status)
-      if (outcome !== "received") await this.setReportOutcome(target, matchId, outcome, outcome === "reviewed" ? ["received"] : undefined)
-      return { flagId: existing.id, created: false }
+      const outcome = outcomeFor(latest.status)
+      if (outcome !== "received") await this.setReportOutcome(target, matchId, outcome, ["received"])
+      return { flagId: latest.id, created: false }
     }
 
     const [n] = await this.db
@@ -58,31 +70,28 @@ export class ReviewService {
       .from(reports)
       .where(and(eq(reports.reportedSteamId, target), eq(reports.matchId, matchId)))
     const reportCount = n?.n ?? 0
-    const reporterTrust = (await this.deps.trust.levels([reporter]))[reporter] ?? "new"
-    const trustedReporter = reporterTrust === "trusted"
     if (reportCount < AUTO_FLAG_MIN_REPORTS && !trustedReporter) return { flagId: null, created: false }
+    return this.openFlag(target, matchId, { reports: reportCount, trustedReporter })
+  }
 
+  private async openFlag(target: string, matchId: string, detail: Record<string, unknown>): Promise<{ flagId: string | null; created: boolean }> {
     const [row] = await this.db
       .insert(flags)
-      .values({
-        steamId: target,
-        matchId,
-        source: "reports",
-        status: "open",
-        detail: { reports: reportCount, trustedReporter },
-      })
+      .values({ steamId: target, matchId, source: "reports", status: "open", detail })
       .onConflictDoNothing()
       .returning({ id: flags.id })
     if (!row) {
+      // Another report opened the case at the same moment
       const [again] = await this.db
         .select({ id: flags.id })
         .from(flags)
         .where(and(eq(flags.steamId, target), eq(flags.matchId, matchId)))
+        .orderBy(desc(flags.createdAt))
+        .limit(1)
       return { flagId: again?.id ?? null, created: false }
     }
     // Flagged demos are kept until review is done
     await this.db.update(demos).set({ keep: true }).where(eq(demos.matchId, matchId))
-    await this.recomputeTrust(target)
     this.deps.events.emit("user", { action: "flagged", steamId: target, matchId, flagId: row.id })
     return { flagId: row.id, created: true }
   }
@@ -126,7 +135,7 @@ export class ReviewService {
     if (row.status === "open") {
       const [updated] = await this.db
         .update(flags)
-        .set({ status: "reviewing", reviewerSteamId: admin })
+        .set({ status: "reviewing", reviewerSteamId: admin, claimedAt: new Date(this.deps.now()) })
         .where(and(eq(flags.id, flagId), eq(flags.status, "open")))
         .returning({ id: flags.id })
       if (!updated) throw conflict("already_claimed", "Another reviewer has this case")
@@ -136,12 +145,35 @@ export class ReviewService {
     return this.get(flagId)
   }
 
+  // The claimer may release a case at any time, anyone else once the claim is stale
+  async unclaim(flagId: string, admin: string): Promise<ReviewFlag> {
+    const [row] = await this.db.select().from(flags).where(eq(flags.id, flagId))
+    if (!row) throw notFound("flag_not_found")
+    if (row.status !== "reviewing") throw conflict("not_claimed", "This case is not claimed")
+    const stale = this.claimStale(row)
+    if (row.reviewerSteamId !== admin && !stale) throw conflict("already_claimed", "Another reviewer has this case")
+    const [updated] = await this.db
+      .update(flags)
+      .set({ status: "open", reviewerSteamId: null, claimedAt: null })
+      .where(and(eq(flags.id, flagId), eq(flags.status, "reviewing")))
+      .returning({ id: flags.id })
+    if (!updated) throw conflict("already_decided", "This case changed while you were releasing it")
+    if (row.matchId) await this.setReportOutcome(row.steamId, row.matchId, "received", ["reviewed"])
+    await this.audit(admin, "review.unclaim", flagId, { steamId: row.steamId, matchId: row.matchId, claimedBy: row.reviewerSteamId })
+    return this.get(flagId)
+  }
+
+  private claimStale(row: FlagRow): boolean {
+    return !!row.claimedAt && this.deps.now() - row.claimedAt.getTime() >= CLAIM_TIMEOUT_MS
+  }
+
   async decide(flagId: string, admin: string, body: ReviewDecideBody): Promise<ReviewDecideResponse> {
     const [row] = await this.db.select().from(flags).where(eq(flags.id, flagId))
     if (!row) throw notFound("flag_not_found")
     if (row.steamId === admin) throw conflict("own_case", "You cannot review your own case")
     if (DECIDED.includes(row.status)) throw conflict("already_decided", "This case is already decided")
-    if (row.reviewerSteamId && row.reviewerSteamId !== admin) throw conflict("already_claimed", "Another reviewer has this case")
+    const takeover = !!row.reviewerSteamId && row.reviewerSteamId !== admin
+    if (takeover && !this.claimStale(row)) throw conflict("already_claimed", "Another reviewer has this case")
 
     const nowDate = new Date(this.deps.now())
     // The status guard makes a second decide on the same flag a no-op
@@ -152,7 +184,11 @@ export class ReviewService {
         and(
           eq(flags.id, flagId),
           inArray(flags.status, ["open", "reviewing"]),
-          or(isNull(flags.reviewerSteamId), eq(flags.reviewerSteamId, admin)),
+          or(
+            isNull(flags.reviewerSteamId),
+            eq(flags.reviewerSteamId, admin),
+            lte(flags.claimedAt, new Date(this.deps.now() - CLAIM_TIMEOUT_MS)),
+          ),
         ),
       )
       .returning({ id: flags.id })
@@ -199,6 +235,7 @@ export class ReviewService {
       note: body.note,
       ban: body.ban ?? null,
       banId,
+      overrodeClaimOf: takeover ? row.reviewerSteamId : null,
       reportsUpdated,
       rollback,
     })
@@ -216,13 +253,15 @@ export class ReviewService {
         note: reports.detail,
         outcome: reports.outcome,
         createdAt: reports.createdAt,
-        decidedAt: flags.decidedAt,
+        // Latest ruling on the player in that match. A reopened case can have several
+        decidedAt: sql<Date | null>`(select max(${flags.decidedAt}) from ${flags} where ${flags.steamId} = ${reports.reportedSteamId} and ${flags.matchId} = ${reports.matchId})`.mapWith(
+          (v: string | Date | null) => (v ? new Date(v) : null),
+        ),
         mode: matches.mode,
         mapId: matches.mapId,
         endedAt: matches.endedAt,
       })
       .from(reports)
-      .leftJoin(flags, and(eq(flags.steamId, reports.reportedSteamId), eq(flags.matchId, reports.matchId)))
       .leftJoin(matches, eq(matches.id, reports.matchId))
       .where(and(eq(reports.reporterSteamId, reporter), opts.matchId ? eq(reports.matchId, opts.matchId) : undefined))
       .orderBy(desc(reports.createdAt))
@@ -337,6 +376,7 @@ export class ReviewService {
         createdAt: f.createdAt.toISOString(),
         decidedAt: iso(f.decidedAt ?? f.resolvedAt),
         reviewer: f.reviewerSteamId ? cardOf(cards, f.reviewerSteamId) : null,
+        claimedAt: iso(f.claimedAt),
         note: f.note,
         player: {
           ...cardOf(cards, f.steamId),

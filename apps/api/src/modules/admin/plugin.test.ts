@@ -408,7 +408,7 @@ describe("mutating routes", () => {
     expect((await h.admin.post(`/admin/users/${PLAYER}/ban`, {})).statusCode).toBe(400)
     expect((await h.admin.post(`/admin/users/${PLAYER}/ban`, { reason: "x", until: "2020-01-01T00:00:00Z" })).statusCode).toBe(400)
     expect((await h.admin.post(`/admin/users/${ADMIN}/ban`, { reason: "x" })).statusCode).toBe(400)
-    expect((await h.admin.post("/admin/users/76561198999999999/ban", { reason: "x" })).statusCode).toBe(404)
+    expect((await h.admin.post("/admin/users/not-an-id/ban", { reason: "x" })).statusCode).toBe(404)
     expect(h.calls.ban).toEqual([])
 
     expect((await h.admin.post(`/admin/users/${PLAYER}/ban`, { reason: "aimbot" })).statusCode).toBe(200)
@@ -426,6 +426,15 @@ describe("mutating routes", () => {
       ["user", { action: "banned", steamId: PLAYER, until: null, by: ADMIN }],
       ["user", { action: "banned", steamId: OTHER, until, by: ADMIN }],
     ])
+  })
+
+  it("bans a player who never signed in by creating a bare user", async () => {
+    h = await harness()
+    const NEWBIE = "76561198999999999"
+    expect((await h.admin.post(`/admin/users/${NEWBIE}/ban`, { reason: "known cheater" })).statusCode).toBe(200)
+    expect(h.store.users.get(NEWBIE)?.user.displayName).toBe(NEWBIE)
+    expect(h.calls.ban).toEqual([[NEWBIE, "known cheater", null]])
+    expect(h.store.audit[0]).toMatchObject({ action: "user.ban", target: NEWBIE, payload: { reason: "known cheater", until: null, createdUser: true } })
   })
 
   it("unbans and reports 409 when there is no active ban", async () => {

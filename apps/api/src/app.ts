@@ -129,6 +129,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
           )
         },
         scheduler: !opts.env.DISABLE_LOOPS,
+        modeGate: (mode: Mode) => ctx.flags.queueOpen(mode),
       })
     }
   }

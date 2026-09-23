@@ -94,12 +94,12 @@ export function BarChart({ title, sub, points, stepSec, color, height = 200, ref
             );
           })}
         </svg>
-        {empty && <p className={styles.empty}>No matches started in this range</p>}
+        {empty && <p className={styles.empty}>No matches found in this range</p>}
         {hover !== null && points[hover] && (
           <div className={styles.tooltip} style={{ left: hx + 180 > width ? Math.max(0, hx - 180) : hx + 12 }} aria-hidden="true">
             <p className={styles.tipTime}>{fullTime(points[hover]!.t, stepSec)}</p>
             <p className={styles.tipRow} style={{ margin: 0 }}>
-              Matches started
+              Matches found
               <span className={styles.tipValue}>{points[hover]!.v === null ? "no data" : compact(points[hover]!.v!)}</span>
             </p>
           </div>
@@ -112,7 +112,7 @@ export function BarChart({ title, sub, points, stepSec, color, height = 200, ref
             <thead>
               <tr>
                 <th scope="col">Time</th>
-                <th scope="col">Matches started</th>
+                <th scope="col">Matches found</th>
               </tr>
             </thead>
             <tbody>

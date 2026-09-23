@@ -24,10 +24,6 @@
   justify-content: flex-end;
   gap: var(--space-1);
 }
-/* Member rows with actions wrap them under the name when the panel is narrow */
-.member:has(.actions) {
-  flex-wrap: wrap;
-}
 .name {
   flex: 1 1 6rem;
   min-width: 0;
@@ -101,4 +97,65 @@
   font-size: var(--text-xs);
   color: var(--color-win);
   min-height: 1em;
+}
+/* Leader crown next to the name */
+.crown {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  cursor: help;
+}
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target-min);
+  height: var(--target-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
+}
+.iconButton:hover:not(:disabled),
+.iconButton:focus-visible {
+  background: var(--color-surface-2);
+}
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.iconButton[aria-busy="true"] {
+  cursor: progress;
+}
+.crownPath {
+  fill: transparent;
+  stroke: currentColor;
+}
+.leadButton:hover:not(:disabled),
+.leadButton:focus-visible {
+  color: var(--color-accent);
+}
+.leadButton:hover:not(:disabled) .crownPath,
+.leadButton:focus-visible .crownPath {
+  fill: currentColor;
+}
+.removeButton:hover:not(:disabled),
+.removeButton:focus-visible {
+  color: var(--color-loss);
+}
+/* Mouse users see the actions on row hover or focus. Touch always shows them */
+@media (hover: hover) and (pointer: fine) {
+  .member .actions {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease);
+  }
+  .member:hover .actions,
+  .member:focus-within .actions {
+    opacity: 1;
+  }
 }

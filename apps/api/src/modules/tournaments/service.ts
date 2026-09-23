@@ -85,6 +85,8 @@ export interface ServiceDeps {
   getProfiles(steamIds: string[]): Promise<Record<string, ProfileInfo>>
   // Stops a CS2 match that no longer counts for the bracket. Optional in tests.
   cancelMatch?(matchId: string, reason: string): Promise<unknown>
+  // False when an admin closed the mode. The scheduler then neither creates nor starts cups in it
+  modeGate?(mode: Mode): Promise<boolean>
 }
 
 const DEFAULT_RATING = 1500
@@ -304,6 +306,21 @@ export class TournamentService {
   // Scheduler
 
   private ticking = false
+  // Modes already logged as closed, so the skip is logged once per closure
+  private closedLogged = new Set<Mode>()
+
+  private async modeOpen(mode: Mode, what: string): Promise<boolean> {
+    const open = this.d.modeGate ? await this.d.modeGate(mode) : true
+    if (open) {
+      this.closedLogged.delete(mode)
+      return true
+    }
+    if (!this.closedLogged.has(mode)) {
+      this.closedLogged.add(mode)
+      this.d.log.info({ mode }, `mode closed, skipping ${what}`)
+    }
+    return false
+  }
 
   async tick(): Promise<void> {
     if (this.ticking) return
@@ -327,6 +344,7 @@ export class TournamentService {
     const waiting = new Set(open.map((t) => t.cupKey))
     for (const cup of schedules.map(scheduleToCup)) {
       if (waiting.has(cup.key)) continue
+      if (!(await this.modeOpen(cup.mode, "cup creation"))) continue
       const startsAt = nextStart(cup, now)
       const created = await this.d.store.createTournament({
         cupKey: cup.key,
@@ -352,6 +370,7 @@ export class TournamentService {
       startsBefore: this.d.now(),
     })
     for (const t of due) {
+      if (!(await this.modeOpen(t.mode, "cup start"))) continue
       try {
         await this.start(t.id)
       } catch (err) {
@@ -451,8 +470,8 @@ export class TournamentService {
           params: {
             mode: t.mode,
             teams: [
-              { name: TEAM_NAMES.a, steamIds: a.steamIds },
-              { name: TEAM_NAMES.b, steamIds: b.steamIds },
+              { name: TEAM_NAMES.a, steamIds: a.steamIds, ...(a.teamName ? { displayName: a.teamName } : {}) },
+              { name: TEAM_NAMES.b, steamIds: b.steamIds, ...(b.teamName ? { displayName: b.teamName } : {}) },
             ],
             source: {
               kind: "tournament",
@@ -627,7 +646,10 @@ export class TournamentService {
   }
 
   // Changes carry over to the schedule's open cup. A new time moves that cup to the next slot.
-  async updateSchedule(id: string, patch: Partial<Omit<NewSchedule, "cupKey">>): Promise<CupSchedule> {
+  async updateSchedule(
+    id: string,
+    patch: Partial<Omit<NewSchedule, "cupKey">>,
+  ): Promise<{ schedule: CupSchedule; openCup: OpenCupOutcome | null }> {
     const before = await this.d.store.getSchedule(id)
     if (!before) throw new TournamentError(404, "not_found", "Schedule not found")
     const merged = { ...before, ...patch }
@@ -647,6 +669,10 @@ export class TournamentService {
     const { id: _id, updatedAt: _u, ...fields } = merged
     const row = await this.d.store.updateSchedule(id, fields)
     if (!row) throw new TournamentError(404, "not_found", "Schedule not found")
+
+    if (before.enabled && !row.enabled) {
+      return { schedule: this.scheduleView(row), openCup: await this.retireOpenCup(row.cupKey, "schedule_disabled") }
+    }
 
     const cup = scheduleToCup(row)
     const timing =
@@ -671,16 +697,42 @@ export class TournamentService {
       await this.announce(t.id, timing ? "rescheduled" : "entries_changed")
     }
     if (row.enabled) await this.ensureUpcoming()
-    return this.scheduleView(row)
+    return { schedule: this.scheduleView(row), openCup: null }
   }
 
-  // Open cups the schedule already created stay. Cancel them on their own.
-  async deleteSchedule(id: string): Promise<ScheduleRecord> {
+  async deleteSchedule(id: string): Promise<{ schedule: ScheduleRecord; openCup: OpenCupOutcome | null }> {
     const row = await this.d.store.getSchedule(id)
     if (!row || !(await this.d.store.deleteSchedule(id))) {
       throw new TournamentError(404, "not_found", "Schedule not found")
     }
-    return row
+    return { schedule: row, openCup: await this.retireOpenCup(row.cupKey, "schedule_removed") }
+  }
+
+  // The open cup of a disabled or deleted schedule is cancelled when nobody entered, otherwise kept.
+  private async retireOpenCup(cupKey: string, reason: string): Promise<OpenCupOutcome | null> {
+    const open = (await this.d.store.listTournaments({ status: ["open"], limit: 1000 })).find((t) => t.cupKey === cupKey)
+    if (!open) return null
+    const entrantCount = (await this.d.store.countEntries([open.id]))[open.id] ?? 0
+    if (entrantCount > 0) return { tournamentId: open.id, name: open.name, action: "kept", entrantCount }
+    try {
+      await this.cancel(open.id, reason)
+    } catch (err) {
+      if (!(err instanceof TournamentError)) throw err
+      return { tournamentId: open.id, name: open.name, action: "kept", entrantCount }
+    }
+    return { tournamentId: open.id, name: open.name, action: "cancelled", entrantCount: 0 }
+  }
+
+  // Removes the badges an entry earned in a completed cup, for example after cheating comes to light.
+  async stripBadges(tournamentId: string, entryId: string): Promise<{ entry: EntryRecord; removed: number }> {
+    const t = await this.d.store.getTournament(tournamentId)
+    if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
+    if (t.status !== "completed") throw new TournamentError(409, "not_completed", "Badges exist only for completed cups")
+    const entry = (await this.d.store.listEntries(tournamentId)).find((e) => e.id === entryId)
+    if (!entry) throw new TournamentError(404, "not_found", "Entry not found")
+    const removed = await this.d.store.deleteBadges(tournamentId, entry.steamIds)
+    if (removed === 0) throw new TournamentError(409, "no_badges", "This entry has no badges from this cup")
+    return { entry, removed }
   }
 
   // Admin: cups
@@ -714,7 +766,7 @@ export class TournamentService {
     return this.summaryOf(id)
   }
 
-  async cancel(tournamentId: string): Promise<TournamentSummary> {
+  async cancel(tournamentId: string, cancelReason = "admin_cancelled"): Promise<TournamentSummary> {
     const live = await this.d.store.locked(tournamentId, async (s) => {
       const t = await s.getTournament(tournamentId)
       if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
@@ -724,7 +776,7 @@ export class TournamentService {
       const stored = await s.loadBracket(tournamentId)
       await s.updateTournament(tournamentId, {
         status: "cancelled",
-        cancelReason: "admin_cancelled",
+        cancelReason,
         completedAt: this.d.now(),
       })
       return liveMatchIds(stored)
@@ -878,6 +930,14 @@ export class TournamentService {
       this.d.log.error({ err, tournamentId, kind }, "tournament_update emit failed")
     }
   }
+}
+
+export interface OpenCupOutcome {
+  tournamentId: string
+  name: string
+  // cancelled when it had no entries, kept otherwise
+  action: "cancelled" | "kept"
+  entrantCount: number
 }
 
 interface Claim {

@@ -306,15 +306,21 @@ export function registerRoutes(
 
   app.post<{ Params: { steamId: string } }>("/admin/users/:steamId/ban", async (req) => {
     const { steamId } = req.params
-    await requireUser(steamId)
+    checkSteamId(steamId)
     const body = parse(BanBody, req.body)
     if (steamId === adminOf(req)) throw new AdminError(400, "invalid_request", "You cannot ban yourself")
     const until = body.until ? new Date(body.until) : null
     if (until && until.getTime() <= now().getTime()) {
       throw new AdminError(400, "invalid_request", "until must be in the future")
     }
+    // A player who never signed in gets a bare row so the ban gate stops them at first login
+    const createdUser = await store.ensureUser(steamId)
     await hooks.ban(steamId, body.reason, until)
-    const entry = await audit(req, "user.ban", steamId, { reason: body.reason, until: until?.toISOString() ?? null })
+    const entry = await audit(req, "user.ban", steamId, {
+      reason: body.reason,
+      until: until?.toISOString() ?? null,
+      ...(createdUser ? { createdUser: true } : {}),
+    })
     hooks.emitAdmin("user", { action: "banned", steamId, until: until?.toISOString() ?? null, by: entry.adminSteamId })
     return { ok: true, audit: entry }
   })

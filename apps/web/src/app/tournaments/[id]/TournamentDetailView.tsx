@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TEAM_NAME_MAX, TeamNameSchema, trustAtLeast } from "@rushsite/shared";
+import { AvatarStack } from "@/components/tournaments/AvatarStack";
+import { LiveBadge } from "@/components/tournaments/LiveBadge";
+import { LocalTime } from "@/components/tournaments/LocalTime";
+import { WithdrawDialog } from "@/components/tournaments/WithdrawDialog";
+import { registeredToast } from "@/components/tournaments/toasts";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { BracketView, entryName, entryPlayers } from "@/components/ui/BracketView";
@@ -14,7 +19,6 @@ import { Card } from "@/components/ui/Card";
 import { StatTile } from "@/components/ui/StatTile";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
-import { dateTime } from "@/lib/format";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { trustProgressLine } from "@/lib/trust";
@@ -141,6 +145,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const teamMode = t.mode !== "aim1v1";
   const [teamName, setTeamName] = useState("");
   const [teamNameError, setTeamNameError] = useState<string>();
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
 
   async function toggleEntry() {
     let name: string | undefined;
@@ -158,7 +163,8 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
       if (entered) await api.tournaments.withdraw(t.id);
       else await api.tournaments.enter(t.id, name);
       setEntered(!entered);
-      toast.push({ title: entered ? "Withdrawn" : "You're in", tone: "success" });
+      setConfirmWithdraw(false);
+      toast.push(entered ? { title: "Withdrawn", tone: "success" } : registeredToast(t));
       reload();
     } catch (e) {
       toast.push({ title: "Could not update entry", body: e instanceof Error ? e.message : undefined, tone: "error" });
@@ -177,7 +183,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
       <header className="page-header">
         <div>
           <div className="row">
-            <Badge tone={status.tone}>{status.label}</Badge>
+            {t.status === "running" ? <LiveBadge /> : <Badge tone={status.tone}>{status.label}</Badge>}
             <Badge>{t.cadence}</Badge>
             <Badge tone="info">{t.minTrust} required</Badge>
           </div>
@@ -185,6 +191,16 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
           <p>
             {MODE_COPY[t.mode].label}. {formatLabel(t)}.
           </p>
+          {t.entries.length > 0 && (
+            <a href="#entrants-heading" className={styles.stackLink}>
+              <AvatarStack
+                people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: e.players?.[0]?.avatarUrl ?? null }))}
+                total={t.entrantCount}
+                size="md"
+              />
+              <span>See all entrants</span>
+            </a>
+          )}
         </div>
         {t.status === "open" &&
           (user ? (
@@ -202,7 +218,13 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
                   }}
                 />
               )}
-              <Button size="lg" variant={entered ? "danger" : "primary"} onClick={toggleEntry} loading={busy} disabled={!eligible || (!entered && full)}>
+              <Button
+                size="lg"
+                variant={entered ? "danger" : "primary"}
+                onClick={entered ? () => setConfirmWithdraw(true) : toggleEntry}
+                loading={busy && !confirmWithdraw}
+                disabled={!eligible || (!entered && full)}
+              >
                 {entered ? "Withdraw" : full ? "Full" : "Enter cup"}
               </Button>
               {!eligible && (
@@ -217,41 +239,50 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
             <SignInLink size="lg">Sign in to enter</SignInLink>
           ))}
       </header>
+      <WithdrawDialog
+        open={confirmWithdraw}
+        cupName={t.name}
+        startsAt={t.startsAt}
+        bracketBuilt={!!t.bracket}
+        teamCup={teamMode}
+        busy={busy}
+        onConfirm={toggleEntry}
+        onClose={() => setConfirmWithdraw(false)}
+      />
 
       <div className={styles.facts}>
-        <StatTile label="Starts" value={<span className={styles.small}>{dateTime(t.startsAt)}</span>} />
+        <StatTile label="Starts" value={<LocalTime iso={t.startsAt} className={styles.small} />} />
         <StatTile label="Entrants" value={`${t.entrantCount}/${t.maxEntrants}`} />
         <StatTile label="Prize" value={<span className={styles.small}>Profile badges</span>} />
         {winner && <StatTile label="Champion" value={<span className={styles.small}>{entryName(winner)}</span>} />}
       </div>
 
-      {t.bracket ? (
+      {t.bracket && (
         <section aria-labelledby="bracket-heading" className="stack">
           <h2 id="bracket-heading">Bracket</h2>
           <BracketView bracket={t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} />
         </section>
-      ) : (
-        <section aria-labelledby="entrants-heading" className="stack">
-          <h2 id="entrants-heading">Entrants</h2>
-          {t.status === "cancelled" && <p className="muted">This cup was cancelled.</p>}
-          {t.entries.length === 0 ? (
-            <p className="muted">No sign ups yet.</p>
-          ) : (
-            <ol className={styles.entrants}>
-              {t.entries.map((e) => (
-                <li key={e.id} className={styles.entrant}>
-                  <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
-                    <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
-                    <span className={styles.entrantName}>{entryName(e)}</span>
-                  </TeamCard>
-                  {e.disqualified && <Badge tone="loss">DQ</Badge>}
-                  {e.rating !== null && <span className="mono muted">{e.rating}</span>}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
       )}
+      <section aria-labelledby="entrants-heading" className="stack">
+        <h2 id="entrants-heading">Entrants</h2>
+        {t.status === "cancelled" && <p className="muted">This cup was cancelled.</p>}
+        {t.entries.length === 0 ? (
+          <p className="muted">No sign ups yet.</p>
+        ) : (
+          <ol className={styles.entrants}>
+            {t.entries.map((e) => (
+              <li key={e.id} className={styles.entrant}>
+                <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
+                  <Avatar name={entryName(e)} src={e.players?.[0]?.avatarUrl} size="sm" />
+                  <span className={styles.entrantName}>{entryName(e)}</span>
+                </TeamCard>
+                {e.disqualified && <Badge tone="loss">DQ</Badge>}
+                {e.rating !== null && <span className="mono muted rating-num">{e.rating}</span>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }

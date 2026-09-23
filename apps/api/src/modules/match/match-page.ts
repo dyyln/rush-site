@@ -55,6 +55,7 @@ export async function buildMatchPage(
     endedAt: m.endedAt?.toISOString() ?? null,
     teams: m.teams.map((t, idx) => ({
       name: t.name,
+      ...(t.displayName ? { displayName: t.displayName } : {}),
       score: scores[idx]!.score,
       players: players
         .filter((p) => p.team === idx)

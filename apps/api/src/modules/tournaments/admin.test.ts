@@ -161,8 +161,10 @@ describe("scheduler reads cup_schedules", () => {
     expect(x.only().startsAt.toISOString()).toBe("2026-09-23T21:00:00.000Z")
     expect(x.only().maxEntrants).toBe(16)
 
-    // Disabled schedules create nothing after their cup has started
-    await x.admin("PATCH", `/admin/tournaments/schedules/${schedule.id}`, { enabled: false })
+    // Disabling cancels the open cup when nobody entered
+    const off = await x.admin("PATCH", `/admin/tournaments/schedules/${schedule.id}`, { enabled: false })
+    expect(off.json().openCup).toMatchObject({ tournamentId: t.id, action: "cancelled", entrantCount: 0 })
+    expect(x.only()).toMatchObject({ status: "cancelled", cancelReason: "schedule_disabled" })
     x.clock.now = new Date("2026-09-23T21:00:01Z")
     await x.tick()
     expect(x.tournaments()).toHaveLength(1)
@@ -171,7 +173,15 @@ describe("scheduler reads cup_schedules", () => {
 
     const list = await x.admin("GET", "/admin/tournaments/schedules")
     expect(list.json().schedules).toHaveLength(1)
-    expect((await x.admin("DELETE", `/admin/tournaments/schedules/${schedule.id}`)).statusCode).toBe(200)
+    // Deleting keeps an open cup that has entries and says so
+    const next = x.tournaments().find((c) => c.status === "open")!
+    x.parties.push({ partyId: "r", leaderSteamId: "r1", memberSteamIds: ["r1", "r2", "r3"] })
+    x.trust.r1 = x.trust.r2 = x.trust.r3 = "trusted"
+    expect((await x.enter(next.id, "r1")).statusCode).toBe(201)
+    const del = await x.admin("DELETE", `/admin/tournaments/schedules/${schedule.id}`)
+    expect(del.statusCode).toBe(200)
+    expect(del.json().openCup).toMatchObject({ tournamentId: next.id, action: "kept", entrantCount: 1 })
+    expect(x.store.tournaments.get(next.id)?.status).toBe("open")
     expect((await x.admin("GET", "/admin/tournaments/schedules")).json().schedules).toHaveLength(0)
     expect(x.store.audit.map((a) => a.action)).toEqual([
       "tournament.schedule_create",
@@ -382,6 +392,41 @@ describe("admin cup tools", () => {
     // The admin decided loser still places as runner-up
     expect(x.store.badges.filter((bd) => bd.kind === "cup_runner_up").map((bd) => bd.steamId)).toHaveLength(1)
     expect(x.store.audit.filter((a) => a.action === "tournament.force_result")).toHaveLength(3)
+
+    // Stripping removes the champion's badge and is audited
+    const champ = x.store.entries.get(second.a!)!
+    const strip = await x.admin("POST", `/admin/tournaments/${t.id}/entries/${champ.id}/strip-badges`, { reason: "cheat confirmed" })
+    expect(strip.statusCode).toBe(200)
+    expect(strip.json().removed).toBe(1)
+    expect(x.store.badges.some((bd) => champ.steamIds.includes(bd.steamId))).toBe(false)
+    expect(x.store.audit.at(-1)).toMatchObject({ action: "tournament.strip_badges", payload: { entryId: champ.id, removed: 1 } })
+    const again = await x.admin("POST", `/admin/tournaments/${t.id}/entries/${champ.id}/strip-badges`, { reason: "x" })
+    expect(again.json().error).toBe("no_badges")
+  })
+
+  it("strip-badges needs a completed cup", async () => {
+    const { x, t, entryOf } = await runningFour()
+    const res = await x.admin("POST", `/admin/tournaments/${t.id}/entries/${entryOf("p1")}/strip-badges`, { reason: "r" })
+    expect(res.statusCode).toBe(409)
+    expect(res.json().error).toBe("not_completed")
+  })
+
+  it("passes team names to the match as display names", async () => {
+    const x = await harness([cup("daily-aim2v2")])
+    h = x
+    await x.tick()
+    const t = x.only()
+    x.parties.push({ partyId: "a", leaderSteamId: "a1", memberSteamIds: ["a1", "a2"] })
+    x.parties.push({ partyId: "b", leaderSteamId: "b1", memberSteamIds: ["b1", "b2"] })
+    await x.enter(t.id, "a1", { teamName: "Night Owls" })
+    await x.enter(t.id, "b1")
+    await x.startNow(t.startsAt)
+    const teams = x.started[0]!.teams
+    const owls = teams.find((tm) => tm.steamIds.includes("a1"))!
+    const other = teams.find((tm) => tm.steamIds.includes("b1"))!
+    expect(owls).toMatchObject({ displayName: "Night Owls" })
+    expect(["A", "B"]).toContain(owls.name)
+    expect(other).not.toHaveProperty("displayName")
   })
 
   it("creates, reschedules and cancels one-off cups", async () => {

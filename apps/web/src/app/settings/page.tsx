@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/ui/Card";
 import { NotifyPanel } from "@/components/notify/NotifyPanel";
+import { DisplayPanel } from "./DisplayPanel";
 import styles from "./settings.module.css";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -14,6 +15,9 @@ export default function SettingsPage() {
           <p>Saved in this browser only.</p>
         </div>
       </header>
+      <Card title="Display">
+        <DisplayPanel />
+      </Card>
       <Card title="Notifications">
         <NotifyPanel />
       </Card>

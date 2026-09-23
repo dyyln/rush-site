@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReviewDecideBody, ReviewDecideResponse, ReviewFlag } from "@rushsite/shared";
+import { CLAIM_TIMEOUT_MINUTES, type ReviewDecideBody, type ReviewDecideResponse, type ReviewFlag } from "@rushsite/shared";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -40,13 +40,16 @@ export function DecideForm({
   const [note, setNote] = useState("");
   const [ban, setBan] = useState<BanLength>("permanent");
   const [reason, setReason] = useState("Cheating confirmed by review");
-  const [busy, setBusy] = useState<"claim" | "decide" | null>(null);
+  const [busy, setBusy] = useState<"claim" | "unclaim" | "decide" | null>(null);
   const [error, setError] = useState<string>();
   const noteId = useId();
 
   const decided = flag.status === "cleared" || flag.status === "confirmed";
   const ownCase = flag.player.steamId === viewer;
-  const claimedByOther = flag.status === "reviewing" && flag.reviewer && flag.reviewer.steamId !== viewer;
+  const claimedByOther = flag.status === "reviewing" && !!flag.reviewer && flag.reviewer.steamId !== viewer;
+  const claimedByMe = flag.status === "reviewing" && flag.reviewer?.steamId === viewer;
+  // Server time decides. This only picks which controls to show
+  const stale = !!flag.claimedAt && Date.now() - Date.parse(flag.claimedAt) >= CLAIM_TIMEOUT_MINUTES * 60_000;
 
   if (decided) {
     return (
@@ -59,18 +62,27 @@ export function DecideForm({
     );
   }
   if (ownCase) return <p className="muted">This case is about you. Another admin has to review it.</p>;
-  if (claimedByOther) return <p className="muted">{flag.reviewer?.displayName} is reviewing this case.</p>;
 
-  async function claim() {
-    setBusy("claim");
+  async function run(kind: "claim" | "unclaim") {
+    setBusy(kind);
     setError(undefined);
     try {
-      onChange(await reviewApi.claim(flag.id));
+      onChange(await (kind === "claim" ? reviewApi.claim(flag.id) : reviewApi.unclaim(flag.id)));
     } catch (e) {
       setError(message(e));
     } finally {
       setBusy(null);
     }
+  }
+
+  const release = (
+    <Button variant="secondary" onClick={() => run("unclaim")} loading={busy === "unclaim"} disabled={busy !== null}>
+      Release case
+    </Button>
+  );
+
+  if (claimedByOther && !stale) {
+    return <p className="muted">{flag.reviewer?.displayName} is reviewing this case. Any admin can take it over after {CLAIM_TIMEOUT_MINUTES} minutes.</p>;
   }
 
   async function decide() {
@@ -99,10 +111,20 @@ export function DecideForm({
     <div className="stack">
       {flag.status === "open" && (
         <div className="row">
-          <Button variant="secondary" onClick={claim} loading={busy === "claim"} disabled={busy !== null}>
+          <Button variant="secondary" onClick={() => run("claim")} loading={busy === "claim"} disabled={busy !== null}>
             Claim case
           </Button>
           <span className="muted">Claiming tells other reviewers you have it and moves reports to under review.</span>
+        </div>
+      )}
+      {(claimedByMe || claimedByOther) && (
+        <div className="row">
+          {release}
+          {claimedByOther && (
+            <span className="muted">
+              {flag.reviewer?.displayName} claimed this over {CLAIM_TIMEOUT_MINUTES} minutes ago. You can release it or decide it yourself.
+            </span>
+          )}
         </div>
       )}
       <SegmentedControl

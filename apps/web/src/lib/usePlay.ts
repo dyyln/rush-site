@@ -30,8 +30,11 @@ export type MatchPhase =
   | { phase: "veto"; veto: VetoStatePayload }
   | { phase: "ready"; server: ServerReadyPayload; veto: VetoStatePayload | null }
   // Server is being allocated. Seen on load, for example right after a challenge is accepted
-  | { phase: "starting"; matchId: string; mode: Mode }
+  | { phase: "starting"; matchId: string; mode: Mode; status?: "allocating" | "starting" }
   | { phase: "result"; result: MatchResultPayload };
+
+// Warm-up progress on the connect card
+export type Warmup = { matchId: string; connected: number; expected: number };
 
 const IDLE: QueueStatusPayload = { state: "idle", partyId: null, modes: [], cooldownUntil: null };
 
@@ -44,6 +47,7 @@ export function usePlay(notices: Notices = {}) {
   const [match, setMatch] = useState<MatchPhase>({ phase: "none" });
   const [loaded, setLoaded] = useState(false);
   const [stats, setStats] = useState<ModeStatsPayload | null>(null);
+  const [warmup, setWarmup] = useState<Warmup | null>(null);
   const noticesRef = useRef(notices);
   noticesRef.current = notices;
 
@@ -71,6 +75,9 @@ export function usePlay(notices: Notices = {}) {
         noticesRef.current.onCancelled?.(p);
       }),
       rt.on("error", (p) => noticesRef.current.onError?.(p)),
+      rt.on("match_update", (p) => {
+        if (p.connected !== undefined && p.expected !== undefined) setWarmup({ matchId: p.matchId, connected: p.connected, expected: p.expected });
+      }),
     ];
     setConnection(rt.state);
     let live = true;
@@ -91,7 +98,7 @@ export function usePlay(notices: Notices = {}) {
       api.get<{ match: MatchDetail | null }>("/matches/current").then(
         ({ match: cur }) => {
           if (!live || !cur || (cur.status !== "allocating" && cur.status !== "starting")) return;
-          setMatch((m) => (m.phase === "none" ? { phase: "starting", matchId: cur.id, mode: cur.mode } : m));
+          setMatch((m) => (m.phase === "none" ? { phase: "starting", matchId: cur.id, mode: cur.mode, status: cur.status as "allocating" | "starting" } : m));
         },
         () => {},
       );
@@ -133,5 +140,5 @@ export function usePlay(notices: Notices = {}) {
 
   const dismissMatch = useCallback(() => setMatch({ phase: "none" }), []);
 
-  return { connection, queue, stats, party, setParty, match, loaded, joinQueue, leaveQueue, respond, vote, dismissMatch };
+  return { connection, queue, stats, party, setParty, match, loaded, joinQueue, leaveQueue, respond, vote, dismissMatch, warmup };
 }

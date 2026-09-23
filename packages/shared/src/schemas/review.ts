@@ -17,6 +17,8 @@ export type ReportOutcome = z.infer<typeof ReportOutcomeSchema>
 // Reports from this many players on one target in one match open a flag
 export const AUTO_FLAG_MIN_REPORTS = 2
 
+export const CLAIM_TIMEOUT_MINUTES = 30
+
 export const ReviewReportSchema = z.object({
   id: UuidSchema,
   reporter: PlayerCardSchema.extend({ trustLevel: TrustLevelSchema }),
@@ -83,6 +85,8 @@ export const ReviewFlagSchema = z.object({
   createdAt: z.string(),
   decidedAt: z.string().nullable(),
   reviewer: PlayerCardSchema.nullable(),
+  // Set while claimed. After CLAIM_TIMEOUT_MINUTES any admin may release or decide it
+  claimedAt: z.string().nullable(),
   note: z.string().nullable(),
   player: ReviewPlayerSchema,
   match: ReviewMatchSchema.nullable(),

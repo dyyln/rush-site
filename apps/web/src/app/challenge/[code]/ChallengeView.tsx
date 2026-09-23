@@ -9,6 +9,7 @@ import styles from "@/components/challenges/challenges.module.css";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Card } from "@/components/ui/Card";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Timer } from "@/components/ui/Timer";
@@ -31,7 +32,6 @@ export function ChallengeView({ code }: { code: string }) {
   const [loadError, setLoadError] = useState<"not_found" | "failed" | null>(null);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [url, setUrl] = useState("");
 
   useEffect(() => setUrl(`${window.location.origin}/challenge/${code}`), [code]);
@@ -96,16 +96,6 @@ export function ChallengeView({ code }: { code: string }) {
     } catch (e) {
       setError(challengeError(e));
       setBusy(null);
-    }
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
     }
   }
 
@@ -193,9 +183,7 @@ export function ChallengeView({ code }: { code: string }) {
               </label>
               <div className={styles.linkRow}>
                 <input id="challenge-link" className={`${styles.linkInput} mono`} value={url} readOnly onFocus={(e) => e.currentTarget.select()} />
-                <Button variant="secondary" onClick={copy}>
-                  {copied ? "Copied" : "Copy link"}
-                </Button>
+                <CopyButton text={url}>Copy link</CopyButton>
               </div>
               <div className={styles.actions}>
                 <Button variant="ghost" onClick={() => act("decline")} loading={busy === "decline"}>

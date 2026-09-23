@@ -7,6 +7,7 @@ import {
   DisqualifyEntrySchema,
   ForceResultSchema,
   RescheduleCupSchema,
+  StripBadgesSchema,
 } from "@rushsite/shared"
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import type { z } from "zod"
@@ -77,16 +78,16 @@ export function registerAdminRoutes(
   app.patch<Id>("/admin/tournaments/schedules/:id", opts, async (req) => {
     checkId(req.params.id, "Schedule")
     const body = parse(CupSchedulePatchSchema, req.body)
-    const schedule = await service.updateSchedule(req.params.id, body)
-    await audit(req, "tournament.schedule_update", schedule.id, body)
-    return { schedule }
+    const { schedule, openCup } = await service.updateSchedule(req.params.id, body)
+    await audit(req, "tournament.schedule_update", schedule.id, { ...body, openCup })
+    return { schedule, openCup }
   })
 
   app.delete<Id>("/admin/tournaments/schedules/:id", opts, async (req) => {
     checkId(req.params.id, "Schedule")
-    const removed = await service.deleteSchedule(req.params.id)
-    await audit(req, "tournament.schedule_delete", removed.id, { cupKey: removed.cupKey, name: removed.name })
-    return { ok: true }
+    const { schedule, openCup } = await service.deleteSchedule(req.params.id)
+    await audit(req, "tournament.schedule_delete", schedule.id, { cupKey: schedule.cupKey, name: schedule.name, openCup })
+    return { ok: true, openCup }
   })
 
   app.post("/admin/tournaments", opts, async (req, reply) => {
@@ -127,6 +128,24 @@ export function registerAdminRoutes(
         reason,
       })
       return { ok: true, tournament: await service.summaryOf(req.params.id) }
+    },
+  )
+
+  app.post<{ Params: { id: string; entryId: string } }>(
+    "/admin/tournaments/:id/entries/:entryId/strip-badges",
+    opts,
+    async (req) => {
+      checkId(req.params.id, "Tournament")
+      checkId(req.params.entryId, "Entry")
+      const { reason } = parse(StripBadgesSchema, req.body)
+      const { entry, removed } = await service.stripBadges(req.params.id, req.params.entryId)
+      await audit(req, "tournament.strip_badges", req.params.id, {
+        entryId: entry.id,
+        steamIds: entry.steamIds,
+        removed,
+        reason,
+      })
+      return { ok: true, removed }
     },
   )
 

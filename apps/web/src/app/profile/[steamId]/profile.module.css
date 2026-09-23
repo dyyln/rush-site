@@ -43,8 +43,8 @@
   padding: var(--space-4);
   text-align: left;
   background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -131,8 +131,8 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
   background: var(--color-surface-1);
   font-size: var(--text-sm);
 }
@@ -170,4 +170,54 @@
   justify-content: flex-end;
   min-height: var(--target-min);
   min-width: var(--target-min);
+}
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  font-size: var(--text-sm);
+}
+.form,
+.favourite {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.formDots {
+  display: inline-flex;
+  gap: 6px;
+}
+.formDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-surface-3);
+}
+.formDot[data-result="win"] {
+  background: var(--color-win);
+}
+.formDot[data-result="loss"] {
+  background: var(--color-loss);
+}
+.formDot[data-result="abandoned"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--color-warn);
+}
+.favouriteIcon {
+  flex: none;
+  color: var(--color-accent);
+}
+.streak {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.streak [data-sign="up"] {
+  color: var(--color-win);
+}
+.streak [data-sign="down"] {
+  color: var(--color-loss);
 }

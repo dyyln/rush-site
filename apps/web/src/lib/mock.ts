@@ -168,6 +168,7 @@ function mockModeStats(steamId: string, mode: Mode): ModeStats {
     history,
     bestMaps,
     leaderboardRank: matches >= 20 ? 20 + Math.floor(r() * 400) : null,
+    streak: { current: Math.floor(r() * 9) - 3, longest: 4 + Math.floor(r() * 8) },
   };
 }
 
@@ -233,7 +234,14 @@ export function mockProfile(steamId: string): Profile {
       },
     ],
     recentMatches: mockMatches(steamId),
+    favouriteWeapon: mockFavouriteWeapon(steamId),
   };
+}
+
+function mockFavouriteWeapon(steamId: string): Profile["favouriteWeapon"] {
+  const r = rng(hash(steamId + "weapon"));
+  const weapons = ["ak47", "m4a1_silencer", "deagle", "awp", "usp_silencer"];
+  return { weapon: weapons[Math.floor(r() * weapons.length)]!, kills: 120 + Math.floor(r() * 900) };
 }
 
 // Party
@@ -260,7 +268,12 @@ export const MOCK_TOURNAMENT_IDS = [
   "0e2f5a8c-1b3d-4f6e-8a9b-0c1d2e3f4a04",
   "0e2f5a8c-1b3d-4f6e-8a9b-0c1d2e3f4a05",
   "0e2f5a8c-1b3d-4f6e-8a9b-0c1d2e3f4a06",
+  "0e2f5a8c-1b3d-4f6e-8a9b-0c1d2e3f4a07",
 ];
+
+// Running cup where the mock user has an entry partway through the bracket
+const MY_CUP_ID = MOCK_TOURNAMENT_IDS[6]!;
+const MY_CUP_SEED = 5;
 
 const FORMAT: TournamentSummary["format"] = {
   type: "single_elimination",
@@ -305,6 +318,7 @@ export const MOCK_TOURNAMENTS: TournamentSummary[] = [
   summary(3, "Weekly Aim Cup", "aim1v1", "weekly", "completed", -144, 8, 16),
   summary(4, "Daily Rush Cup", "rush3v3", "daily", "completed", -48, 12, 16),
   summary(5, "Daily Duo Aim Cup", "aim2v2", "daily", "cancelled", -216, 3, 16),
+  summary(6, "Weekly Duo Aim Cup", "aim2v2", "weekly", "running", -2, 16, 16),
 ];
 
 function mockEntries(t: TournamentSummary): EntryView[] {
@@ -312,7 +326,7 @@ function mockEntries(t: TournamentSummary): EntryView[] {
   const size = teamSize(t.mode);
   return Array.from({ length: t.entrantCount }, (_, i) => {
     const players = Array.from({ length: size }, (_, j) => {
-      const u = mockUser(i * size + j + 1);
+      const u = t.id === MY_CUP_ID && i === MY_CUP_SEED - 1 && j === 0 ? MOCK_ME : mockUser(i * size + j + 1);
       const rating = Math.round(2250 - i * 40 - r() * 160);
       return { steamId: u.steamId, displayName: u.displayName, avatarUrl: null, rating, tier: tierForRating(rating).id };
     });
@@ -346,7 +360,8 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
   const bySeed = (seed: number) => entries[seed - 1]?.id ?? null;
   const matches: BracketMatch[] = [];
   const order = seedOrder(size);
-  const completedRounds = t.status === "completed" ? rounds : 1;
+  const completedRounds = t.status === "completed" ? rounds : t.id === MY_CUP_ID ? 2 : 1;
+  const mine = t.id === MY_CUP_ID ? bySeed(MY_CUP_SEED) : null;
 
   let prevWinners: (string | null)[] = [];
   for (let round = 1; round <= rounds; round++) {
@@ -361,12 +376,13 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
       const known = round === 1 || round <= completedRounds + 1;
       const bye = round === 1 && (!a || !b);
       const done = bye || (round <= completedRounds && !!a && !!b);
-      const live = !done && round === completedRounds + 1 && !!a && !!b && index === 0 && t.status === "running";
+      const live =
+        !done && round === completedRounds + 1 && !!a && !!b && (index === 0 || a === mine || b === mine) && t.status === "running";
       let winner: string | null = null;
       const games: BracketMatch["games"] = [];
       if (bye) winner = a ?? b;
       else if (done) {
-        const aWins = r() > 0.35;
+        const aWins = a === mine ? true : b === mine ? false : r() > 0.35;
         winner = aWins ? a : b;
         const need = Math.ceil(bestOf / 2);
         for (let g = 0; g < need; g++) games.push({ matchId: mockUuid(`${t.id}-${round}-${index}-${g}`), winner: aWins ? "a" : "b" });
@@ -421,8 +437,27 @@ export function mockTournamentDetail(id: string): TournamentDetail | null {
     entries,
     bracket,
     bracketVersion: mockBracketVersion(id),
-    myEntryId: null,
+    myEntryId: id === MY_CUP_ID && mockSignedIn() ? mockMyEntryId() : null,
   };
+}
+
+function mockMyEntryId(): string {
+  const t = MOCK_TOURNAMENTS.find((x) => x.id === MY_CUP_ID)!;
+  return mockEntries(t)[MY_CUP_SEED - 1]!.id;
+}
+
+// Avatar stack preview and champion for list rows
+function enrichMockSummary(t: TournamentSummary) {
+  const entries = mockEntries(t);
+  t.entrantPreview = entries.slice(0, 5).map((e) => ({ steamId: e.captainSteamId, displayName: e.name ?? e.captainSteamId, avatarUrl: e.players?.[0]?.avatarUrl ?? null }));
+  if (t.status === "completed") {
+    const bracket = mockBracket(t, entries);
+    const winnerId = bracket.matches.find((m) => m.round === bracket.rounds)?.winner;
+    const w = entries.find((e) => e.id === winnerId);
+    t.winnerEntryId = w?.id ?? null;
+    t.winner = w ? { entryId: w.id, name: w.name ?? w.captainSteamId, avatarUrl: w.players?.[0]?.avatarUrl ?? null } : null;
+  }
+  if (t.id === MY_CUP_ID && typeof window !== "undefined" && mockSignedIn()) t.myEntryId = mockMyEntryId();
 }
 
 // Match pages. One live match that gains a round every few seconds, the rest finished
@@ -665,3 +700,6 @@ export function setMockSignedIn(v: boolean) {
     // Storage can be blocked. The mock then stays signed in
   }
 }
+
+// Runs last so every mock constant above is initialised
+MOCK_TOURNAMENTS.forEach(enrichMockSummary);

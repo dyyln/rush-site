@@ -4,10 +4,13 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Table, type Column } from "@/components/ui/Table";
 import { Throbber } from "@/components/ui/Throbber";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
+import { MatchSkeleton } from "@/components/skeletons/MatchSkeleton";
+import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
 import { DemoActions } from "@/components/match/DemoActions";
 import { MatchSummary } from "@/components/match/MatchSummary";
 import { ReportButton } from "@/components/match/ReportDialog";
@@ -38,6 +41,8 @@ const STATUS: Record<MatchStatus, { label: string; tone: "win" | "neutral" | "lo
 };
 
 const CONNECTABLE: MatchStatus[] = ["starting", "ready", "live"];
+// Server start up steps shown to players before the match goes live
+const CONNECT_STEP: Partial<Record<MatchStatus, ConnectStep>> = { allocating: "allocating", starting: "starting", ready: "waiting" };
 // Participants can report once the match is under way
 const REPORTABLE: MatchStatus[] = ["live", "finished", "abandoned"];
 
@@ -54,13 +59,7 @@ export function MatchView({ id }: { id: string }) {
       </div>
     );
   }
-  if (!match) {
-    return (
-      <div className="container page" aria-busy="true">
-        <p className="muted">Loading match</p>
-      </div>
-    );
-  }
+  if (!match) return <MatchSkeleton />;
   return <MatchBody m={match} />;
 }
 
@@ -72,6 +71,8 @@ function MatchBody({ m }: { m: MatchDetail }) {
   const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
   const roster = buildRoster(m, ownIndex);
   const finished = m.status === "finished";
+  const connectStep = CONNECT_STEP[m.status];
+  const topDamage = Math.max(0, ...m.teams.flatMap((t) => t.players.map((p) => p.damage)));
   return (
     <div className="container page">
       <header className={styles.header}>
@@ -107,17 +108,23 @@ function MatchBody({ m }: { m: MatchDetail }) {
         </div>
       </header>
 
-      {user && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
+      {user && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
 
       {finished && <MatchSummary m={m} roster={roster} ownIndex={ownIndex} viewer={user?.steamId} />}
 
-      {m.connect && CONNECTABLE.includes(m.status) && (
+      {((m.connect && CONNECTABLE.includes(m.status)) || (connectStep && user && roster.has(user.steamId))) && (
         <Card tone="accent" eyebrow="You are in this match" title="Connect">
-          <div className="row">
-            <a className={styles.connect} href={`steam://connect/${m.connect.ip}:${m.connect.port}/${encodeURIComponent(m.connect.password)}`}>
-              Launch CS2 and connect
-            </a>
-            <code className="mono muted">{m.connect.connect}</code>
+          <div className="stack">
+            {connectStep && <ConnectSteps step={connectStep} />}
+            {m.connect && CONNECTABLE.includes(m.status) && (
+              <div className="row">
+                <a className={styles.connect} href={`steam://connect/${m.connect.ip}:${m.connect.port}/${encodeURIComponent(m.connect.password)}`}>
+                  Launch CS2 and connect
+                </a>
+                <CopyButton text={m.connect.connect}>Copy connect</CopyButton>
+                <code className={`mono muted ${styles.connectCode}`}>{m.connect.connect}</code>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -149,9 +156,9 @@ function MatchBody({ m }: { m: MatchDetail }) {
           <section key={t.name} aria-labelledby={`team-${i}`} className="stack">
             <h2 id={`team-${i}`} className={styles.teamHeading}>
               <TeamMarker side={sideOf(i)} />
-              {t.name}
+              {t.displayName ?? t.name}
             </h2>
-            <Table caption={`${t.name} players`} columns={playerColumns(sideOf(i))} rows={t.players} rowKey={(p) => p.steamId} />
+            <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), topDamage)} rows={t.players} rowKey={(p) => p.steamId} />
           </section>
         ))}
       </div>
@@ -165,7 +172,7 @@ function TeamScore({ team, side }: { team: MatchDetail["teams"][number]; side: T
       <span className={styles.score}>{team.score}</span>
       <span className={styles.teamName}>
         <TeamMarker side={side} />
-        {team.name}
+        {team.displayName ?? team.name}
       </span>
       <span className={styles.avatars}>
         {team.players.map((p) => (
@@ -179,7 +186,7 @@ function TeamScore({ team, side }: { team: MatchDetail["teams"][number]; side: T
   );
 }
 
-const playerColumns = (side: TeamSide): Column<MatchPlayer>[] => [
+const playerColumns = (side: TeamSide, topDamage: number): Column<MatchPlayer>[] => [
   {
     key: "player",
     header: "Player",
@@ -196,5 +203,18 @@ const playerColumns = (side: TeamSide): Column<MatchPlayer>[] => [
   { key: "k", header: "K", cell: (p) => p.kills, numeric: true },
   { key: "d", header: "D", cell: (p) => p.deaths, numeric: true },
   { key: "hs", header: "HS", cell: (p) => p.headshots, numeric: true },
-  { key: "dmg", header: "DMG", cell: (p) => p.damage, numeric: true },
+  { key: "dmg", header: "DMG", cell: (p) => <DamageBar damage={p.damage} top={topDamage} side={side} />, numeric: true },
 ];
+
+// Bar length is relative to the highest damage in the match
+function DamageBar({ damage, top, side }: { damage: number; top: number; side: TeamSide }) {
+  const share = top > 0 ? Math.min(1, damage / top) : 0;
+  return (
+    <span className={styles.damage}>
+      <span className={styles.damageTrack} data-side={side} aria-hidden="true">
+        <span style={{ width: `${(share * 100).toFixed(1)}%` }} />
+      </span>
+      <span>{Math.round(damage)}</span>
+    </span>
+  );
+}

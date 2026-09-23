@@ -90,8 +90,8 @@ export const MetricsViewSchema = z.object({
   medianWaitSec: z.record(ModeSchema, z.array(MetricPointSchema)),
   // Open websockets, mean per bucket
   activeSockets: z.array(MetricPointSchema),
-  // Matches started per bucket of matchesStepSec, every mode together
-  matchesStarted: z.array(MetricPointSchema),
+  // Matches found per bucket of matchesStepSec, every mode together
+  matchesFound: z.array(MetricPointSchema),
   matchesStepSec: z.number().int().positive(),
 })
 export type MetricsView = z.infer<typeof MetricsViewSchema>

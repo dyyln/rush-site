@@ -1,7 +1,9 @@
 "use client";
 
-import type { Mode, VetoState } from "@rushsite/shared";
+import { VETO_STEP_SEC, type Mode, type VetoState } from "@rushsite/shared";
 import { mapName } from "@/lib/modes";
+import { VetoSummary } from "@/components/play/VetoSummary";
+import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { MapCard, type MapCardState } from "./MapCard";
 import { Timer } from "./Timer";
 import { cx } from "./cx";
@@ -29,12 +31,14 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
   Object.values(state.votes).forEach((m) => voteCounts.set(m, (voteCounts.get(m) ?? 0) + 1));
   const actingTeam = step ? state.teams[step.team] : null;
   const pending = actingTeam ? actingTeam.steamIds.filter((id) => !(id in state.votes)) : [];
+  useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote && frozenSec === undefined);
+  const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
 
-  function cardState(mapId: string): { state: MapCardState; note?: string } {
+  function cardState(mapId: string): { state: MapCardState; note?: string; tag?: string } {
     const h = state.history.find((e) => e.mapId === mapId);
     if (h) {
       const who = h.team === myTeam ? "your team" : "opponents";
-      return { state: h.action === "ban" ? "banned" : "picked", note: `By ${who}` };
+      return { state: h.action === "ban" ? "banned" : "picked", note: `By ${who}`, tag: h.noVotes ? "auto" : undefined };
     }
     if (state.done && state.maps.includes(mapId)) return { state: "decider" };
     return { state: "available" };
@@ -67,9 +71,15 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
           <p className={styles.sub} aria-live="polite">
             {sub}
           </p>
+          {lastAuto && !state.done && (
+            <p className={styles.sub} role="status">
+              Time ran out. {mapName(mode, lastAuto.mapId)} was auto-{lastAuto.action === "ban" ? "banned" : "picked"}.
+            </p>
+          )}
+          <VetoSummary mode={mode} state={state} mySteamId={mySteamId} />
         </div>
         {!state.done && stepDeadline !== null && (
-          <Timer until={stepDeadline} frozenSec={frozenSec} label="Step" size="sm" />
+          <Timer until={stepDeadline} frozenSec={frozenSec} totalSec={VETO_STEP_SEC} label={myTurn ? "Your turn" : "Their turn"} size="lg" />
         )}
       </header>
 
@@ -103,6 +113,7 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
                 name={mapName(mode, mapId)}
                 state={cs.state}
                 note={cs.note}
+                tag={cs.tag}
                 voted={myVote === mapId}
                 votes={cs.state === "available" ? voteCounts.get(mapId) : undefined}
                 onSelect={selectable ? () => onVote?.(mapId) : undefined}

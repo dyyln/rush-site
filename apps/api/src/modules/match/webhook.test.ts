@@ -173,6 +173,30 @@ describe("POST /webhooks/match/:matchId", () => {
     expect(await h.db.select().from(cooldowns)).toHaveLength(0)
   })
 
+  it("player_connected and player_disconnected send warm-up counts to participants", async () => {
+    const { matchId, a, b } = await startDuel(h)
+    await post(matchId, { type: "server_ready" })
+    h.notifier.clear()
+    await post(matchId, { type: "player_connected", steamId: a })
+    await post(matchId, { type: "player_connected", steamId: b })
+    await post(matchId, { type: "player_disconnected", steamId: a })
+    const updates = h.notifier.ofType("match_update").filter((x) => x.audience.kind === "users")
+    expect(updates.map((x) => (x.msg.payload as { connected: number }).connected)).toEqual([1, 2, 1])
+    for (const u of updates) {
+      expect(u.audience.kind === "users" && [...u.audience.steamIds].sort()).toEqual([a, b].sort())
+      expect(u.msg.payload).toMatchObject({ matchId, status: "ready", expected: 2 })
+    }
+  })
+
+  it("warm-up counts ignore events for a finished match", async () => {
+    const { matchId, a } = await startDuel(h)
+    await post(matchId, { type: "server_ready" })
+    await h.db.update(matches).set({ status: "cancelled" }).where(eq(matches.id, matchId))
+    h.notifier.clear()
+    await post(matchId, { type: "player_connected", steamId: a })
+    expect(h.notifier.ofType("match_update")).toHaveLength(0)
+  })
+
   it("a player who never connects forfeits and gets a cooldown", async () => {
     const { matchId, a, b } = await startDuel(h)
     await post(matchId, { type: "server_ready" })

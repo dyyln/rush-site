@@ -47,6 +47,8 @@ export interface AdminStore {
   counts(now: Date): Promise<Counts>
   userCards(steamIds: string[]): Promise<Map<string, UserCard>>
   userExists(steamId: string): Promise<boolean>
+  // Inserts a bare user row named after the id. True when it was created
+  ensureUser(steamId: string): Promise<boolean>
   // Newest first
   listMatches(statuses: string[], limit: number): Promise<MatchSummaryView[]>
   getMatch(id: string): Promise<MatchDetailView | null>
@@ -172,6 +174,15 @@ export class DrizzleAdminStore implements AdminStore {
 
   async userExists(steamId: string): Promise<boolean> {
     const rows = await this.db.select({ id: users.steamId }).from(users).where(eq(users.steamId, steamId)).limit(1)
+    return rows.length > 0
+  }
+
+  async ensureUser(steamId: string): Promise<boolean> {
+    const rows = await this.db
+      .insert(users)
+      .values({ steamId, displayName: steamId })
+      .onConflictDoNothing({ target: users.steamId })
+      .returning({ steamId: users.steamId })
     return rows.length > 0
   }
 

@@ -104,3 +104,14 @@ export const RescheduleCupSchema = z.object({ startsAt: z.iso.datetime({ offset:
 export const CancelCupSchema = z.object({ reason: AdminReasonSchema })
 export const DisqualifyEntrySchema = z.object({ reason: AdminReasonSchema })
 export const ForceResultSchema = z.object({ winnerEntryId: z.uuid(), reason: AdminReasonSchema })
+export const StripBadgesSchema = z.object({ reason: AdminReasonSchema })
+
+// Returned by PATCH and DELETE on a schedule when it is turned off
+export const OpenCupOutcomeSchema = z.object({
+  tournamentId: z.string(),
+  name: z.string(),
+  // cancelled when the open cup had no entries, kept otherwise
+  action: z.enum(["cancelled", "kept"]),
+  entrantCount: z.number().int().nonnegative(),
+})
+export type OpenCupOutcome = z.infer<typeof OpenCupOutcomeSchema>

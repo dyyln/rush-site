@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto"
 import { MODES, type Mode } from "@rushsite/shared"
+import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, createTestDb, makeUsers, withServers } from "../../../test/helpers.js"
-import { bans, hosts, matchPlayers, matches, parties, queueTickets, ratings } from "../../db/schema.js"
+import { bans, hosts, matchPlayers, matches, parties, queueTickets, ratings, users } from "../../db/schema.js"
 import type { Db } from "../../db/client.js"
 import { buildDistribution } from "./distribution.js"
 import { estimateFromTickets, median } from "./eta.js"
+import { namePattern } from "./rank.js"
 import { buildStatus, type StatusInput } from "./status.js"
 
 const none = Object.fromEntries(MODES.map((m) => [m, []])) as unknown as Record<Mode, string[]>
@@ -197,6 +199,83 @@ describe("stats routes", () => {
       [2, true, me],
       [null, false, f2],
     ])
+  })
+
+  it("finds the viewer's rank and the offset of its page", async () => {
+    const ids = await makeUsers(h.db, 7)
+    const [top, tieLow, tieHigh, me, banned, unplaced, unrated] = ids as [string, string, string, string, string, string, string]
+    await rate(h.db, top, "aim1v1", 2000)
+    // Equal ratings break on steamId like the table does
+    const [a, b] = [tieLow, tieHigh].sort()
+    await rate(h.db, a!, "aim1v1", 1800)
+    await rate(h.db, b!, "aim1v1", 1800)
+    await rate(h.db, me, "aim1v1", 1700)
+    await rate(h.db, banned, "aim1v1", 1900)
+    await h.db.insert(bans).values({ steamId: banned, reason: "test" })
+    await rate(h.db, unplaced, "aim1v1", 2500, 4)
+
+    expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me" })).statusCode).toBe(401)
+    const mine = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me?limit=2", cookies: await login(me) })).json()
+    expect(mine).toMatchObject({ mode: "aim1v1", placed: true, rank: 4, offset: 2, limit: 2, needed: 0 })
+    const board = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1?offset=2&limit=2" })).json()
+    expect(board.rows.map((r: { rank: number; steamId: string }) => [r.rank, r.steamId])).toEqual([
+      [3, b],
+      [4, me],
+    ])
+    const tie = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(b!) })).json()
+    expect(tie).toMatchObject({ rank: 3, offset: 0, limit: 50 })
+
+    const early = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(unplaced) })).json()
+    expect(early).toMatchObject({ placed: false, rank: null, offset: null, matches: 4, needed: 16 })
+    expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(banned) })).json()).toMatchObject({
+      placed: false,
+      rank: null,
+    })
+    expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(unrated) })).json()).toMatchObject({
+      placed: false,
+      matches: 0,
+      needed: 20,
+    })
+    expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me?limit=0", cookies: await login(me) })).statusCode).toBe(400)
+    expect((await h.app.inject({ method: "GET", url: "/leaderboard/nope/me", cookies: await login(me) })).statusCode).toBe(404)
+  })
+
+  it("searches the leaderboard by name and keeps global ranks", async () => {
+    const ids = await makeUsers(h.db, 5)
+    const names = ["Vexa", "kolt", "vex_ash", "Lovex", "vexbanned"]
+    for (const [i, id] of ids.entries()) await h.db.update(users).set({ displayName: names[i]! }).where(eq(users.steamId, id))
+    await rate(h.db, ids[0]!, "rush3v3", 1600)
+    await rate(h.db, ids[1]!, "rush3v3", 2000)
+    await rate(h.db, ids[2]!, "rush3v3", 1500)
+    await rate(h.db, ids[3]!, "rush3v3", 1900)
+    await rate(h.db, ids[4]!, "rush3v3", 2100)
+    await h.db.insert(bans).values({ steamId: ids[4]!, reason: "test" })
+
+    const search = async (q: string, extra = "") =>
+      (await h.app.inject({ method: "GET", url: `/leaderboard/rush3v3?q=${encodeURIComponent(q)}${extra}` })).json()
+    // Two letters match the prefix only, case insensitive
+    const short = await search("VE")
+    expect(short.total).toBe(2)
+    expect(short.rows.map((r: { rank: number; displayName: string }) => [r.rank, r.displayName])).toEqual([
+      [3, "Vexa"],
+      [4, "vex_ash"],
+    ])
+    // Three or more letters match anywhere in the name
+    const long = await search("vex")
+    expect(long.rows.map((r: { rank: number; displayName: string }) => [r.rank, r.displayName])).toEqual([
+      [2, "Lovex"],
+      [3, "Vexa"],
+      [4, "vex_ash"],
+    ])
+    const paged = await search("vex", "&offset=1&limit=1")
+    expect(paged.total).toBe(3)
+    expect(paged.rows.map((r: { rank: number }) => r.rank)).toEqual([3])
+    // Wildcards are literal
+    expect((await search("x_a")).rows.map((r: { displayName: string }) => r.displayName)).toEqual(["vex_ash"])
+    expect((await search("%")).total).toBe(0)
+    expect((await search("  ")).total).toBe(4)
+    expect((await h.app.inject({ method: "GET", url: `/leaderboard/rush3v3?q=${"a".repeat(33)}` })).statusCode).toBe(400)
+    expect(namePattern("A_b")).toBe("%a\\_b%")
   })
 
   it("serves the public status page", async () => {

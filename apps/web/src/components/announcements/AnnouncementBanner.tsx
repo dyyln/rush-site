@@ -1,0 +1,112 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { Announcement } from "@rushsite/shared";
+import { WarningIcon } from "@/components/stats/WarningIcon";
+import { api } from "@/lib/api";
+import { isMock } from "@/lib/env";
+import styles from "./AnnouncementBanner.module.css";
+
+const DISMISSED_KEY = "announcements.dismissed";
+const REFRESH_MS = 5 * 60_000;
+// Keeps the stored list short. Old ids fall off the front
+const MAX_REMEMBERED = 50;
+
+function readDismissed(): string[] {
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissed(ids: string[]): void {
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(ids.slice(-MAX_REMEMBERED)));
+  } catch {
+    // Storage blocked. The banner stays hidden until the page reloads
+  }
+}
+
+const MOCK: Announcement[] = [
+  {
+    id: "00000000-0000-4000-8000-00000000a001",
+    text: "3v3 Rush is live. Queue up and tell us how the rooms feel.",
+    level: "info",
+    startsAt: "2026-09-22T00:00:00.000Z",
+    endsAt: null,
+    dismissible: true,
+    createdAt: "2026-09-22T00:00:00.000Z",
+    updatedAt: "2026-09-22T00:00:00.000Z",
+  },
+];
+
+async function load(): Promise<Announcement[]> {
+  if (isMock) return MOCK;
+  return (await api.get<{ announcements: Announcement[] }>("/announcements")).announcements;
+}
+
+// Site wide notices from GET /announcements. Dismissal is remembered per announcement id
+export function AnnouncementBanner() {
+  const [items, setItems] = useState<Announcement[]>([]);
+  const [dismissed, setDismissed] = useState<string[] | null>(null);
+
+  const refresh = useCallback(() => {
+    load().then(setItems, () => undefined);
+  }, []);
+
+  useEffect(() => {
+    setDismissed(readDismissed());
+    refresh();
+    const t = setInterval(refresh, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [refresh]);
+
+  if (!dismissed) return null;
+  const now = Date.now();
+  const visible = items.filter(
+    (a) =>
+      !(a.dismissible && dismissed.includes(a.id)) &&
+      Date.parse(a.startsAt) <= now &&
+      (!a.endsAt || Date.parse(a.endsAt) > now),
+  );
+  if (visible.length === 0) return null;
+
+  function dismiss(id: string) {
+    const next = [...(dismissed ?? []).filter((x) => x !== id), id];
+    setDismissed(next);
+    writeDismissed(next);
+  }
+
+  return (
+    <div className={styles.stack}>
+      {visible.map((a) => (
+        <section key={a.id} className={`${styles.banner} ${a.level === "warn" ? styles.warn : styles.info}`} aria-label="Announcement">
+          <div className={`container ${styles.inner}`}>
+            {a.level === "warn" ? <WarningIcon className={styles.icon} /> : <InfoIcon />}
+            <p className={styles.text}>{a.text}</p>
+            {a.dismissible && (
+              <button type="button" className={styles.close} onClick={() => dismiss(a.id)} aria-label="Dismiss announcement">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" className={styles.icon} aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 7.2v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="8" cy="4.8" r="0.95" fill="currentColor" />
+    </svg>
+  );
+}

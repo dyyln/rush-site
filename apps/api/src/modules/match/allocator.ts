@@ -225,7 +225,7 @@ export class Allocator {
       gslt,
       password: p.password,
       allowedSteamIds: p.teams.flatMap((t) => t.steamIds),
-      teams: p.teams.map((t) => ({ name: t.name, steamIds: [...t.steamIds] })),
+      teams: p.teams.map((t) => ({ name: t.name, steamIds: [...t.steamIds], ...(t.displayName ? { displayName: t.displayName } : {}) })),
       webhookUrl: `${this.opts.webhookBaseUrl.replace(/\/+$/, "")}/webhooks/match/${p.matchId}`,
       webhookSecret: p.webhookSecret,
       demoUpload,

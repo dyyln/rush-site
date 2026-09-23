@@ -48,6 +48,8 @@ export async function registerReviewAdminRoutes(app: FastifyInstance, ctx: AppCo
 
   app.post("/admin/review/:flagId/claim", async (req) => ({ flag: await service.claim(flagId(req), adminOf(req)) }))
 
+  app.post("/admin/review/:flagId/unclaim", async (req) => ({ flag: await service.unclaim(flagId(req), adminOf(req)) }))
+
   app.post("/admin/review/:flagId/decide", async (req) => {
     const id = flagId(req)
     const body = parse(ReviewDecideBodySchema, req.body)

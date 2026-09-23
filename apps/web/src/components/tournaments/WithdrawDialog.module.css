@@ -1,0 +1,36 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.facts {
+  margin: 0;
+}
+.facts div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--color-text-muted);
+}
+.facts dd {
+  margin: 0;
+}
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.warn {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-warn);
+  background: var(--color-warn-subtle);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}

@@ -18,8 +18,8 @@
   gap: var(--space-3);
   padding: var(--space-5) var(--space-4);
   background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
 }
 .team {
   display: flex;
@@ -125,4 +125,35 @@
 .connect:hover {
   background: var(--color-accent-hover);
   color: var(--color-text-on-accent);
+}
+.connectCode {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+.damage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.damage > span:last-child {
+  min-width: 4ch;
+}
+.damageTrack {
+  display: block;
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+.damageTrack span {
+  display: block;
+  height: 100%;
+}
+.damageTrack[data-side="own"] span {
+  background: var(--team-own);
+}
+.damageTrack[data-side="enemy"] span {
+  background: var(--team-enemy);
 }

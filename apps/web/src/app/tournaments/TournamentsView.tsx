@@ -7,8 +7,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
+import { AvatarStack } from "@/components/tournaments/AvatarStack";
+import { LiveBadge } from "@/components/tournaments/LiveBadge";
+import { LocalTime } from "@/components/tournaments/LocalTime";
+import { Avatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
-import { dateTime } from "@/lib/format";
 import { MODE_COPY, isMode } from "@/lib/modes";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
 import type { TournamentStatus, TournamentSummary } from "@/lib/types";
@@ -25,10 +28,7 @@ const VIEW_STATUS: Record<View, TournamentStatus[]> = {
 export function TournamentsView() {
   const [view, setView] = useState<View>("upcoming");
   const [mode, setMode] = useState<Mode | "all">("all");
-  const data = useAsync(
-    () => api.tournaments.list({ status: VIEW_STATUS[view], mode: mode === "all" ? undefined : mode }),
-    [view, mode],
-  );
+  const data = useAsync(() => api.tournaments.list({ status: VIEW_STATUS[view], mode: mode === "all" ? undefined : mode }), [view, mode]);
 
   return (
     <div className="container page">
@@ -88,7 +88,7 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
   return (
     <article className={styles.card}>
       <div className={styles.cardTop}>
-        <Badge tone={status.tone}>{status.label}</Badge>
+        {t.status === "running" ? <LiveBadge /> : <Badge tone={status.tone}>{status.label}</Badge>}
         <Badge>{t.cadence}</Badge>
       </div>
       <h2 className={styles.cardTitle}>
@@ -102,7 +102,9 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
       <dl className={styles.facts}>
         <div>
           <dt>Starts</dt>
-          <dd className="mono">{dateTime(t.startsAt)}</dd>
+          <dd className="mono">
+            <LocalTime iso={t.startsAt} align="end" />
+          </dd>
         </div>
         <div>
           <dt>Format</dt>
@@ -110,11 +112,23 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
         </div>
         <div>
           <dt>Entrants</dt>
-          <dd className="mono">
-            {t.entrantCount} / {t.maxEntrants}
+          <dd className={styles.entrants}>
+            <AvatarStack people={t.entrantPreview ?? []} total={t.entrantCount} />
+            <span className="mono">
+              {t.entrantCount} / {t.maxEntrants}
+            </span>
           </dd>
         </div>
       </dl>
+      {t.winner && (
+        <p className={styles.winner}>
+          <Avatar name={t.winner.name} src={t.winner.avatarUrl} size="sm" />
+          <span className={styles.winnerText}>
+            <span className={styles.winnerLabel}>Champion</span>
+            <span className={styles.winnerName}>{t.winner.name}</span>
+          </span>
+        </p>
+      )}
       <span className={styles.fill} aria-hidden="true">
         <span style={{ width: `${fill * 100}%` }} />
       </span>

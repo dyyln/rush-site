@@ -26,9 +26,11 @@ import type {
   TournamentStatus as SharedTournamentStatus,
   TournamentSummary as SharedTournamentSummary,
   TrustLevel,
+  Streak,
+  FavouriteWeapon,
 } from "@rushsite/shared";
 
-export type { Mode, TierId, TrustLevel };
+export type { Mode, TierId, TrustLevel, Streak, FavouriteWeapon };
 
 // Matchmaking preferences on GET /me, changed with PATCH /me/settings
 export type UserSettings = { minTrust: TrustLevel };
@@ -63,6 +65,8 @@ export type ModeStats = {
   bestMaps: MapStat[];
   // null until the player has 20 matches in the mode
   leaderboardRank: number | null;
+  // Optional so older api responses still render
+  streak?: Streak;
 };
 
 export type MatchSummary = {
@@ -95,6 +99,7 @@ export type Profile = {
   modes: ModeStats[];
   badges: ProfileBadge[];
   recentMatches: MatchSummary[];
+  favouriteWeapon?: FavouriteWeapon | null;
 };
 
 export type LeaderboardRow = {

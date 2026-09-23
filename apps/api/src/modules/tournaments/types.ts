@@ -20,7 +20,11 @@ export type BadgeKind = "cup_champion" | "cup_runner_up" | "cup_semifinalist"
 export interface StartMatchParams {
   mode: Mode
   // Exactly two teams. The result must name the winner by one of these names.
-  teams: [{ name: string; steamIds: string[] }, { name: string; steamIds: string[] }]
+  // name is the team id the result uses. displayName is the cup team name when set.
+  teams: [
+    { name: string; steamIds: string[]; displayName?: string },
+    { name: string; steamIds: string[]; displayName?: string },
+  ]
   // Tournament games skip the queue and the accept step.
   source: {
     kind: "tournament"
@@ -78,6 +82,8 @@ export interface TournamentsPluginOptions {
   isAdmin?(steamId: string): boolean
   // Stops a CS2 match that no longer counts after a cancel, disqualification or forced result.
   cancelMatch?(matchId: string, reason: string): Promise<unknown>
+  // False when an admin closed the mode through its queue flag
+  modeGate?(mode: Mode): Promise<boolean>
   // Defaults to true. Tests turn it off.
   scheduler?: boolean
   schedulerIntervalMs?: number

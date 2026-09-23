@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import buttonStyles from "@/components/ui/Button.module.css";
+import { CheckIcon, useCopyFeedback } from "@/components/ui/CopyButton";
 import { cx } from "@/components/ui/cx";
 import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import type { MatchDemo } from "@/lib/types";
-import { copyText } from "./copy";
 import { CopyIcon, DownloadIcon, PlayIcon } from "./icons";
 import styles from "./MatchActions.module.css";
 
@@ -33,6 +33,10 @@ export function DemoActions({ matchId, demo }: { matchId: string; demo?: MatchDe
 
   // Presigned links last ten minutes. A stale one is refreshed before download
   const download = async (e: MouseEvent<HTMLAnchorElement>) => {
+    if (fetching) {
+      e.preventDefault();
+      return;
+    }
     if (!demo?.expiresAt || new Date(demo.expiresAt).getTime() - EXPIRY_MARGIN_MS > Date.now()) return;
     e.preventDefault();
     setFetching(true);
@@ -78,6 +82,7 @@ export function DemoActions({ matchId, demo }: { matchId: string; demo?: MatchDe
 
 function WatchPopover({ file, disabled, hintId }: { file: string; disabled: boolean; hintId?: string }) {
   const toast = useToast();
+  const copyFeedback = useCopyFeedback();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -126,8 +131,7 @@ function WatchPopover({ file, disabled, hintId }: { file: string; disabled: bool
   }, [open, place]);
 
   const copy = async () => {
-    if (await copyText(command)) toast.push({ title: "Command copied", body: "Paste it into the CS2 console.", tone: "success" });
-    else toast.push({ title: "Could not copy", body: "Select the command and copy it by hand.", tone: "error" });
+    if (!(await copyFeedback.copy(command))) toast.push({ title: "Could not copy", body: "Select the command and copy it by hand.", tone: "error" });
   };
 
   return (
@@ -167,8 +171,13 @@ function WatchPopover({ file, disabled, hintId }: { file: string; disabled: bool
           </ol>
           <div className={styles.command}>
             <code className="mono">{command}</code>
-            <Button variant="ghost" className={styles.copyBtn} icon={<CopyIcon />} onClick={copy}>
-              <span className="visually-hidden">Copy command</span>
+            <Button
+              variant="ghost"
+              className={cx(styles.copyBtn, copyFeedback.copied && buttonStyles.copied)}
+              icon={copyFeedback.copied ? <CheckIcon /> : <CopyIcon />}
+              onClick={copy}
+            >
+              <span aria-live="polite">{copyFeedback.copied ? "Copied" : <span className="visually-hidden">Copy command</span>}</span>
             </Button>
           </div>
           <p className={styles.note}>Enable the developer console in CS2 settings under Game if it does not open.</p>

@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import buttonStyles from "@/components/ui/Button.module.css";
+import { CheckIcon } from "@/components/ui/CopyButton";
 import type { useFriendInvite } from "./useFriendInvite";
 
 type Friend = { steamId: string; displayName: string; registered: boolean };
@@ -21,9 +23,16 @@ export function FriendAction({ friend, actions }: { friend: Friend; actions: Ret
       </Button>
     );
   }
+  const linked = actions.linked[friend.steamId];
   return (
-    <Button variant="ghost" onClick={() => actions.sendLink(friend.steamId)} aria-label={`Send party link to ${friend.displayName} in Steam chat`}>
-      Send link
+    <Button
+      variant="ghost"
+      className={linked ? buttonStyles.copied : undefined}
+      icon={linked ? <CheckIcon /> : undefined}
+      onClick={() => actions.sendLink(friend.steamId)}
+      aria-label={linked ? `Link copied. Paste it in the Steam chat with ${friend.displayName}` : `Send party link to ${friend.displayName} in Steam chat`}
+    >
+      {linked ? "Copied" : "Send link"}
     </Button>
   );
 }

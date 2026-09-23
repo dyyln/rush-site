@@ -14,15 +14,18 @@ import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
+import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { api, ApiError } from "@/lib/api";
 import { formatStat, pct, shortDate, signed, winRate } from "@/lib/format";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
-import type { BadgeKind, MatchSummary, ModeStats, Profile, TrustLevel } from "@/lib/types";
+import type { BadgeKind, FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { TrustChip } from "@/components/trust/TrustChip";
 import { MyReports } from "@/components/review/MyReports";
+import { WeaponIcon, weaponLabel } from "@/components/icons";
+import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import styles from "./profile.module.css";
 
 const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
@@ -72,13 +75,7 @@ const matchColumns: Column<MatchSummary>[] = [
 export function ProfileView({ steamId }: { steamId: string }) {
   const data = useAsync(() => api.profile(steamId), [steamId]);
 
-  if (data.status === "loading") {
-    return (
-      <div className="container page" aria-busy="true">
-        <p className="muted">Loading profile</p>
-      </div>
-    );
-  }
+  if (data.status === "loading") return <ProfileSkeleton />;
   if (data.status === "error") {
     const notFound = data.error instanceof ApiError && data.error.status === 404;
     return (
@@ -126,6 +123,12 @@ function ProfileBody({ profile }: { profile: Profile }) {
             <FriendButton target={profile.user} />
             <ChallengeButton target={profile.user} />
           </div>
+          {(profile.recentMatches.length > 0 || profile.favouriteWeapon) && (
+            <div className={styles.heroMeta}>
+              {profile.recentMatches.length > 0 && <RecentForm matches={profile.recentMatches} />}
+              {profile.favouriteWeapon && <Favourite weapon={profile.favouriteWeapon} />}
+            </div>
+          )}
         </div>
       </header>
 
@@ -198,6 +201,7 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
       <span className={styles.ratingSub}>
         {stats && stats.matches > 0 ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "\u00a0"}
       </span>
+      {stats?.streak && stats.matches > 0 && <StreakLine streak={stats.streak} />}
       {stats && (
         <span className={styles.ratingSpark}>
           <RatingChart points={stats.history} label={`${MODE_COPY[mode].label} rating trend`} compact />
@@ -214,7 +218,7 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
   return (
     <div className="stack">
       <div className={styles.tiles}>
-        <StatTile label="Rating" value={stats.rating} sub={`${signed(delta)} over ${stats.history.length} matches`} trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"} />
+        <StatTile label="Rating" value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />} sub={`${signed(delta)} over ${stats.history.length} matches`} trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"} />
         <StatTile label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
         <StatTile label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
         <StatTile label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
@@ -246,5 +250,53 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+const FORM: Record<MatchSummary["result"], { letter: string; word: string }> = {
+  win: { letter: "W", word: "win" },
+  loss: { letter: "L", word: "loss" },
+  abandoned: { letter: "A", word: "abandon" },
+};
+
+// Last five results, oldest on the left
+function RecentForm({ matches }: { matches: MatchSummary[] }) {
+  const last = matches.slice(0, 5).reverse();
+  const label = `Recent form, oldest first: ${last.map((m) => FORM[m.result].word).join(", ")}`;
+  return (
+    <span className={styles.form}>
+      <span className="eyebrow">Form</span>
+      <span className={styles.formDots} role="img" aria-label={label}>
+        {last.map((m) => (
+          <span key={m.matchId} className={styles.formDot} data-result={m.result} title={FORM[m.result].word} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function Favourite({ weapon }: { weapon: FavouriteWeapon }) {
+  const name = weaponLabel(weapon.weapon);
+  return (
+    <span className={styles.favourite}>
+      <span className="eyebrow">Favourite</span>
+      <WeaponIcon name={weapon.weapon} size={20} className={styles.favouriteIcon} />
+      <span>{name}</span>
+      <span className="muted mono">{weapon.kills} kills</span>
+    </span>
+  );
+}
+
+function StreakLine({ streak }: { streak: Streak }) {
+  const now = streak.current > 0 ? `W${streak.current}` : streak.current < 0 ? `L${-streak.current}` : "None";
+  return (
+    <span className={styles.streak}>
+      <span>
+        Streak <span className="mono" data-sign={streak.current > 0 ? "up" : streak.current < 0 ? "down" : "none"}>{now}</span>
+      </span>
+      <span>
+        Best <span className="mono">W{streak.longest}</span>
+      </span>
+    </span>
   );
 }

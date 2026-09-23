@@ -1,0 +1,17 @@
+.chip {
+  border-radius: var(--radius-sm);
+}
+.button {
+  border-radius: var(--radius-md);
+}
+.spark {
+  margin-top: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.static {
+  cursor: default;
+}
+.avatars {
+  display: flex;
+  gap: var(--space-1);
+}

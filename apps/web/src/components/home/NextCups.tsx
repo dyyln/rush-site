@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { dateTime } from "@/lib/format";
+import { LocalTime } from "@/components/tournaments/LocalTime";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
@@ -72,7 +72,7 @@ function CupCard({ next }: { next: NextCup }) {
       <p className={styles.countdownLabel}>Starts in</p>
       <Countdown until={Date.parse(cup.startsAt)} className={styles.countdown} />
       <p className={styles.cupMeta}>
-        <span className="mono">{dateTime(cup.startsAt)}</span>
+        <LocalTime iso={cup.startsAt} className="mono" />
         <span className="mono">
           {cup.entrantCount} / {cup.maxEntrants}
         </span>

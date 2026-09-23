@@ -17,7 +17,7 @@ export function MatchSummary({ m, roster, ownIndex, viewer }: Props) {
   const winner = a.score > b.score ? a : b;
   const played = m.teams.some((t) => t.players.some((p) => p.steamId === viewer));
   const ownWon = !draw && m.teams[ownIndex] === winner;
-  const headline = draw ? "Draw" : played ? (ownWon ? "Victory" : "Defeat") : `${winner.name} won`;
+  const headline = draw ? "Draw" : played ? (ownWon ? "Victory" : "Defeat") : `${winner.displayName ?? winner.name} won`;
   const duration =
     m.startedAt && m.endedAt ? mmss((new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()) / 1000) : null;
   const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
@@ -32,14 +32,14 @@ export function MatchSummary({ m, roster, ownIndex, viewer }: Props) {
         <p className={styles.final}>
           <span className={styles.finalTeam} data-side={sideOf(0)}>
             <TeamMarker side={sideOf(0)} />
-            <span className={styles.ellipsis}>{a.name}</span>
+            <span className={styles.ellipsis}>{a.displayName ?? a.name}</span>
           </span>
           <span className={`${styles.finalScore} mono`}>
             {a.score}:{b.score}
           </span>
           <span className={styles.finalTeam} data-side={sideOf(1)}>
             <TeamMarker side={sideOf(1)} />
-            <span className={styles.ellipsis}>{b.name}</span>
+            <span className={styles.ellipsis}>{b.displayName ?? b.name}</span>
           </span>
         </p>
         {duration && (

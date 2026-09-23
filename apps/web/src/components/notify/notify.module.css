@@ -34,8 +34,8 @@
   margin-top: var(--space-2);
   padding: var(--space-4);
   background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
 }
 
 .heading {

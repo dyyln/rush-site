@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Presence, PresenceDetail } from "@rushsite/shared";
 import { mapName, modeLabel, MODE_COPY } from "@/lib/modes";
+import { joinQueueHref, type JoinableModes } from "./useJoinQueue";
 import styles from "./friends.module.css";
 
 export const PRESENCE_LABEL: Record<Presence, string> = {
@@ -33,8 +34,17 @@ function mapLabel(d: PresenceDetail): string | null {
   return d.mapId ? mapName(d.mode, d.mapId) : null;
 }
 
-// One line under a friend's name. A live match gets its score and a Watch link
-export function PresenceLine({ presence, detail }: { presence: Presence; detail?: PresenceDetail }) {
+// One line under a friend's name. A live match gets its score and a Watch link.
+// A queued friend gets a Join queue link when the viewer may queue the same modes
+export function PresenceLine({
+  presence,
+  detail,
+  joinable,
+}: {
+  presence: Presence;
+  detail?: PresenceDetail;
+  joinable?: JoinableModes;
+}) {
   if (presence === "match" && detail?.mode) {
     const map = mapLabel(detail);
     const parts = [modeLabel(detail.mode), map].filter(Boolean).join(" · ");
@@ -60,9 +70,16 @@ export function PresenceLine({ presence, detail }: { presence: Presence; detail?
     );
   }
   if (presence === "queue" && detail?.modes?.length) {
+    const labels = detail.modes.map((m) => MODE_COPY[m].label).join(", ");
+    const join = joinable?.(detail.modes) ?? [];
     return (
       <span className={styles.presenceLine}>
-        <span className={styles.presenceText}>Queue: {detail.modes.map((m) => MODE_COPY[m].label).join(", ")}</span>
+        <span className={styles.presenceText}>Queue: {labels}</span>
+        {join.length > 0 && (
+          <Link href={joinQueueHref(join)} className={styles.watch}>
+            Join queue<span className="visually-hidden"> for {join.map((m) => MODE_COPY[m].label).join(", ")}</span>
+          </Link>
+        )}
       </span>
     );
   }

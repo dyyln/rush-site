@@ -1,0 +1,13 @@
+.thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  object-fit: cover;
+}
+.dim {
+  filter: grayscale(1);
+  opacity: 0.45;
+}

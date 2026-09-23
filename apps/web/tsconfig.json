@@ -38,7 +38,9 @@
     ".next-mock/types/**/*.ts",
     ".next-mock/dev/types/**/*.ts",
     ".next-matchweb/types/**/*.ts",
-    ".next-matchweb/dev/types/**/*.ts"
+    ".next-matchweb/dev/types/**/*.ts",
+    ".next-admin-ops/types/**/*.ts",
+    ".next-admin-ops/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { bracketPath } from "@/components/tournaments/bracketPath";
+import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import type { Bracket, BracketMatch, EntryView } from "@/lib/types";
-import { Badge } from "./Badge";
 import { TeamCard, type TeamCardPlayer } from "./TeamCard";
 import { TeamMarker, type TeamSide } from "./TeamMarker";
 import { cx } from "./cx";
@@ -32,29 +33,54 @@ export function entryPlayers(e: EntryView): TeamCardPlayer[] {
 export function BracketView({ bracket, entries, highlightEntryId }: BracketViewProps) {
   const byId = new Map(entries.map((e) => [e.id, e]));
   const rounds = Array.from({ length: bracket.rounds }, (_, i) => i + 1);
+  const path = bracketPath(bracket, highlightEntryId);
+  const next = path?.nextId ? bracket.matches.find((m) => m.id === path.nextId) : undefined;
 
   return (
-    <div className={styles.scroller} role="region" aria-label="Bracket" tabIndex={0}>
-      <ol className={styles.rounds}>
-        {rounds.map((r) => {
-          const matches = bracket.matches.filter((m) => m.round === r).sort((a, b) => a.index - b.index);
-          const bo = matches[0]?.bestOf ?? 1;
-          return (
-            <li key={r} className={styles.round}>
-              <h3 className={styles.roundTitle}>
-                {roundName(r, bracket.rounds)} <span className="muted">Bo{bo}</span>
-              </h3>
-              <ol className={styles.matches}>
-                {matches.map((m) => (
-                  <li key={m.id} className={styles.slot}>
-                    <MatchBox match={m} byId={byId} highlight={highlightEntryId} />
-                  </li>
-                ))}
-              </ol>
-            </li>
-          );
-        })}
-      </ol>
+    <div className={styles.wrap}>
+      {path && (
+        <p className={styles.legend}>
+          <span className={styles.swatch} aria-hidden="true" />
+          <span>
+            Your route is highlighted.{" "}
+            {path.outcome === "champion"
+              ? "You won the cup."
+              : path.outcome === "eliminated"
+                ? `Out in the ${roundName(path.round, bracket.rounds).toLowerCase()}.`
+                : next
+                  ? `Next: ${roundName(next.round, bracket.rounds).toLowerCase()}${next.status === "live" ? ", live now" : ""}.`
+                  : ""}
+          </span>
+        </p>
+      )}
+      <div className={styles.scroller} role="region" aria-label="Bracket" tabIndex={0}>
+        <ol className={styles.rounds}>
+          {rounds.map((r) => {
+            const matches = bracket.matches.filter((m) => m.round === r).sort((a, b) => a.index - b.index);
+            const bo = matches[0]?.bestOf ?? 1;
+            return (
+              <li key={r} className={styles.round}>
+                <h3 className={styles.roundTitle}>
+                  {roundName(r, bracket.rounds)} <span className="muted">Bo{bo}</span>
+                </h3>
+                <ol className={styles.matches}>
+                  {matches.map((m) => (
+                    <li key={m.id} className={cx(styles.slot, path?.connectorIds.has(m.id) && styles.pathOut)}>
+                      <MatchBox
+                        match={m}
+                        byId={byId}
+                        highlight={highlightEntryId}
+                        onPath={!!path?.matchIds.has(m.id)}
+                        isNext={path?.nextId === m.id}
+                      />
+                    </li>
+                  ))}
+                </ol>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }
@@ -64,7 +90,15 @@ function matchLink(m: BracketMatch): string | null {
   return id ? `/matches/${id}` : null;
 }
 
-function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<string, EntryView>; highlight?: string | null }) {
+type MatchBoxProps = {
+  match: BracketMatch;
+  byId: Map<string, EntryView>;
+  highlight?: string | null;
+  onPath: boolean;
+  isNext: boolean;
+};
+
+function MatchBox({ match, byId, highlight, onPath, isNext }: MatchBoxProps) {
   const aWins = match.games.filter((g) => g.winner === "a").length;
   const bWins = match.games.filter((g) => g.winner === "b").length;
   // The viewer's entry is own. Otherwise the top slot is own
@@ -75,18 +109,17 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
     { id: match.b, seed: match.bSeed, score: bWins, resolved: match.bResolved },
   ];
   const href = matchLink(match);
+  const placed = !!highlight && (match.a === highlight || match.b === highlight);
   return (
-    <div className={cx(styles.match, match.status === "live" && styles.live)}>
+    <div className={cx(styles.match, match.status === "live" && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
+      {onPath && <span className="visually-hidden">{placed ? "Your match. " : "On your route. "}</span>}
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;
         const lost = match.status === "done" && !!match.winner && !won;
         const entry = s.id ? byId.get(s.id) : undefined;
         const label = s.id ? entryName(entry) : match.round === 1 && s.resolved ? "Bye" : "TBD";
         return (
-          <div
-            key={i}
-            className={cx(styles.side, won && styles.won, lost && styles.lost, s.id && s.id === highlight && styles.me)}
-          >
+          <div key={i} className={cx(styles.side, won && styles.won, lost && styles.lost, s.id && s.id === highlight && styles.me)}>
             <span className={styles.lead}>
               <TeamMarker side={sideOf(i)} />
               <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
@@ -105,9 +138,10 @@ function MatchBox({ match, byId, highlight }: { match: BracketMatch; byId: Map<s
           </div>
         );
       })}
-      {(href || (match.resolution && match.resolution !== "played")) && (
+      {(href || isNext || (match.resolution && match.resolution !== "played")) && (
         <div className={styles.footer}>
-          {match.status === "live" && <Badge tone="win">Live</Badge>}
+          {match.status === "live" && <LiveBadge />}
+          {isNext && <span className={styles.next}>{placed ? "Your next match" : "Next if you win"}</span>}
           {match.resolution && match.resolution !== "played" && (
             <span className={styles.resolution}>{match.resolution.replace("_", " ")}</span>
           )}

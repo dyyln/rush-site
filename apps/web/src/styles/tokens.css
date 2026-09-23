@@ -86,6 +86,11 @@
   --radius-lg: 10px;
   --radius-full: 999px;
 
+  /* Cards. Every card-like surface uses this border and radius */
+  --card-border: 1px solid var(--color-border);
+  --card-radius: var(--radius-lg);
+  --card-bg: var(--color-surface-2);
+
   /* Sizing */
   --target-min: 44px;
   --content-max: 1200px;
@@ -102,6 +107,12 @@
   --z-toast: 60;
 
   color-scheme: dark;
+}
+
+/* Colourblind team palette. Set from Settings */
+:root[data-palette="cb"] {
+  --team-own: #6fa8dc;
+  --team-enemy: #e8a04c;
 }
 
 @media (min-width: 768px) {

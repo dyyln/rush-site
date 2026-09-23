@@ -1,0 +1,50 @@
+/* Sits above whole-card link overlays so hover and focus reach it */
+.wrap {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  border-bottom: 1px dotted var(--color-border-strong);
+  cursor: help;
+}
+.wrap:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+.tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-header);
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-3);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  white-space: nowrap;
+  text-align: left;
+  pointer-events: none;
+}
+.end {
+  left: auto;
+  right: 0;
+}
+.wrap:hover .tip,
+.wrap:focus-visible .tip {
+  display: inline-flex;
+}
+.tag {
+  padding: 0 var(--space-1);
+  border-radius: 2px;
+  background: var(--color-info-subtle);
+  color: var(--color-info);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}

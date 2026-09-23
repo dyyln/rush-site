@@ -93,8 +93,8 @@ func ServerCfg(p Params) string {
 	w(`tv_password "%s"`, p.TVPassword)
 	w("tv_autorecord 0")
 	if len(p.Req.Teams) == 2 {
-		w(`mp_teamname_1 "%s"`, CfgString(p.Req.Teams[0].Name))
-		w(`mp_teamname_2 "%s"`, CfgString(p.Req.Teams[1].Name))
+		w(`mp_teamname_1 "%s"`, CfgString(p.Req.Teams[0].Label()))
+		w(`mp_teamname_2 "%s"`, CfgString(p.Req.Teams[1].Label()))
 	}
 	w("exec %s/%s", p.CfgRel, p.Spec.ExecCfg)
 	return b.String()

@@ -15,7 +15,7 @@ describe("review queue", () => {
   beforeEach(async () => {
     admin = "76561190000000001"
     other = "76561190000000002"
-    h = await createAppHarness({ env: { ADMIN_STEAM_IDS: `${admin},${other}` } })
+    h = await createAppHarness({ env: { ADMIN_STEAM_IDS: `${admin},${other}`, TRUST_VERIFIED_MIN_MATCHES: "1" } })
     await h.db.insert((await import("../../db/schema.js")).users).values([
       { steamId: admin, displayName: "admin" },
       { steamId: other, displayName: "admin2" },
@@ -258,6 +258,51 @@ describe("review queue", () => {
       expect(demo!.keep).toBe(false)
     })
 
+    it("the claimer can release a case and others can after the claim goes stale", async () => {
+      const { flagId } = await flagged()
+      await call(admin, "POST", `/admin/review/${flagId}/claim`)
+      expect(await call(other, "POST", `/admin/review/${flagId}/unclaim`)).toMatchObject({ status: 409, body: { error: "already_claimed" } })
+      const released = await call<{ flag: ReviewFlag }>(admin, "POST", `/admin/review/${flagId}/unclaim`)
+      expect(released.body.flag).toMatchObject({ status: "open", reviewer: null, claimedAt: null })
+      expect(released.body.flag.reports.every((r) => r.outcome === "received")).toBe(true)
+      expect((await call(admin, "POST", `/admin/review/${flagId}/unclaim`)).body).toMatchObject({ error: "not_claimed" })
+
+      await call(admin, "POST", `/admin/review/${flagId}/claim`)
+      h.clock.advance(30 * 60_000)
+      const taken = await call<{ flag: ReviewFlag }>(other, "POST", `/admin/review/${flagId}/unclaim`)
+      expect(taken.body.flag.status).toBe("open")
+      const audit = await h.db.select().from(adminAudit).where(eq(adminAudit.target, flagId))
+      expect(audit.map((a) => [a.action, a.adminSteamId])).toEqual([
+        ["review.claim", admin],
+        ["review.unclaim", admin],
+        ["review.claim", admin],
+        ["review.unclaim", other],
+      ])
+    })
+
+    it("any admin may decide a case once the claim is 30 minutes old", async () => {
+      const { flagId } = await flagged()
+      await call(admin, "POST", `/admin/review/${flagId}/claim`)
+      h.clock.advance(29 * 60_000)
+      expect((await call(other, "POST", `/admin/review/${flagId}/decide`, { outcome: "cleared", note: "early" })).status).toBe(409)
+      h.clock.advance(60_000)
+      const res = await call<{ flag: ReviewFlag }>(other, "POST", `/admin/review/${flagId}/decide`, { outcome: "cleared", note: "stale claim" })
+      expect(res.status).toBe(200)
+      expect(res.body.flag).toMatchObject({ status: "cleared", reviewer: { steamId: other } })
+      const [entry] = await h.db.select().from(adminAudit).where(and(eq(adminAudit.target, flagId), eq(adminAudit.action, "review.decide")))
+      expect(entry).toMatchObject({ adminSteamId: other, payload: { overrodeClaimOf: admin } })
+    })
+
+    it("open and reviewing cases leave the trust level alone, a confirmed one drops it", async () => {
+      const { flagId, suspect } = await flagged()
+      expect((await h.ctx.trust.recompute(suspect)).level).toBe("verified")
+      await call(admin, "POST", `/admin/review/${flagId}/claim`)
+      expect((await h.ctx.trust.recompute(suspect)).level).toBe("verified")
+      await call(admin, "POST", `/admin/review/${flagId}/decide`, { outcome: "confirmed", note: "cheat" })
+      const [row] = await h.db.select().from(trustLevels).where(eq(trustLevels.steamId, suspect))
+      expect(row!.level).toBe("new")
+    })
+
     it("validates the decide body", async () => {
       const { flagId } = await flagged()
       const url = `/admin/review/${flagId}/decide`
@@ -301,6 +346,29 @@ describe("review queue", () => {
       expect((await call<{ reports: MyReport[] }>(a.v1, "GET", "/me/reports")).body.reports).toHaveLength(1)
       expect((await call<{ reports: MyReport[] }>(a.v1, "GET", `/me/reports?matchId=${b.matchId}`)).body.reports).toHaveLength(0)
       expect((await call(a.v1, "GET", "/me/reports?matchId=nope")).status).toBe(400)
+    })
+
+    it("a Trusted report on a cleared case reopens it once", async () => {
+      const { matchId, suspect, mate, v1, v2 } = await finished2v2()
+      await report(v1, matchId, suspect)
+      await report(v2, matchId, suspect)
+      const [first] = await flagRows(suspect)
+      await call(admin, "POST", `/admin/review/${first!.id}/decide`, { outcome: "cleared", note: "clean" })
+      await h.db.insert(trustLevels).values({ steamId: mate, level: "trusted" })
+      await report(mate, matchId, suspect, "wallhack", "saw it from spec")
+      const rows = (await flagRows(suspect)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      expect(rows.map((r) => r.status)).toEqual(["cleared", "open"])
+      expect(rows[1]!.detail).toMatchObject({ reopenedFrom: first!.id, reopenedBy: mate, trustedReporter: true })
+      const mine = await call<{ reports: MyReport[] }>(mate, "GET", "/me/reports")
+      expect(mine.body.reports[0]).toMatchObject({ outcome: "received", decidedAt: null })
+      // The new case carries every report on the player in that match
+      const open = await call<ReviewListResponse>(admin, "GET", "/admin/review?status=open")
+      expect(open.body.flags[0]!.reports).toHaveLength(3)
+      // Confirming it actions every report, including the ones the first ruling dismissed
+      await call(admin, "POST", `/admin/review/${rows[1]!.id}/decide`, { outcome: "confirmed", note: "second look" })
+      const reps = await h.db.select().from(reports).where(eq(reports.reportedSteamId, suspect))
+      expect(reps.every((r) => r.outcome === "actioned")).toBe(true)
+      expect((await call<{ reports: MyReport[] }>(v1, "GET", "/me/reports")).body.reports).toHaveLength(1)
     })
 
     it("late reports follow the decided case", async () => {

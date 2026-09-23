@@ -10,7 +10,7 @@ import type {
 import { api } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { mockCall } from "@/lib/mock";
-import { mockClaim, mockDecide, mockFlag, mockList, mockMyReports } from "./mock";
+import { mockClaim, mockDecide, mockFlag, mockList, mockMyReports, mockUnclaim } from "./mock";
 
 export const reviewApi = {
   list(status: FlagStatus | "all"): Promise<ReviewListResponse> {
@@ -24,6 +24,10 @@ export const reviewApi = {
   async claim(id: string): Promise<ReviewFlag> {
     if (isMock) return mockCall(() => mockClaim(id));
     return (await api.post<{ flag: ReviewFlag }>(`/admin/review/${encodeURIComponent(id)}/claim`, {})).flag;
+  },
+  async unclaim(id: string): Promise<ReviewFlag> {
+    if (isMock) return mockCall(() => mockUnclaim(id));
+    return (await api.post<{ flag: ReviewFlag }>(`/admin/review/${encodeURIComponent(id)}/unclaim`, {})).flag;
   },
   decide(id: string, body: ReviewDecideBody): Promise<ReviewDecideResponse> {
     if (isMock) return mockCall(() => mockDecide(id, body));

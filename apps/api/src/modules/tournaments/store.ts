@@ -116,6 +116,8 @@ export interface TournamentStore {
   loadBracket(tournamentId: string): Promise<StoredBracket | null>
   findTournamentByLiveMatch(matchId: string): Promise<string | null>
   insertBadges(rows: BadgeRecord[]): Promise<void>
+  // Returns how many badges were removed.
+  deleteBadges(tournamentId: string, steamIds: string[]): Promise<number>
   listSchedules(): Promise<ScheduleRecord[]>
   getSchedule(id: string): Promise<ScheduleRecord | null>
   insertSchedule(s: NewSchedule): Promise<ScheduleRecord>
@@ -408,6 +410,15 @@ export class DrizzleTournamentStore implements TournamentStore {
       .insert(badges)
       .values(rows)
       .onConflictDoNothing({ target: [badges.steamId, badges.tournamentId] })
+  }
+
+  async deleteBadges(tournamentId: string, steamIds: string[]): Promise<number> {
+    if (steamIds.length === 0) return 0
+    const rows = await this.db
+      .delete(badges)
+      .where(and(eq(badges.tournamentId, tournamentId), inArray(badges.steamId, steamIds)))
+      .returning({ id: badges.id })
+    return rows.length
   }
 
   async listSchedules(): Promise<ScheduleRecord[]> {

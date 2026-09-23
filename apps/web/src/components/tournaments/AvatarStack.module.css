@@ -1,0 +1,33 @@
+.stack {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 8px;
+}
+.item {
+  display: inline-flex;
+  margin-left: -8px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 2px var(--color-surface-1);
+}
+.md .item {
+  margin-left: -10px;
+}
+.md {
+  padding-left: 10px;
+}
+.more {
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-1);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.md .more {
+  min-width: 40px;
+  height: 40px;
+  font-size: var(--text-xs);
+}

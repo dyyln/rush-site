@@ -172,3 +172,8 @@ table {
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
+
+/* Rating numbers. Hidden when the viewer turns on Show tiers only */
+html[data-tiers-only] .rating-num {
+  display: none;
+}

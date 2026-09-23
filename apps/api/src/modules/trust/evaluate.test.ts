@@ -18,7 +18,7 @@ const base = (over: Partial<TrustInputs> = {}, platform: Partial<TrustInputs["pl
   cs2PlaytimeMinutes: 500 * 60,
   faceit: null,
   ...over,
-  platform: { completedMatches: 10, openFlags: 0, confirmedFlags: 0, activeBan: false, ...platform },
+  platform: { completedMatches: 10, confirmedFlags: 0, activeBan: false, ...platform },
 })
 
 describe("evaluateTrust", () => {
@@ -55,8 +55,8 @@ describe("evaluateTrust", () => {
     expect(evaluateTrust(base({ faceit: pastFaceit }, { completedMatches: 200 }), cfg, NOW).level).toBe("verified")
   })
 
-  it("drops to New on open flags or a platform ban", () => {
-    expect(evaluateTrust(base({}, { openFlags: 1 }), cfg, NOW).level).toBe("new")
+  it("drops to New on a confirmed flag or a platform ban", () => {
+    expect(evaluateTrust(base({}, { confirmedFlags: 1 }), cfg, NOW).level).toBe("new")
     expect(evaluateTrust(base({}, { activeBan: true }), cfg, NOW).level).toBe("new")
   })
 })

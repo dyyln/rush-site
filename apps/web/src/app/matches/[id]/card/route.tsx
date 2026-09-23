@@ -174,9 +174,9 @@ function Card({ m }: { m: MatchDetail }) {
       >
         {a && b ? (
           <>
-            <Team name={a.name} score={a.score} own won={finished && a.score > b.score} />
+            <Team name={a.displayName ?? a.name} score={a.score} own won={finished && a.score > b.score} />
             <div style={{ display: "flex", fontFamily: DISPLAY, fontSize: 120, color: C.muted, marginBottom: 70 }}>:</div>
-            <Team name={b.name} score={b.score} own={false} won={finished && b.score > a.score} />
+            <Team name={b.displayName ?? b.name} score={b.score} own={false} won={finished && b.score > a.score} />
           </>
         ) : (
           <div style={{ display: "flex", fontSize: 40, color: C.muted }}>Match</div>

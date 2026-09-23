@@ -16,11 +16,12 @@ afterEach(() => undefined)
 
 const depth = (aim1v1 = 0, aim2v2 = 0, rush3v3 = 0) => ({ aim1v1, aim2v2, rush3v3 })
 
-async function seedMatch(mode: "aim1v1" | "rush3v3", startedAt: Date, waits: number[]) {
+async function seedMatch(mode: "aim1v1" | "rush3v3", foundAt: Date, waits: number[]) {
+  const startedAt = foundAt
   const ids = await makeUsers(db, waits.length)
   const [m] = await db
     .insert(matches)
-    .values({ mode, status: "live", region: "eu", teams: [{ name: "team_a", steamIds: ids }], webhookSecret: "s", startedAt })
+    .values({ mode, status: "live", region: "eu", teams: [{ name: "team_a", steamIds: ids }], webhookSecret: "s", createdAt: foundAt })
     .returning()
   const partyRows = await db
     .insert(parties)
@@ -60,12 +61,12 @@ describe("metric sampling", () => {
     expect(get("queue_depth", "aim1v1")?.value).toBe(3)
     expect(get("queue_depth", "rush3v3")?.value).toBe(6)
     expect(get("active_sockets")?.value).toBe(12)
-    expect(get("matches_started")?.value).toBe(2)
+    expect(get("matches_found")?.value).toBe(2)
     // Median of the per match mean waits, 50 and 100
     expect(get("median_wait_sec", "aim1v1")?.value).toBe(75)
     expect(get("median_wait_sec", "rush3v3")).toBeUndefined()
     expect(get("queue_depth", "aim1v1")?.sampledAt.toISOString()).toBe("2026-09-23T12:00:00.000Z")
-    expect(get("matches_started")?.sampledAt.toISOString()).toBe("2026-09-23T11:59:00.000Z")
+    expect(get("matches_found")?.sampledAt.toISOString()).toBe("2026-09-23T11:59:00.000Z")
   })
 
   it("drops samples older than seven days", async () => {
@@ -88,7 +89,7 @@ describe("metrics view", () => {
     for (let i = 0; i < 30; i++) {
       await sampleMetrics(db, { at: new Date(T0 - i * MIN), queueDepth: depth(i % 2 === 0 ? 2 : 4), activeSockets: 10 })
     }
-    await db.insert(metricSamples).values({ metric: "matches_started", mode: "", sampledAt: new Date(T0 - 5 * MIN), value: 7 })
+    await db.insert(metricSamples).values({ metric: "matches_found", mode: "", sampledAt: new Date(T0 - 5 * MIN), value: 7 })
 
     const hour = await metricsView(db, "1h", new Date(T0))
     expect(hour.stepSec).toBe(60)
@@ -99,7 +100,7 @@ describe("metrics view", () => {
     expect(hour.queueDepth.aim1v1[0]!.v).toBeNull()
     expect(hour.activeSockets.at(-1)?.v).toBe(10)
     expect(hour.matchesStepSec).toBe(300)
-    expect(hour.matchesStarted.reduce((n, p) => n + (p.v ?? 0), 0)).toBe(7)
+    expect(hour.matchesFound.reduce((n, p) => n + (p.v ?? 0), 0)).toBe(7)
 
     const day = await metricsView(db, "24h", new Date(T0))
     expect(day.stepSec).toBe(600)
@@ -107,7 +108,7 @@ describe("metrics view", () => {
     // Mean of alternating 2 and 4 inside a ten minute bucket
     expect(day.queueDepth.aim1v1.filter((p) => p.v !== null).every((p) => p.v! >= 2 && p.v! <= 4)).toBe(true)
     expect(day.matchesStepSec).toBe(3600)
-    expect(day.matchesStarted).toHaveLength(24)
+    expect(day.matchesFound).toHaveLength(24)
 
     const week = await metricsView(db, "7d", new Date(T0))
     expect(week.queueDepth.rush3v3).toHaveLength(168)

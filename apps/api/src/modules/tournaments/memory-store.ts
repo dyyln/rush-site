@@ -151,6 +151,12 @@ export class MemoryTournamentStore implements TournamentStore {
     }
   }
 
+  async deleteBadges(tournamentId: string, steamIds: string[]) {
+    const before = this.badges.length
+    this.badges = this.badges.filter((b) => !(b.tournamentId === tournamentId && steamIds.includes(b.steamId)))
+    return before - this.badges.length
+  }
+
   async listSchedules() {
     return [...this.schedules.values()].map((x) => ({ ...x }))
   }

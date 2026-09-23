@@ -13,10 +13,13 @@ const NAV = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/queue", label: "Queue" },
   { href: "/admin/matches", label: "Matches" },
+  { href: "/admin/tournaments", label: "Tournaments" },
   { href: "/admin/hosts", label: "Hosts" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/review", label: "Review" },
   { href: "/admin/events", label: "Events" },
+  { href: "/admin/flags", label: "Flags" },
+  { href: "/admin/announcements", label: "Announcements" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {

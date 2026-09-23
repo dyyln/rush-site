@@ -369,6 +369,13 @@ export class MockRealtime extends Emitter implements Realtime {
       connect: "connect 203.0.113.24:27017; password mock-7f3a",
       mapId,
     });
+    // Players join the server one by one during warm-up
+    const expected = MODE_CONFIGS[mode].teamSize * 2;
+    for (let n = 1; n <= expected; n++) {
+      this.later(2500 * n, () =>
+        this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected }),
+      );
+    }
     this.later(30000, () => {
       this.emit("match_result", {
         matchId: MATCH_ID,

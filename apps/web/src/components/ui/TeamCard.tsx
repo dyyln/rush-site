@@ -138,7 +138,7 @@ export function TeamCard({ title, players, meanRating, children, className }: Te
             <p className={styles.title}>
               <span>{title}</span>
               {mean !== null && (
-                <span className={styles.mean}>
+                <span className={`${styles.mean} rating-num`}>
                   Avg <span className="mono">{mean}</span>
                 </span>
               )}

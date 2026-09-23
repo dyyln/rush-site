@@ -1,6 +1,7 @@
 import {
   LEADERBOARD_MIN_MATCHES,
   MODES,
+  computeStreak,
   ModeSchema,
   getModeConfig,
   tierForRating,
@@ -11,13 +12,15 @@ import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm"
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import type { AppContext } from "../../context.js"
-import { badges, bans, matchPlayers, matches, ratingEvents, ratings, tournaments, users } from "../../db/schema.js"
+import { badges, bans, matchKills, matchPlayers, matches, ratingEvents, ratings, tournaments, users } from "../../db/schema.js"
 import { badRequest, notFound } from "../../lib/errors.js"
+import { globalRank, namePattern } from "./rank.js"
 
 const SteamIdParam = z.string().regex(/^\d{17}$/)
 const Page = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  q: z.string().trim().max(32).optional(),
 })
 
 // Statuses that count as a game in progress for the live mode stats
@@ -61,7 +64,14 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
     const page = Page.safeParse(req.query)
     if (!page.success) throw badRequest("invalid_query", "bad offset or limit", page.error.issues)
     const { limit, offset } = page.data
-    const where = and(eq(ratings.mode, mode.data), gte(ratings.matchesPlayed, LEADERBOARD_MIN_MATCHES), notBanned)
+    // Name search keeps each row's global rank
+    const q = page.data.q || undefined
+    const where = and(
+      eq(ratings.mode, mode.data),
+      gte(ratings.matchesPlayed, LEADERBOARD_MIN_MATCHES),
+      notBanned,
+      ...(q ? [sql`lower(${users.displayName}) like ${namePattern(q)}`] : []),
+    )
     const rows = await ctx.db
       .select({
         steamId: ratings.steamId,
@@ -70,6 +80,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
         wins: ratings.wins,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        ...(q ? { rank: globalRank } : {}),
       })
       .from(ratings)
       .innerJoin(users, eq(users.steamId, ratings.steamId))
@@ -77,12 +88,13 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       .orderBy(desc(ratings.rating), asc(ratings.steamId))
       .limit(limit)
       .offset(offset)
-    const [total] = await ctx.db.select({ n: sql<number>`count(*)::int` }).from(ratings).where(where)
+    const totalQuery = ctx.db.select({ n: sql<number>`count(*)::int` }).from(ratings)
+    const [total] = await (q ? totalQuery.innerJoin(users, eq(users.steamId, ratings.steamId)) : totalQuery).where(where)
     return {
       mode: mode.data,
       total: total?.n ?? 0,
       rows: rows.map((r, i) => ({
-        rank: offset + i + 1,
+        rank: "rank" in r && typeof r.rank === "number" ? r.rank : offset + i + 1,
         steamId: r.steamId,
         displayName: r.displayName,
         avatarUrl: r.avatarUrl,
@@ -125,6 +137,20 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
       .where(and(eq(matchPlayers.steamId, steamId), inArray(matches.status, ["finished", "abandoned"])))
       .groupBy(matches.mode, matches.mapId)
+    const results = await ctx.db
+      .select({ mode: matches.mode, won: matchPlayers.won, abandoned: matchPlayers.abandoned })
+      .from(matchPlayers)
+      .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
+      .where(and(eq(matchPlayers.steamId, steamId), inArray(matches.status, ["finished", "abandoned"])))
+      .orderBy(asc(sql`coalesce(${matches.endedAt}, ${matches.createdAt})`), asc(matches.createdAt))
+    // Team kills do not count toward the favourite weapon
+    const [weapon] = await ctx.db
+      .select({ weapon: matchKills.weapon, kills: sql<number>`count(*)::int` })
+      .from(matchKills)
+      .where(and(eq(matchKills.attackerSteamId, steamId), sql`not exists (select 1 from ${matchPlayers} a join ${matchPlayers} v on v.match_id = a.match_id and v.team = a.team where a.match_id = ${matchKills.matchId} and a.steam_id = ${matchKills.attackerSteamId} and v.steam_id = ${matchKills.victimSteamId})`))
+      .groupBy(matchKills.weapon)
+      .orderBy(desc(sql`count(*)`), asc(matchKills.weapon))
+      .limit(1)
     const history = await ctx.db
       .select({ mode: ratingEvents.mode, ts: ratingEvents.createdAt, rating: ratingEvents.ratingAfter })
       .from(ratingEvents)
@@ -171,6 +197,11 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
             .sort((a, b) => b.wins / b.matches - a.wins / a.matches || b.matches - a.matches)
             .slice(0, 5),
           leaderboardRank,
+          streak: computeStreak(
+            results
+              .filter((x) => x.mode === mode)
+              .map((x) => (x.abandoned ? "abandoned" : x.won ? "win" : "loss")),
+          ),
         }
       }),
     )
@@ -202,6 +233,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
         awardedAt: b.awardedAt.toISOString(),
       })),
       recentMatches: await recentMatches(ctx, steamId, RECENT_MATCHES),
+      favouriteWeapon: weapon ? { weapon: weapon.weapon, kills: weapon.kills } : null,
     }
   })
 

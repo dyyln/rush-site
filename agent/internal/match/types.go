@@ -22,6 +22,16 @@ type MapEntry struct {
 type Team struct {
 	Name     string   `json:"name"`
 	SteamIDs []string `json:"steamIds"`
+	// Shown in game when set, such as a cup team name.
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+// Label is the in-game team name.
+func (t Team) Label() string {
+	if t.DisplayName != "" {
+		return t.DisplayName
+	}
+	return t.Name
 }
 
 // DemoUpload says where the plugin puts the demo.

@@ -3,8 +3,9 @@
 import { useRef, useState, type ReactNode } from "react";
 import type { PartyUpdatePayload } from "@rushsite/shared";
 import { Avatar } from "./Avatar";
-import { Badge } from "./Badge";
 import { Button } from "./Button";
+import buttonStyles from "./Button.module.css";
+import { CheckIcon, CopyIcon, useCopyFeedback } from "./CopyButton";
 import { Card } from "./Card";
 import { Modal } from "./Modal";
 import { PartySize } from "./PartySize";
@@ -47,7 +48,7 @@ export function PartyPanel({
   locked,
   renderInvite,
 }: PartyPanelProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy: copyToClipboard } = useCopyFeedback();
   const [inviteSlot, setInviteSlot] = useState<number | null>(null);
   const slotRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [creating, setCreating] = useState(false);
@@ -79,14 +80,7 @@ export function PartyPanel({
   }
 
   async function copy() {
-    if (!inviteUrl) return;
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
+    if (inviteUrl) await copyToClipboard(inviteUrl);
   }
 
   return (
@@ -115,29 +109,45 @@ export function PartyPanel({
               {m.displayName}
               {m.steamId === mySteamId && <span className="muted"> (you)</span>}
             </span>
-            {m.steamId === leaderSteamId && <Badge tone="accent">Leader</Badge>}
+            {m.steamId === leaderSteamId && <LeaderCrown />}
             {isLeader && m.steamId !== mySteamId && (onMakeLeader || onKick) && (
               <span className={styles.actions}>
                 {onMakeLeader && (
-                  <Button
-                    variant="ghost"
+                  <button
+                    type="button"
+                    className={`${styles.iconButton} ${styles.leadButton}`}
                     onClick={() => run(`lead:${m.steamId}`, () => onMakeLeader(m.steamId))}
-                    loading={busy === `lead:${m.steamId}`}
-                    disabled={locked || (busy !== null && busy !== `lead:${m.steamId}`)}
+                    disabled={locked || busy !== null}
+                    aria-busy={busy === `lead:${m.steamId}` || undefined}
                     aria-label={`Make ${m.displayName} leader`}
+                    title="Make leader"
                   >
-                    Make leader
-                  </Button>
+                    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                      <path
+                        d="M2.5 6.5l4.2 3.6L10 3.5l3.3 6.6 4.2-3.6-1.6 9H4.1z"
+                        className={styles.crownPath}
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                      <rect x="4.1" y="16.5" width="11.8" height="1.8" rx="0.6" fill="currentColor" />
+                    </svg>
+                  </button>
                 )}
                 {onKick && (
-                  <Button
-                    variant="ghost"
+                  <button
+                    type="button"
+                    className={`${styles.iconButton} ${styles.removeButton}`}
                     onClick={() => setKickTarget({ steamId: m.steamId, displayName: m.displayName })}
                     disabled={locked || busy !== null}
                     aria-label={`Remove ${m.displayName}`}
+                    title="Remove from party"
                   >
-                    Remove
-                  </Button>
+                    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                      <circle cx="8" cy="6" r="3.2" fill="currentColor" />
+                      <path d="M1.5 18c0-3.7 2.9-6.2 6.5-6.2s6.5 2.5 6.5 6.2z" fill="currentColor" />
+                      <path d="M13.5 5.5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </button>
                 )}
               </span>
             )}
@@ -187,7 +197,13 @@ export function PartyPanel({
           />
           {inviteUrl ? (
             <>
-              <Button variant="secondary" onClick={copy} disabled={locked}>
+              <Button
+                variant="secondary"
+                className={copied ? buttonStyles.copied : undefined}
+                icon={copied ? <CheckIcon /> : <CopyIcon />}
+                onClick={copy}
+                disabled={locked}
+              >
                 {copied ? "Copied" : "Copy"}
               </Button>
               {isLeader && onRotateInvite && (
@@ -266,6 +282,18 @@ function SlotIcon() {
         <path d="M1.5 18c0-3.7 2.9-6.2 6.5-6.2s6.5 2.5 6.5 6.2z" fill="currentColor" />
         <path d="M16 2.5v6M13 5.5h6" stroke="var(--color-text)" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
+    </span>
+  );
+}
+
+function LeaderCrown() {
+  return (
+    <span className={styles.crown} title="Leader">
+      <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+        <path d="M2.5 6.5l4.2 3.6L10 3.5l3.3 6.6 4.2-3.6-1.6 9H4.1z" fill="currentColor" strokeLinejoin="round" />
+        <rect x="4.1" y="16.5" width="11.8" height="1.8" rx="0.6" fill="currentColor" />
+      </svg>
+      <span className="visually-hidden">Leader</span>
     </span>
   );
 }

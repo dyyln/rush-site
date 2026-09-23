@@ -56,16 +56,21 @@ export const reportStatusEnum = pgEnum("report_status", ["open", "actioned", "di
 export const reportOutcomeEnum = pgEnum("report_outcome", ["received", "reviewed", "actioned", "dismissed"])
 
 // Identity is the SteamID64
-export const users = pgTable("users", {
-  steamId: steamId().primaryKey(),
-  displayName: text("display_name").notNull(),
-  avatarUrl: text("avatar_url"),
-  profileUrl: text("profile_url"),
-  countryCode: text("country_code"),
-  region: text("region").notNull().default("eu"),
-  createdAt: createdAt(),
-  lastLoginAt: ts("last_login_at").notNull().defaultNow(),
-})
+export const users = pgTable(
+  "users",
+  {
+    steamId: steamId().primaryKey(),
+    displayName: text("display_name").notNull(),
+    avatarUrl: text("avatar_url"),
+    profileUrl: text("profile_url"),
+    countryCode: text("country_code"),
+    region: text("region").notNull().default("eu"),
+    createdAt: createdAt(),
+    lastLoginAt: ts("last_login_at").notNull().defaultNow(),
+  },
+  // Leaderboard name search. text_pattern_ops lets prefix LIKE use the index
+  (t) => [index("users_display_name_lower_idx").using("btree", sql`lower(${t.displayName}) text_pattern_ops`)],
+)
 
 // Last Steam Web API snapshot for a user
 export const steamProfiles = pgTable("steam_profiles", {
@@ -165,7 +170,7 @@ export const queueTickets = pgTable(
   ],
 )
 
-export type TeamRosterJson = { name: string; steamIds: string[] }
+export type TeamRosterJson = { name: string; steamIds: string[]; displayName?: string }
 
 export const matches = pgTable(
   "matches",
@@ -416,6 +421,7 @@ export const flags = pgTable(
     detail: jsonb("detail"),
     // Admin who claimed the flag. Kept after the decision
     reviewerSteamId: steamId("reviewer_steam_id"),
+    claimedAt: ts("claimed_at"),
     decidedAt: ts("decided_at"),
     note: text("note"),
     createdAt: createdAt(),
@@ -424,8 +430,11 @@ export const flags = pgTable(
   (t) => [
     index("flags_user_idx").on(t.steamId, t.status),
     index("flags_status_idx").on(t.status, t.createdAt),
-    // One flag per player per match
-    uniqueIndex("flags_player_match_idx").on(t.steamId, t.matchId).where(sql`${t.matchId} is not null`),
+    // One open case per player per match. Only the original enum value is used so migrations run in one transaction
+    uniqueIndex("flags_player_match_active_idx")
+      .on(t.steamId, t.matchId)
+      .where(sql`${t.matchId} is not null and ${t.status} = 'open'`),
+    index("flags_match_idx").on(t.matchId, t.steamId),
   ],
 )
 

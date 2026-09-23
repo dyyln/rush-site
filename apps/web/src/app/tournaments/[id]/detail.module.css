@@ -54,3 +54,11 @@
   flex: 1;
   min-width: 0;
 }
+.stackLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--target-min);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}

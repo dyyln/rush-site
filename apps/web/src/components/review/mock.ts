@@ -17,6 +17,7 @@ function build(i: number): ReviewFlag {
     createdAt: created,
     decidedAt: null,
     reviewer: null,
+    claimedAt: null,
     note: null,
     player: {
       steamId: suspect.steamId,
@@ -73,9 +74,20 @@ export function mockClaim(id: string): ReviewFlag {
   const f = find(id);
   if (f.status === "open") {
     f.status = "reviewing";
+    f.claimedAt = new Date().toISOString();
     f.reviewer = { steamId: MOCK_ME.steamId, displayName: MOCK_ME.displayName, avatarUrl: MOCK_ME.avatarUrl };
     f.reports.forEach((r) => (r.outcome = "reviewed"));
   }
+  return f;
+}
+
+export function mockUnclaim(id: string): ReviewFlag {
+  const f = find(id);
+  if (f.status !== "reviewing") throw new ApiError(409, "not_claimed", "This case is not claimed");
+  f.status = "open";
+  f.reviewer = null;
+  f.claimedAt = null;
+  f.reports.forEach((r) => (r.outcome = "received"));
   return f;
 }
 

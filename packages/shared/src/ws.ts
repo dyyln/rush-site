@@ -7,6 +7,7 @@ import { MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
 import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema } from "./schemas/friends.js"
+import { CupEntrantPreviewSchema, CupWinnerSchema } from "./schemas/cups-ux.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
 export const WsEnvelopeSchema = z.object({
@@ -144,6 +145,10 @@ export const TournamentSummarySchema = z.object({
   winnerEntryId: UuidSchema.nullable(),
   // The signed-in viewer's entry. Only set on list rows for signed-in viewers
   myEntryId: UuidSchema.nullable().optional(),
+  // First entries by sign up order, at most 5
+  entrantPreview: z.array(CupEntrantPreviewSchema).optional(),
+  // Set on completed cups with a winner
+  winner: CupWinnerSchema.nullable().optional(),
 })
 export type TournamentSummary = z.infer<typeof TournamentSummarySchema>
 
@@ -287,6 +292,9 @@ export const MatchUpdatePayloadSchema = z.object({
   status: MatchStatusSchema,
   teams: z.array(z.object({ name: z.string(), score: z.number().int().nonnegative() })),
   lastRound: MatchRoundSchema.optional(),
+  // Warm-up progress, sent to participants on player_connected and player_disconnected
+  connected: z.number().int().nonnegative().optional(),
+  expected: z.number().int().nonnegative().optional(),
 })
 export type MatchUpdatePayload = z.infer<typeof MatchUpdatePayloadSchema>
 

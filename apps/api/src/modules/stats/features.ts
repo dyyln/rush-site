@@ -8,8 +8,10 @@ import { tierDistribution } from "./distribution.js"
 import { createEtaSource } from "./eta.js"
 import { friendsLeaderboard } from "./friends.js"
 import { liveMatches } from "./live.js"
+import { myRank } from "./rank.js"
 import { createAvailabilitySource, serviceStatus } from "./status.js"
 
+const MeQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) })
 const LiveQuery = z.object({ limit: z.coerce.number().int().min(1).max(24).default(6) })
 
 function modeParam(params: unknown): Mode {
@@ -26,6 +28,15 @@ export function registerStatsFeatures(app: FastifyInstance, ctx: AppContext): vo
   app.get("/leaderboard/:mode/friends", async (req) => {
     const steamId = await requireUser(ctx.auth, req)
     return friendsLeaderboard(ctx, modeParam(req.params), steamId)
+  })
+
+  // The viewer's global rank and the offset of the page that holds it
+  app.get("/leaderboard/:mode/me", async (req) => {
+    const steamId = await requireUser(ctx.auth, req)
+    const mode = modeParam(req.params)
+    const q = MeQuery.safeParse(req.query)
+    if (!q.success) throw badRequest("invalid_query", "bad limit", q.error.issues)
+    return myRank(ctx, mode, steamId, q.data.limit)
   })
 
   app.get("/leaderboard/:mode/distribution", async (req) => {

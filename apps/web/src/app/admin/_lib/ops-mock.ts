@@ -107,7 +107,7 @@ export const mockOps = {
       queueDepth: perMode([2, 1, 4], [10, 6, 22], 7),
       medianWaitSec: perMode([20, 35, 50], [30, 60, 90], 17),
       activeSockets: wave(from, to, cfg.step, 3, 40, 220, gap),
-      matchesStarted: bars,
+      matchesFound: bars,
       matchesStepSec: cfg.mStep / 1000,
     };
   },

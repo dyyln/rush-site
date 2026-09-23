@@ -6,6 +6,8 @@ import { matchesQuery, PresenceAvatar, sortByPresence } from "@/components/frien
 import { SearchBox } from "@/components/friends/SearchBox";
 import { useFriends } from "@/components/friends/store";
 import { Button } from "@/components/ui/Button";
+import buttonStyles from "@/components/ui/Button.module.css";
+import { CheckIcon, CopyIcon, useCopyFeedback } from "@/components/ui/CopyButton";
 import { FriendAction, STEAM_FRIENDS_SUBTITLE } from "./FriendAction";
 import { useFriendInvite, type InviteSource } from "./useFriendInvite";
 import styles from "./InvitePopover.module.css";
@@ -19,8 +21,7 @@ type InvitePopoverProps = InviteSource & {
 export function InvitePopover({ inviteUrl, ensureInvite, onParty, onClose, returnFocus }: InvitePopoverProps) {
   const friends = useFriends();
   const actions = useFriendInvite({ inviteUrl, ensureInvite, onParty });
-  const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const feedback = useCopyFeedback();
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -44,9 +45,7 @@ export function InvitePopover({ inviteUrl, ensureInvite, onParty, onClose, retur
   }, [onClose, returnFocus]);
 
   async function copy() {
-    setBusy(true);
-    setCopied(!!(await actions.copyLink()));
-    setBusy(false);
+    if (await actions.copyLink()) feedback.show("copied");
   }
 
   const [query, setQuery] = useState("");
@@ -64,8 +63,14 @@ export function InvitePopover({ inviteUrl, ensureInvite, onParty, onClose, retur
       <p id={titleId} className={styles.title}>
         Invite to party
       </p>
-      <Button variant="secondary" block onClick={copy} loading={busy}>
-        {copied ? "Link copied" : "Copy invite link"}
+      <Button
+        variant="secondary"
+        block
+        className={feedback.copied ? buttonStyles.copied : undefined}
+        icon={feedback.copied ? <CheckIcon /> : <CopyIcon />}
+        onClick={copy}
+      >
+        <span aria-live="polite">{feedback.copied ? "Copied" : "Copy invite link"}</span>
       </Button>
       {all.length > 0 && (
         <>

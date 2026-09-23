@@ -94,3 +94,12 @@
     animation-duration: 2s;
   }
 }
+
+/* Copy confirmation. Keeps the button shape and tints the label */
+.secondary.copied,
+.secondary.copied:hover:not(:disabled),
+.ghost.copied,
+.ghost.copied:hover:not(:disabled) {
+  color: var(--color-win);
+  border-color: var(--color-win);
+}

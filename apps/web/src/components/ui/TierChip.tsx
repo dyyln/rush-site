@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { TIERS, tierForRating, type TierId } from "@rushsite/shared";
+import { useTiersOnly } from "@/lib/prefs";
 import { cx } from "./cx";
 import styles from "./TierChip.module.css";
 
@@ -27,6 +30,7 @@ function Wrap({ link, children }: { link: boolean; children: ReactNode }) {
 }
 
 export function TierChip({ tier, rating, size = "md", unranked, link = true }: TierChipProps) {
+  const tiersOnly = useTiersOnly();
   if (unranked) {
     return (
       <Wrap link={link}>
@@ -44,7 +48,7 @@ export function TierChip({ tier, rating, size = "md", unranked, link = true }: T
           <path d="M5 0l5 5-5 5-5-5z" fill="currentColor" />
         </svg>
         <span>{band.displayName}</span>
-        {rating !== undefined && <span className={cx(styles.rating, "mono")}>{Math.round(rating)}</span>}
+        {rating !== undefined && !tiersOnly && <span className={cx(styles.rating, "mono", "rating-num")}>{Math.round(rating)}</span>}
       </span>
     </Wrap>
   );

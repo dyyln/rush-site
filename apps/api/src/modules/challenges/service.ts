@@ -242,6 +242,7 @@ export class ChallengeService {
     if (row.createdBy === steamId) throw badRequest("own_challenge", "you cannot accept your own challenge")
     if (row.targetSteamId && row.targetSteamId !== steamId) throw forbidden("not_target", "this challenge is for someone else")
     this.assertModeAvailable(row.mode)
+    if (!(await this.ctx.flags.queueOpen(row.mode))) throw conflict("mode_closed", `${row.mode} is closed right now`)
 
     let expectCreator: string[] | undefined
     let expectAccepter: string[] | undefined

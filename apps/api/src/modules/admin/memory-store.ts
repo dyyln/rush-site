@@ -40,6 +40,25 @@ export class MemoryAdminStore implements AdminStore {
     return this.users.has(steamId)
   }
 
+  async ensureUser(steamId: string): Promise<boolean> {
+    if (this.users.has(steamId)) return false
+    const at = new Date().toISOString()
+    this.users.set(steamId, {
+      user: { steamId, displayName: steamId, avatarUrl: null, region: "eu", countryCode: null, profileUrl: null, createdAt: at, lastLoginAt: at },
+      steam: null,
+      trust: null,
+      trustSignals: [],
+      ratings: [],
+      recentMatches: [],
+      bans: [],
+      activeBan: null,
+      cooldowns: [],
+      reports: { received: 0, open: 0 },
+      flags: { open: 0, total: 0 },
+    })
+    return true
+  }
+
   async listMatches(statuses: string[], limit: number): Promise<MatchSummaryView[]> {
     return this.matches
       .filter((m) => statuses.includes(m.status))

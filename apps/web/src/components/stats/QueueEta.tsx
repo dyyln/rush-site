@@ -1,5 +1,5 @@
 import type { QueueModeStatus } from "@rushsite/shared";
-import { mmss } from "@/lib/format";
+import { etaRange } from "@/components/play/eta";
 import styles from "./QueueEta.module.css";
 
 // Estimated wait for the queued modes. The first match found wins, so the shortest estimate applies
@@ -10,7 +10,7 @@ export function QueueEta({ modes }: { modes: QueueModeStatus[] }) {
   return (
     <span className={styles.eta}>
       <span className={styles.label}>Est.</span>
-      <span className="mono">~{mmss(eta)}</span>
+      <span className="mono">{etaRange(eta)}</span>
     </span>
   );
 }

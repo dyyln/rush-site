@@ -1,3 +1,4 @@
+import { MapThumb } from "@/components/play/MapThumb";
 import { cx } from "./cx";
 import styles from "./MapCard.module.css";
 
@@ -17,11 +18,14 @@ type MapCardProps = {
   onSelect?: () => void;
   disabled?: boolean;
   actionLabel?: string;
+  // Small tag after the state, like "auto" for a timed out ban
+  tag?: string;
 };
 
-export function MapCard({ mapId, name, state = "available", voted, votes, note, onSelect, disabled, actionLabel = "Ban" }: MapCardProps) {
+export function MapCard({ mapId, name, state = "available", voted, votes, note, onSelect, disabled, actionLabel = "Ban", tag }: MapCardProps) {
   const body = (
     <>
+      <MapThumb mapId={mapId} dim={state === "banned"} />
       <span className={styles.top}>
         <span className={cx(styles.name, "mono")}>{name}</span>
         {votes !== undefined && votes > 0 && (
@@ -36,6 +40,7 @@ export function MapCard({ mapId, name, state = "available", voted, votes, note, 
         {state === "picked" && <span className={styles.stateAccent}>Picked</span>}
         {state === "decider" && <span className={styles.stateWin}>Playing</span>}
         {state === "available" && voted && <span className={styles.stateAccent}>Your vote</span>}
+        {tag && <span className={cx(styles.tag, "mono")}>{tag}</span>}
         {note && <span className={styles.note}>{note}</span>}
       </span>
     </>

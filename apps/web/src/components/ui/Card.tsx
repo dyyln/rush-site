@@ -6,7 +6,7 @@ type CardProps = ComponentPropsWithoutRef<"section"> & {
   title?: ReactNode;
   eyebrow?: ReactNode;
   actions?: ReactNode;
-  tone?: "default" | "raised" | "accent";
+  tone?: "default" | "raised" | "accent" | "flat";
   padded?: boolean;
   as?: "section" | "div" | "article";
 };

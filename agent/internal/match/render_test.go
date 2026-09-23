@@ -103,6 +103,15 @@ func TestServerCfg(t *testing.T) {
 	}
 }
 
+func TestServerCfgUsesDisplayName(t *testing.T) {
+	p := sampleParams(t)
+	p.Req.Teams[0].DisplayName = "Night Owls"
+	cfg := ServerCfg(p)
+	if !strings.Contains(cfg, `mp_teamname_1 "Night Owls"`+"\n") || !strings.Contains(cfg, `mp_teamname_2 "Bravo"`+"\n") {
+		t.Errorf("display name not used\n%s", cfg)
+	}
+}
+
 func TestPluginJSONMatchesContract(t *testing.T) {
 	p := sampleParams(t)
 	b, err := PluginJSON(p)

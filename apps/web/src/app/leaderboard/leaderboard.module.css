@@ -30,7 +30,7 @@
   gap: var(--space-3);
   padding: var(--space-5);
   border: 1px solid var(--color-loss);
-  border-radius: var(--radius-lg);
+  border-radius: var(--card-radius);
 }
 .notice {
   display: flex;
@@ -38,8 +38,8 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
   background: var(--color-surface-1);
 }
 .notice p {
@@ -58,4 +58,141 @@
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-xs);
+}
+
+/* Search and jump */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.search {
+  position: relative;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.search input {
+  width: 100%;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 22px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+}
+.search input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  color: var(--color-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.jump {
+  flex: none;
+}
+@media (max-width: 479px) {
+  .jump {
+    flex: 1 1 100%;
+  }
+}
+.status {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.statusWarn {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-info);
+  border-radius: var(--radius-md);
+  background: var(--color-info-subtle);
+  color: var(--color-text);
+}
+
+/* Top three */
+.podium .name {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+tr:has(.podium) td {
+  height: 60px;
+}
+.medal {
+  display: inline-flex;
+  vertical-align: middle;
+  --medal: var(--color-credits);
+}
+.gold {
+  --medal: var(--color-credits);
+}
+.silver {
+  --medal: color-mix(in srgb, var(--color-text) 72%, var(--color-text-muted));
+}
+.bronze {
+  /* Credits darkened toward the background, then turned warmer where relative colours work */
+  --medal: color-mix(in oklch, var(--color-credits) 72%, var(--color-bg));
+  --medal: oklch(from var(--color-credits) calc(l - 0.16) calc(c + 0.01) calc(h - 30));
+}
+.disc {
+  fill: var(--medal);
+}
+.ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--medal) 55%, var(--color-bg));
+  stroke-width: 1;
+}
+.ribbon {
+  fill: color-mix(in srgb, var(--medal) 45%, var(--color-surface-3));
+}
+.ribbonFar {
+  fill: color-mix(in srgb, var(--medal) 30%, var(--color-surface-2));
+}
+.numeral {
+  fill: var(--color-bg);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* Friends */
+.friendMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--color-info);
+}
+tr:has(.friendMark) td:first-child {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-info) 70%, transparent);
+}
+
+/* Jump to my rank */
+.player:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+tr:has(.jumped) td {
+  animation: jumpFlash 1.8s ease-out;
+}
+@keyframes jumpFlash {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface-1));
+  }
+  100% {
+    background: var(--color-accent-subtle);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  tr:has(.jumped) td {
+    animation: none;
+  }
 }

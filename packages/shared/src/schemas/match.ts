@@ -47,7 +47,10 @@ export const MatchDetailPlayerSchema = z.object({
 export type MatchDetailPlayer = z.infer<typeof MatchDetailPlayerSchema>
 
 export const MatchDetailTeamSchema = z.object({
+  // Team id used in scores and results
   name: z.string(),
+  // Cup team name when set. Show it instead of name
+  displayName: z.string().optional(),
   score: z.number().int().nonnegative(),
   players: z.array(MatchDetailPlayerSchema),
 })

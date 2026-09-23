@@ -390,7 +390,7 @@ export function DesignGuide() {
             </div>
           </Specimen>
           <Specimen label="Live">
-            <Button variant="secondary" onClick={() => toast.push({ title: "Invite link copied", tone: "success" })}>
+            <Button variant="secondary" onClick={() => toast.push({ title: "Party created", tone: "success" })}>
               Push success
             </Button>
             <Button variant="secondary" onClick={() => toast.push({ title: "Server not ready", body: "Retrying.", tone: "error" })}>

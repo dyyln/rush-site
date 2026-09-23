@@ -24,7 +24,7 @@ export const adminAudit = pgTable(
 export const metricSamples = pgTable(
   "metric_samples",
   {
-    // queue_depth, matches_started, median_wait_sec, active_sockets
+    // queue_depth, matches_found, median_wait_sec, active_sockets
     metric: text("metric").notNull(),
     mode: text("mode").notNull().default(""),
     sampledAt: timestamp("sampled_at", { withTimezone: true }).notNull(),

@@ -6,6 +6,7 @@ import { BRAND_NAME, type FriendRequest, type RecentPlayer } from "@rushsite/sha
 import { FriendRow, SteamOnlyRow } from "@/components/friends/FriendRow";
 import { PresenceAvatar, friendError, matchesQuery, sortByPresence } from "@/components/friends/presence";
 import { SearchBox } from "@/components/friends/SearchBox";
+import { useJoinableModes } from "@/components/friends/useJoinQueue";
 import { reloadFriends, reloadPending, useFriends } from "@/components/friends/store";
 import { useFriendInvite } from "@/components/party/useFriendInvite";
 import { Button } from "@/components/ui/Button";
@@ -58,6 +59,7 @@ export function FriendsView() {
   const { data, error } = useFriends(!!user);
   const recent = useAsync(() => (user ? api.friends.recent() : Promise.resolve([] as RecentPlayer[])), [user?.steamId]);
   const actions = useFriendInvite();
+  const joinable = useJoinableModes({ enabled: !!user });
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -231,7 +233,7 @@ export function FriendsView() {
           ) : (
             <ul className={styles.list}>
               {friends.map((f) => (
-                <FriendRow key={f.steamId} friend={f} actions={actions} />
+                <FriendRow key={f.steamId} friend={f} actions={actions} joinable={joinable} />
               ))}
             </ul>
           )}

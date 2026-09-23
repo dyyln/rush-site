@@ -12,8 +12,8 @@
   gap: var(--space-3);
   min-height: var(--target-min);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
   background: var(--color-surface-2);
   cursor: pointer;
 }
