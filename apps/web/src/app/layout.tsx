@@ -3,6 +3,7 @@ import { Chakra_Petch, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { BRAND_NAME } from "@rushsite/shared";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { ToastProvider } from "@/components/ui/Toast";
+import { SessionProvider } from "@/lib/session";
 import "@/styles/globals.css";
 
 const chakra = Chakra_Petch({
@@ -42,10 +43,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <ToastProvider>
-          <SiteHeader />
-          <main id="main">{children}</main>
-        </ToastProvider>
+        <SessionProvider>
+          <ToastProvider>
+            <SiteHeader />
+            <main id="main">{children}</main>
+          </ToastProvider>
+        </SessionProvider>
       </body>
     </html>
   );

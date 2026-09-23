@@ -7,7 +7,7 @@ import {
   VetoStateSchema,
 } from "./index.js"
 import { ClientMessageSchema, ServerMessageSchema, serverMessage } from "../ws.js"
-import { ALL_RUSH_ROOMS, findRushRoom, MODE_CONFIGS, RUSH_ROOMS, RUSH_RULES, unresolvedConfig } from "../config/modes.js"
+import { ALL_RUSH_ROOMS, allowedModesForParty, findRushRoom, MODE_CONFIGS, RUSH_ROOMS, RUSH_RULES, unresolvedConfig } from "../config/modes.js"
 import { tierForRating, TIERS } from "../config/tiers.js"
 import { cooldownSeconds, maxRatingDiffAfter, canMixBuckets } from "../config/queue.js"
 import { createVeto } from "../veto/bo3.js"
@@ -35,6 +35,9 @@ describe("schemas", () => {
     }
     expect(StartServerRequestSchema.parse(req)).toEqual(req)
     expect(() => StartServerRequestSchema.parse({ ...req, mode: "wingman" })).toThrow()
+    const withCs2 = { ...req, cs2: { ...MODE_CONFIGS.rush3v3.cs2, extraArgs: ["+tv_enable", "1"] } }
+    expect(StartServerRequestSchema.parse(withCs2).cs2).toEqual(withCs2.cs2)
+    expect(StartServerRequestSchema.parse({ ...req, cs2: MODE_CONFIGS.aim1v1.cs2 }).cs2).toEqual(MODE_CONFIGS.aim1v1.cs2)
   })
 
   it("parses match events", () => {
@@ -48,14 +51,27 @@ describe("schemas", () => {
     }
     expect(MatchWebhookBodySchema.parse({ event: end }).event).toEqual(end)
     expect(() => MatchEventSchema.parse({ type: "player_connected" })).toThrow()
+    const round = { type: "round_end", round: 3, winnerTeam: "draw", score: { a: 1, b: 1 }, arena: "203" }
+    expect(MatchEventSchema.parse(round)).toEqual(round)
+    const { arena: _arena, ...noArena } = round
+    expect(MatchEventSchema.parse(noArena)).toEqual(noArena)
+    expect(MatchEventSchema.parse({ type: "demo_uploaded", ok: true, bytes: 1024 })).toEqual({
+      type: "demo_uploaded",
+      ok: true,
+      bytes: 1024,
+    })
+    expect(MatchEventSchema.parse({ type: "demo_uploaded", ok: false, error: "timeout" }).type).toBe("demo_uploaded")
+    expect(() => MatchEventSchema.parse({ type: "demo_uploaded" })).toThrow()
   })
 
   it("parses WS messages", () => {
     const m = serverMessage("queue_status", {
       state: "queued",
-      mode: "aim1v1",
       partyId: null,
-      queuedAt: 1,
+      modes: [
+        { mode: "aim1v1", queuedAt: 1, waitSec: 12, ratingWindow: 100 },
+        { mode: "rush3v3", queuedAt: 1, waitSec: 12, estimatedSec: 60, ratingWindow: null },
+      ],
       cooldownUntil: null,
     })
     expect(ServerMessageSchema.parse(m)).toEqual(m)
@@ -72,8 +88,68 @@ describe("schemas", () => {
       stepDeadline: 123,
     })
     expect(ServerMessageSchema.parse(veto)).toEqual(veto)
-    expect(ClientMessageSchema.parse({ type: "queue_join", payload: { mode: "rush3v3" }, ts: 1 }).type).toBe("queue_join")
-    expect(() => ClientMessageSchema.parse({ type: "queue_join", payload: { mode: "x" }, ts: 1 })).toThrow()
+    const join = (payload: unknown) => ClientMessageSchema.parse({ type: "queue_join", payload, ts: 1 })
+    expect(join({ modes: ["rush3v3", "aim2v2"] }).type).toBe("queue_join")
+    expect(() => join({ modes: [] })).toThrow()
+    expect(() => join({ modes: ["aim1v1", "aim1v1"] })).toThrow()
+    expect(() => join({ modes: ["x"] })).toThrow()
+    const leave = (payload: unknown) => ClientMessageSchema.parse({ type: "queue_leave", payload, ts: 1 })
+    expect(leave({}).type).toBe("queue_leave")
+    expect(leave({ modes: ["aim1v1"] }).type).toBe("queue_leave")
+    expect(() => leave({ modes: [] })).toThrow()
+    expect(() =>
+      ServerMessageSchema.parse(
+        serverMessage("queue_status", {
+          state: "queued",
+          partyId: null,
+          modes: [
+            { mode: "aim1v1", queuedAt: 1, waitSec: 0, ratingWindow: 100 },
+            { mode: "aim1v1", queuedAt: 1, waitSec: 0, ratingWindow: 100 },
+          ],
+          cooldownUntil: null,
+        }),
+      ),
+    ).toThrow()
+  })
+
+  it("parses server_ready with explicit connect parts", () => {
+    const ready = serverMessage("server_ready", {
+      matchId: MID,
+      ip: "203.0.113.5",
+      port: 27015,
+      password: "pw",
+      connect: "connect 203.0.113.5:27015; password pw",
+      mapId: "rush_001",
+    })
+    expect(ServerMessageSchema.parse(ready)).toEqual(ready)
+    const { password: _pw, ...noPassword } = ready.payload
+    expect(() => ServerMessageSchema.parse({ ...ready, payload: noPassword })).toThrow()
+  })
+
+  it("parses mode_stats and queue status counts", () => {
+    const stats = serverMessage("mode_stats", {
+      modes: [
+        { mode: "aim1v1", playersInQueue: 4, matchesInProgress: 2 },
+        { mode: "rush3v3", playersInQueue: 0, matchesInProgress: 0 },
+      ],
+    })
+    expect(ServerMessageSchema.parse(stats)).toEqual(stats)
+    expect(() =>
+      ServerMessageSchema.parse({ ...stats, payload: { modes: [{ mode: "aim1v1", playersInQueue: 1 }] } }),
+    ).toThrow()
+    const status = serverMessage("queue_status", {
+      state: "queued",
+      partyId: null,
+      modes: [{ mode: "aim2v2", queuedAt: 1, waitSec: 5, ratingWindow: 100, matchesInProgress: 3 }],
+      cooldownUntil: null,
+    })
+    expect(ServerMessageSchema.parse(status)).toEqual(status)
+  })
+
+  it("parses admin_event", () => {
+    const ev = serverMessage("admin_event", { kind: "host", payload: { hostId: "h1", free: 3 } })
+    expect(ServerMessageSchema.parse(ev)).toEqual(ev)
+    expect(() => ServerMessageSchema.parse({ ...ev, payload: { kind: "nope", payload: null } })).toThrow()
   })
 
   it("veto state round trips", () => {
@@ -104,6 +180,14 @@ describe("config", () => {
     expect(MODE_CONFIGS.aim1v1.vetoFormat).toBe("bo1-ban")
     expect(MODE_CONFIGS.aim2v2.vetoFormat).toBe("bo1-ban")
     expect(MODE_CONFIGS.rush3v3.vetoFormat).toBe("none")
+  })
+
+  it("allows modes by party size", () => {
+    expect(allowedModesForParty(1)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
+    expect(allowedModesForParty(2)).toEqual(["aim2v2", "rush3v3"])
+    expect(allowedModesForParty(3)).toEqual(["rush3v3"])
+    expect(allowedModesForParty(4)).toEqual([])
+    expect(allowedModesForParty(0)).toEqual([])
   })
 
   it("lists the Rush rooms and rules", () => {

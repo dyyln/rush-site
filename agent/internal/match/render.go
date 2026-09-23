@@ -117,7 +117,7 @@ func ModeCfg(p Params) ([]byte, error) {
 	}
 	b, err := defaultCfgs.ReadFile("cfgs/" + name)
 	if err != nil {
-		return nil, fmt.Errorf("no mode cfg named %s: %w", name, err)
+		return nil, invalid("no mode cfg named %s on this agent", name)
 	}
 	return b, nil
 }

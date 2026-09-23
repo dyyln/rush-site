@@ -260,3 +260,71 @@ func TestRecoverAdoptsLiveServersAndCleansStale(t *testing.T) {
 		t.Fatalf("stop adopted err=%v stopped=%v", err, adoptedProc.Stopped())
 	}
 }
+
+func TestCrashCallsOnCrashButStopDoesNot(t *testing.T) {
+	r := &procrun.FakeRunner{}
+	m := newManager(t, r, 27015, 27016)
+	type call struct{ id, url, secret string }
+	calls := make(chan call, 4)
+	m.OnCrash = func(info Info, url, secret string) { calls <- call{info.MatchID, url, secret} }
+	if _, err := m.Start(req(idA)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Start(req(idB)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Stop(idB); err != nil {
+		t.Fatal(err)
+	}
+	r.Procs[0].Exit(134)
+	select {
+	case c := <-calls:
+		if c.id != idA || c.url != "http://api.local/webhooks/match/"+idA || c.secret != "secret" {
+			t.Fatalf("call %+v", c)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnCrash not called")
+	}
+	select {
+	case c := <-calls:
+		t.Fatalf("unexpected call %+v", c)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestStateFileKeepsWebhookForAdoptedCrash(t *testing.T) {
+	r := &procrun.FakeRunner{}
+	m := newManager(t, r, 27015, 27016)
+	if _, err := m.Start(req(idA)); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(m.statePath())
+	if !strings.Contains(string(b), "webhookSecret") {
+		t.Fatalf("state file lacks webhook: %s", b)
+	}
+	pid := m.List(false)[0].PID
+
+	m2 := New(m.cfg, match.DefaultModes(), r, slots.New(27015, 27016, nil), nil)
+	p := procrun.NewFakeProcess(pid)
+	m2.Alive = func(int, string) bool { return true }
+	m2.Adopt = func(int) procrun.Process { return p }
+	got := make(chan string, 1)
+	m2.OnCrash = func(info Info, url, secret string) { got <- secret }
+	if _, err := m2.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	for _, info := range m2.List(false) {
+		if strings.Contains(info.Connect, "secret") {
+			t.Fatal("secret leaked into Info")
+		}
+	}
+	p.Exit(-1)
+	select {
+	case s := <-got:
+		if s != "secret" {
+			t.Fatalf("secret %q", s)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnCrash not called for adopted exit")
+	}
+}

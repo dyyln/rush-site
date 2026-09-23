@@ -38,13 +38,14 @@ A competitive platform for Counter-Strike 2 in the spirit of the old PvPRO (CS:G
 
 1. **Steam sign-in** (OpenID). A player's identity is their SteamID64.
 2. **Parties**: invite links plus the Steam friends list. No separate friends system.
-3. **Matchmaking queues** for the three modes. Rating-based matching that widens over time. Party-size buckets: parties prefer parties and solos prefer solos, mixed only when queue time grows. EU first, region stored on users and matches but the leaderboard shows global only.
+3. **Matchmaking queues** for the three modes. A party can queue for several modes at once, limited to modes whose team size is at least the party size. The first match found removes the party from the other queues. Rating-based matching that widens over time. Party-size buckets: parties prefer parties and solos prefer solos, mixed only when queue time grows. EU first, region stored on users and matches but the leaderboard shows global only.
 4. **Match flow**: match found, accept within 20 seconds, veto, server allocated, connect info shown. Declining or timing out gives a short queue cooldown. A player who never connects or leaves mid-match forfeits, takes the rating loss, and gets an escalating queue cooldown.
 5. **Ratings and tiers**: Glicko-2 per mode. Rating is visible from the first match, no placement phase. Tiers are Iron <1000, Bronze 1000 to 1299, Silver 1300 to 1599, Gold 1600 to 1899, Platinum 1900 to 2199, Elite 2200+. Bands live in config and will be tuned once the distribution is visible. No seasons at launch.
 6. **Profiles**: rating per mode, win rate, headshot %, rating history, best maps, match history, cup badges.
 7. **Leaderboards**: per mode, global. Minimum of 20 matches to place.
 8. **Tournaments**: free daily and weekly cups per mode. Single elimination, Bo1 until the semis and a Bo3 final. Verified trust level required for every cup. No check-in. Bracket built from sign-ups, absent players forfeit round one. Server slots are first come first served with the ladder. Prizes are cosmetic profile badges. Leagues (round robin) are a later milestone.
 9. **Fair play**: trust levels, demo capture, rating rollback and bans. Details below.
+10. **Admin interface** at /admin, gated on a whitelist of SteamID64s in `ADMIN_STEAM_IDS`. Live view of queues per mode, active matches with server and connect info, hosts and slot capacity, recent webhooks and errors, user lookup with trust signals, and actions: kick a ticket from queue, cancel a match, ban or unban, adjust trust level.
 
 ## Trust
 
@@ -71,10 +72,10 @@ Server-side detection only at the start. Rating updates immediately and can be r
 
 ## Infrastructure (game servers)
 
-Provider: **Hetzner**. Start with **one dedicated AX box** running everything: Postgres, Redis, API, web via Docker Compose, plus the CS2 instances. Cloud CCX servers for peak times and a second machine are a later milestone.
+Providers: **Hetzner dedicated for base load, DatHost for surge.** Start with **one dedicated AX box** running everything: Postgres, Redis, API, web via Docker Compose, plus the CS2 instances. When no Hetzner slot is free for longer than a short configurable wait, the allocator starts a DatHost instance (€0.33 per running hour, EU location matching the box) for that match and stops it when the result lands. Adding Hetzner boxes is the response to sustained load, DatHost is only for peaks. The prototype may run DatHost-only until the first box is proven.
 
 - **Don't create a VM per match.** One machine hosts many CS2 processes on different ports, sharing one install of the game (about 60 GB). Raw processes, no containers per slot.
-- **Allocator** (inside the API): picks a free slot, reserves a port and a GSLT, asks the host agent to start a server with the match config, and returns the connect info.
+- **Allocator** (inside the API): two drivers behind one start-server contract. Hetzner driver picks a free slot, reserves a port and a GSLT, and asks the host agent to start a server. DatHost driver clones a prepared server image via their API, starts it with the match config, and stops it after the match. Both return connect info. Demos from DatHost are fetched from their file store after match end.
 - **Host agent** (Go, one binary per machine): starts and stops CS2 processes, reports health and capacity, handles game updates.
 - **Match plugin**: custom CounterStrikeSharp plugin on Metamod:Source. Only the match's Steam IDs can join, each match gets a random password, loads the mode config, handles warmup and ready-up, records the demo, sends match events and the final result to the backend by webhook.
 - **GSLT pool**: one Game Server Login Token per running server, max 1,000 per Steam account. Use a dedicated Steam account. Reuse tokens between matches.

@@ -27,6 +27,8 @@ import {
   type MatchResult,
   type Mode,
   type PartyInfo,
+  type ProfileInfo,
+  type TournamentDetail,
   type StartMatchParams,
   type TournamentStatus,
   type TournamentSummary,
@@ -65,18 +67,20 @@ export interface ServiceDeps {
   getTrustLevels(steamIds: string[]): Promise<Record<string, TrustLevel>>
   getRatings(steamIds: string[], mode: Mode): Promise<Record<string, number>>
   getParty(steamId: string): Promise<PartyInfo | null>
-}
-
-export interface TournamentDetail extends TournamentSummary {
-  entries: EntryView[]
-  bracket: Bracket | null
-  myEntryId: string | null
+  getProfiles(steamIds: string[]): Promise<Record<string, ProfileInfo>>
 }
 
 const DEFAULT_RATING = 1500
 
-function toEntryView(e: EntryRecord): EntryView {
+function toEntryView(e: EntryRecord, profiles: Record<string, ProfileInfo>): EntryView {
+  const players = e.steamIds.map((steamId) => ({
+    steamId,
+    displayName: profiles[steamId]?.displayName ?? steamId,
+    avatarUrl: profiles[steamId]?.avatarUrl ?? null,
+  }))
   return {
+    name: profiles[e.captainSteamId]?.displayName ?? e.captainSteamId,
+    players,
     id: e.id,
     captainSteamId: e.captainSteamId,
     steamIds: e.steamIds,
@@ -123,10 +127,11 @@ export class TournamentService {
     if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
     const entries = await this.d.store.listEntries(id)
     const stored = await this.d.store.loadBracket(id)
+    const profiles = await this.profiles(entries.flatMap((e) => e.steamIds))
     const mine = viewer ? entries.find((e) => e.steamIds.includes(viewer)) : undefined
     return {
       ...this.summary(t, entries.length),
-      entries: entries.map(toEntryView),
+      entries: entries.map((e) => toEntryView(e, profiles)),
       bracket: stored?.bracket ?? null,
       myEntryId: mine?.id ?? null,
     }
@@ -179,7 +184,7 @@ export class TournamentService {
       return s.insertEntry({ tournamentId, captainSteamId: steamId, steamIds: members })
     })
     await this.announce(tournamentId, "entries_changed")
-    return toEntryView(entry)
+    return toEntryView(entry, await this.profiles(entry.steamIds))
   }
 
   async withdraw(tournamentId: string, steamId: string): Promise<void> {
@@ -204,6 +209,17 @@ export class TournamentService {
     }
     if (now < t.registrationOpensAt) {
       throw new TournamentError(409, "registration_not_open", "Registration is not open yet")
+    }
+  }
+
+  // Profiles are display only. A lookup failure falls back to SteamIDs.
+  private async profiles(steamIds: string[]): Promise<Record<string, ProfileInfo>> {
+    if (steamIds.length === 0) return {}
+    try {
+      return await this.d.getProfiles(steamIds)
+    } catch (err) {
+      this.d.log.warn({ err }, "profile lookup failed")
+      return {}
     }
   }
 

@@ -129,8 +129,8 @@ export function buildBracket(entries: SeedEntry[], rule: BestOfRule): Bracket {
         resolution: null,
       }
       if (round === 1) {
-        const sa = positions[index * 2]
-        const sb = positions[index * 2 + 1]
+        const sa = positions[index * 2] as number
+        const sb = positions[index * 2 + 1] as number
         m.a = seeded[sa - 1]?.id ?? null
         m.b = seeded[sb - 1]?.id ?? null
         m.aSeed = m.a ? sa : null

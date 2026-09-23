@@ -27,10 +27,8 @@ export const EnvSchema = z.object({
 
   // Website origin. Login redirects here and CORS allows it.
   PUBLIC_URL: z.url().default("http://localhost:3000"),
-  // Public API origin. Used as the Steam OpenID realm and return_to.
+  // Public API origin. Used as the Steam OpenID realm and return_to, and as the match webhook base
   API_PUBLIC_URL: z.url().default("http://localhost:3001"),
-  // Base URL the CS2 plugin posts match webhooks to
-  WEBHOOK_BASE_URL: z.url().default("http://127.0.0.1:3001"),
 
   DATABASE_URL: z.string().min(1).default("postgres://rushsite:rushsite@localhost:5432/rushsite"),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
@@ -48,6 +46,14 @@ export const EnvSchema = z.object({
   RUSHSITE_AGENT_TOKEN: z.string().min(1).default("change-me-dev-agent-token"),
   AGENT_URLS: csv,
   GSLT_TOKENS: csv,
+
+  // DatHost surge capacity. Disabled without an account email
+  DATHOST_EMAIL: optionalString,
+  DATHOST_PASSWORD: optionalString,
+  DATHOST_TEMPLATE_SERVER_ID: optionalString,
+  DATHOST_LOCATION: z.string().default("dusseldorf"),
+  // How long a match waits for a Hetzner slot before using DatHost
+  SURGE_WAIT_SEC: z.coerce.number().int().nonnegative().default(20),
 
   S3_ENDPOINT: optionalString,
   S3_PUBLIC_ENDPOINT: optionalString,
@@ -76,6 +82,10 @@ export const EnvSchema = z.object({
   ALLOCATION_TIMEOUT_SEC: z.coerce.number().int().positive().default(120),
   // Backstop for players who never connect when the plugin does not report it
   CONNECT_TIMEOUT_SEC: z.coerce.number().int().positive().default(600),
+  // Servers stay up after the match until the demo upload is reported or this long passes
+  DEMO_WAIT_SEC: z.coerce.number().int().nonnegative().default(180),
+  // Lets modes with placeholder map or game ids queue outside production
+  ALLOW_UNRESOLVED_MODES: bool.default(false),
   // Disable background loops, for tests and one-off scripts
   DISABLE_LOOPS: bool.default(false),
 })

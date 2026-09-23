@@ -1,0 +1,36 @@
+.figure {
+  margin: 0;
+  width: 100%;
+}
+.detailed {
+  max-width: 720px;
+}
+.svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.line.up { stroke: var(--color-accent); }
+.line.down { stroke: var(--color-loss); }
+.dot.up { fill: var(--color-accent); }
+.dot.down { fill: var(--color-loss); }
+.band {
+  stroke: var(--color-border-strong);
+  stroke-dasharray: 3 4;
+  stroke-width: 1;
+}
+.bandLabel {
+  fill: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.empty {
+  font-size: var(--text-sm);
+  padding: var(--space-4) 0;
+}

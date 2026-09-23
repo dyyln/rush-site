@@ -18,17 +18,22 @@ export type VetoFormat = z.infer<typeof VetoFormatSchema>
 export const WinConditionSchema = z.enum(["first_to_16", "valve_rush"])
 export type WinCondition = z.infer<typeof WinConditionSchema>
 
+export const Cs2LaunchSchema = z.object({
+  gameType: z.number().int(),
+  gameMode: z.number().int(),
+  workshopCollection: z.string().optional(),
+  execCfg: z.string().min(1),
+  // Extra server command line args appended by the agent
+  extraArgs: z.array(z.string()).optional(),
+})
+export type Cs2Launch = z.infer<typeof Cs2LaunchSchema>
+
 export const ModeConfigSchema = z.object({
   mode: ModeSchema,
   teamSize: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   maps: z.array(MapEntrySchema).min(1),
   vetoFormat: VetoFormatSchema,
   winCondition: WinConditionSchema,
-  cs2: z.object({
-    gameType: z.number().int(),
-    gameMode: z.number().int(),
-    workshopCollection: z.string().optional(),
-    execCfg: z.string().min(1),
-  }),
+  cs2: Cs2LaunchSchema,
 })
 export type ModeConfig = z.infer<typeof ModeConfigSchema>

@@ -2,8 +2,11 @@
 package procrun
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -100,13 +103,23 @@ func Run(r Runner, spec Spec) (int, error) {
 	return p.Wait(), nil
 }
 
-// Alive reports whether pid exists.
+// Alive reports whether pid exists and is not a zombie.
 func Alive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	if err := syscall.Kill(pid, 0); err != nil && !errors.Is(err, syscall.EPERM) {
+		return false
+	}
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return true
+	}
+	// The state field follows the command name, which is wrapped in parens.
+	if i := bytes.LastIndexByte(b, ')'); i >= 0 && i+2 < len(b) && b[i+2] == 'Z' {
+		return false
+	}
+	return true
 }
 
 // Adopt wraps a running process that is not a child of this one, such as a CS2 server

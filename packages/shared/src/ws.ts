@@ -18,15 +18,28 @@ const msg = <T extends string, P extends z.ZodType>(type: T, payload: P) =>
 
 // Server to client payloads
 
+const uniqueModes = (arr: string[]) => new Set(arr).size === arr.length
+
+export const QueueModeStatusSchema = z.object({
+  mode: ModeSchema,
+  // Epoch ms
+  queuedAt: z.number(),
+  waitSec: z.number().nonnegative(),
+  estimatedSec: z.number().nonnegative().optional(),
+  // Current max rating gap from the widen schedule. null means any gap
+  ratingWindow: z.number().nonnegative().nullable(),
+  playersInQueue: z.number().int().nonnegative().optional(),
+  matchesInProgress: z.number().int().nonnegative().optional(),
+})
+export type QueueModeStatus = z.infer<typeof QueueModeStatusSchema>
+
 export const QueueStatusPayloadSchema = z.object({
   state: z.enum(["idle", "queued", "cooldown"]),
-  mode: ModeSchema.nullable(),
   partyId: UuidSchema.nullable(),
-  // Epoch ms
-  queuedAt: z.number().nullable(),
+  // One entry per mode the user or party is queued for. Empty when idle
+  modes: z.array(QueueModeStatusSchema).refine((m) => uniqueModes(m.map((x) => x.mode)), "duplicate mode"),
   // Epoch ms, set when state is cooldown
   cooldownUntil: z.number().nullable(),
-  playersInQueue: z.number().int().nonnegative().optional(),
 })
 export type QueueStatusPayload = z.infer<typeof QueueStatusPayloadSchema>
 
@@ -53,7 +66,8 @@ export type VetoStatePayload = z.infer<typeof VetoStatePayloadSchema>
 export const ServerReadyPayloadSchema = z.object({
   matchId: UuidSchema,
   ip: z.string(),
-  port: z.number().int(),
+  port: z.number().int().min(1).max(65535),
+  password: z.string(),
   // Full console connect string including the password
   connect: z.string(),
   mapId: z.string(),
@@ -126,6 +140,27 @@ export const TournamentSummarySchema = z.object({
 })
 export type TournamentSummary = z.infer<typeof TournamentSummarySchema>
 
+export const EntryPlayerSchema = z.object({
+  steamId: SteamId64Schema,
+  displayName: z.string(),
+  avatarUrl: z.string().nullable(),
+})
+export type EntryPlayer = z.infer<typeof EntryPlayerSchema>
+
+export const TournamentEntrySchema = z.object({
+  id: UuidSchema,
+  captainSteamId: SteamId64Schema,
+  steamIds: z.array(SteamId64Schema),
+  seed: z.number().int().positive().nullable(),
+  rating: z.number().nullable(),
+  // ISO timestamp
+  registeredAt: z.string(),
+  // Team name. Defaults to the captain's display name
+  name: z.string().optional(),
+  players: z.array(EntryPlayerSchema).optional(),
+})
+export type TournamentEntry = z.infer<typeof TournamentEntrySchema>
+
 export const BracketSideSchema = z.enum(["a", "b"])
 
 export const BracketMatchSchema = z.object({
@@ -158,6 +193,13 @@ export const BracketSchema = z.object({
 })
 export type BracketView = z.infer<typeof BracketSchema>
 
+export const TournamentDetailSchema = TournamentSummarySchema.extend({
+  entries: z.array(TournamentEntrySchema),
+  bracket: BracketSchema.nullable(),
+  myEntryId: UuidSchema.nullable(),
+})
+export type TournamentDetail = z.infer<typeof TournamentDetailSchema>
+
 export const TournamentUpdatePayloadSchema = z.object({
   kind: z.enum([
     "created",
@@ -176,6 +218,29 @@ export const TournamentUpdatePayloadSchema = z.object({
 })
 export type TournamentUpdatePayload = z.infer<typeof TournamentUpdatePayloadSchema>
 
+export const ModeStatsSchema = z.object({
+  mode: ModeSchema,
+  playersInQueue: z.number().int().nonnegative(),
+  matchesInProgress: z.number().int().nonnegative(),
+})
+export type ModeStats = z.infer<typeof ModeStatsSchema>
+
+// Broadcast to every connected client every few seconds and on change
+export const ModeStatsPayloadSchema = z.object({
+  modes: z.array(ModeStatsSchema),
+})
+export type ModeStatsPayload = z.infer<typeof ModeStatsPayloadSchema>
+
+export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user"])
+export type AdminEventKind = z.infer<typeof AdminEventKindSchema>
+
+// Sent to admin clients only
+export const AdminEventPayloadSchema = z.object({
+  kind: AdminEventKindSchema,
+  payload: z.unknown(),
+})
+export type AdminEventPayload = z.infer<typeof AdminEventPayloadSchema>
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("queue_status", QueueStatusPayloadSchema),
   msg("match_found", MatchFoundPayloadSchema),
@@ -184,6 +249,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("match_result", MatchResultPayloadSchema),
   msg("party_update", PartyUpdatePayloadSchema),
   msg("tournament_update", TournamentUpdatePayloadSchema),
+  msg("mode_stats", ModeStatsPayloadSchema),
+  msg("admin_event", AdminEventPayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]
@@ -203,10 +270,15 @@ export const VetoVotePayloadSchema = z.object({
 })
 export type VetoVotePayload = z.infer<typeof VetoVotePayloadSchema>
 
-export const QueueJoinPayloadSchema = z.object({ mode: ModeSchema })
+export const QueueJoinPayloadSchema = z.object({
+  modes: z.array(ModeSchema).min(1).refine(uniqueModes, "duplicate mode"),
+})
 export type QueueJoinPayload = z.infer<typeof QueueJoinPayloadSchema>
 
-export const QueueLeavePayloadSchema = z.object({})
+// Omit modes to leave every queue
+export const QueueLeavePayloadSchema = z.object({
+  modes: z.array(ModeSchema).min(1).refine(uniqueModes, "duplicate mode").optional(),
+})
 export type QueueLeavePayload = z.infer<typeof QueueLeavePayloadSchema>
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [

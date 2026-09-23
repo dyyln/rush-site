@@ -118,6 +118,12 @@ export function findMap(mode: Mode, mapId: string): MapEntry | undefined {
   return MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)
 }
 
+// Modes a party of this size can queue for
+export function allowedModesForParty(partySize: number): Mode[] {
+  if (!Number.isInteger(partySize) || partySize < 1) return []
+  return (Object.keys(MODE_CONFIGS) as Mode[]).filter((m) => MODE_CONFIGS[m].teamSize >= partySize)
+}
+
 // Lists placeholder values that still block a mode from going live
 export function unresolvedConfig(mode: Mode): string[] {
   const cfg = MODE_CONFIGS[mode]

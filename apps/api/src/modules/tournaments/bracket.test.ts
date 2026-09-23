@@ -43,7 +43,7 @@ function playOut(b: Bracket): Bracket {
   for (let guard = 0; guard < 500 && !isComplete(cur); guard++) {
     const ready = playableMatches(cur)
     if (ready.length === 0) throw new Error("stuck")
-    const r = ready[0]
+    const r = ready[0]!
     cur = play(cur, r.id, (r.aSeed ?? 99) < (r.bSeed ?? 99) ? "a" : "b")
   }
   return cur
@@ -63,7 +63,7 @@ describe("seeding", () => {
 
   it("puts every seed pair in round one summing to size plus one", () => {
     const p = seedPositions(32)
-    for (let i = 0; i < p.length; i += 2) expect(p[i] + p[i + 1]).toBe(33)
+    for (let i = 0; i < p.length; i += 2) expect(p[i]! + p[i + 1]!).toBe(33)
     expect(new Set(p).size).toBe(32)
   })
 

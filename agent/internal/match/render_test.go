@@ -134,7 +134,7 @@ func TestPluginJSONMatchesContract(t *testing.T) {
 func TestModeCfgOverrideAndWriteDir(t *testing.T) {
 	p := sampleParams(t)
 	emb, err := ModeCfg(p)
-	if err != nil || !strings.Contains(string(emb), "mp_maxrounds 31") {
+	if err != nil || !strings.Contains(string(emb), "mp_startmoney 16000") {
 		t.Fatalf("embedded cfg: %v %q", err, emb)
 	}
 	over := t.TempDir()
@@ -246,8 +246,26 @@ func TestRushDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, line := range strings.Split(string(cfg), "\n") {
-		if strings.HasPrefix(line, "mp_match_end_restart") || strings.HasPrefix(line, "mp_maxrounds") {
-			t.Errorf("rush cfg must not override Valve rules: %s", line)
+		for _, cvar := range []string{"mp_match_end_restart", "mp_maxrounds", "mp_warmup_pausetimer", "mp_warmuptime", "mp_roundtime", "mp_halftime"} {
+			if strings.HasPrefix(line, cvar) {
+				t.Errorf("rush cfg must not override Valve rules: %s", line)
+			}
+		}
+	}
+}
+
+func TestAimCfgsLeaveRoundRulesToPlugin(t *testing.T) {
+	for _, mode := range []Mode{Aim1v1, Aim2v2} {
+		cfg, err := ModeCfg(Params{Spec: DefaultModes()[mode]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(cfg), "\n") {
+			for _, cvar := range []string{"mp_maxrounds", "mp_match_can_clinch", "mp_overtime_enable", "mp_halftime"} {
+				if strings.HasPrefix(line, cvar) {
+					t.Errorf("%s cfg sets %s, the plugin owns it", mode, line)
+				}
+			}
 		}
 	}
 }
@@ -255,5 +273,61 @@ func TestRushDefaults(t *testing.T) {
 func TestConnect(t *testing.T) {
 	if got := Connect("1.2.3.4", 27015, "pw"); got != "connect 1.2.3.4:27015; password pw" {
 		t.Fatal(got)
+	}
+}
+
+func TestCS2BlockOverridesTable(t *testing.T) {
+	r := sampleReq()
+	gt, gm := 0, 6
+	r.CS2 = &CS2Settings{GameType: &gt, GameMode: &gm, ExecCfg: "rushsite_rush3v3.cfg", ExtraArgs: []string{"+mapgroup", "mg_rush_001"}}
+	spec, err := Validate(&r, DefaultModes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *spec.GameMode != 6 || spec.ExecCfg != "rushsite_rush3v3.cfg" || spec.TeamSize != 1 || spec.WinCondition != "first_to_16" {
+		t.Fatalf("spec %+v", spec)
+	}
+	args, err := LaunchArgs(Params{Req: r, Spec: spec, Port: 27015, TVPort: 27115, CfgRel: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := strings.Join(args, " "); !strings.Contains(line, "+game_type 0 +game_mode 6 +mapgroup mg_rush_001 +host_workshop_map") {
+		t.Fatalf("line %s", line)
+	}
+
+	// Partial block keeps table values for missing fields.
+	r.CS2 = &CS2Settings{GameMode: &gm}
+	spec, err = Validate(&r, DefaultModes())
+	if err != nil || *spec.GameType != 0 || *spec.GameMode != 6 || spec.ExecCfg != "rushsite_aim1v1.cfg" || spec.ExtraArgs != nil {
+		t.Fatalf("partial %+v %v", spec, err)
+	}
+
+	// A cs2 block makes an unconfigured table entry usable.
+	modes := DefaultModes()
+	modes[Aim1v1] = ModeSpec{TeamSize: 1, ExecCfg: "rushsite_aim1v1.cfg"}
+	r.CS2 = &CS2Settings{GameType: &gt, GameMode: &gm}
+	if _, err := Validate(&r, modes); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCS2BlockRejectsBadValues(t *testing.T) {
+	neg := -1
+	for name, o := range map[string]*CS2Settings{
+		"bad cfg":       {ExecCfg: "../../x.cfg"},
+		"bad arg":       {ExtraArgs: []string{"+exec", "a;quit"}},
+		"space arg":     {ExtraArgs: []string{"+map de_dust2"}},
+		"negative mode": {GameMode: &neg},
+	} {
+		r := sampleReq()
+		r.CS2 = o
+		if _, err := Validate(&r, DefaultModes()); !IsValidation(err) {
+			t.Errorf("%s: want validation error, got %v", name, err)
+		}
+	}
+	p := sampleParams(t)
+	p.Spec.ExecCfg = "missing.cfg"
+	if _, err := RenderFiles(p); !IsValidation(err) {
+		t.Errorf("unknown execCfg: want validation error, got %v", err)
 	}
 }

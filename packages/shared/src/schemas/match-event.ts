@@ -20,11 +20,15 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("round_end"),
     round: z.number().int().nonnegative(),
+    // Team name, or "draw"
     winnerTeam: z.string(),
     score: ScoreSchema,
+    // Rush room id or name when known
+    arena: z.string().optional(),
   }),
   z.object({
     type: z.literal("match_end"),
+    // Team name, or "draw"
     winnerTeam: z.string(),
     score: ScoreSchema,
     players: z.array(PlayerStatsSchema),
@@ -35,9 +39,17 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     reason: z.string(),
     missingSteamIds: z.array(SteamId64Schema),
   }),
+  z.object({
+    type: z.literal("demo_uploaded"),
+    ok: z.boolean(),
+    bytes: z.number().int().nonnegative().optional(),
+    error: z.string().optional(),
+  }),
 ])
 export type MatchEvent = z.infer<typeof MatchEventSchema>
 export type MatchEventType = MatchEvent["type"]
+
+export const DRAW_WINNER = "draw"
 
 export const MatchWebhookBodySchema = z.object({ event: MatchEventSchema })
 export type MatchWebhookBody = z.infer<typeof MatchWebhookBodySchema>

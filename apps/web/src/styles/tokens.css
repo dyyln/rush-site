@@ -8,6 +8,12 @@
   --color-border: #2c2838;
   --color-border-strong: #433d55;
 
+  /* Disabled. Neutral grey with no purple tint */
+  --color-disabled-surface: #1b1b1f;
+  --color-disabled-border: #34343b;
+  --color-disabled-text: #8e9097;
+  --color-disabled-text-strong: #b6b8be;
+
   /* Text */
   --color-text: #ecedef;
   --color-text-muted: #9aa0ab;

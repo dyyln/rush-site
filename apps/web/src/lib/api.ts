@@ -1,6 +1,8 @@
-import type { Mode, PartyUpdatePayload, QueueStatusPayload } from "@rushsite/shared";
+import type { Mode, ModeStatsPayload, PartyUpdatePayload, QueueStatusPayload } from "@rushsite/shared";
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
+import { getRealtime } from "./ws";
+import { MockRealtime, mockModeStats } from "./ws-mock";
 import type {
   Leaderboard,
   Profile,
@@ -22,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-type Query = Record<string, string | number | undefined>;
+export type Query = Record<string, string | number | undefined>;
 
 function buildUrl(path: string, query?: Query): string {
   const url = new URL(apiUrl + path);
@@ -63,11 +65,19 @@ export function steamLoginUrl(returnTo = "/play"): string {
 }
 
 export const api = {
+  // Generic calls for pages without a dedicated helper
+  get: <T>(path: string, query?: Query) => request<T>("GET", path, { query }),
+  post: <T>(path: string, body?: unknown) => request<T>("POST", path, { body }),
+  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, { body }),
+  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, { body }),
+  del: <T = void>(path: string) => request<T>("DELETE", path),
+
   // Returns null when signed out
   async me(): Promise<User | null> {
     if (isMock) return mocked(mock.MOCK_ME);
     try {
-      return (await request<{ user: User }>("GET", "/auth/me")).user;
+      const res = await request<{ user: User } | User>("GET", "/me");
+      return "user" in res ? res.user : res;
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return null;
       throw e;
@@ -81,7 +91,7 @@ export const api = {
 
   party: {
     async get(): Promise<PartyUpdatePayload> {
-      if (isMock) return mocked(mock.mockParty(1));
+      if (isMock) return mocked(mock.mockParty(2));
       return request("GET", "/parties/me");
     },
     async create(): Promise<PartyUpdatePayload> {
@@ -104,9 +114,15 @@ export const api = {
 
   async queueStatus(): Promise<QueueStatusPayload> {
     if (isMock) {
-      return mocked({ state: "idle", mode: null, partyId: null, queuedAt: null, cooldownUntil: null });
+      const rt = getRealtime();
+      return mocked(rt instanceof MockRealtime ? rt.snapshot() : null);
     }
     return request("GET", "/queue/status");
+  },
+
+  async modeStats(): Promise<ModeStatsPayload> {
+    if (isMock) return mocked(mockModeStats());
+    return request("GET", "/stats/modes");
   },
 
   async leaderboard(mode: Mode, opts: { offset?: number; limit?: number } = {}): Promise<Leaderboard> {
@@ -138,11 +154,11 @@ export const api = {
       return (await request<{ tournament: TournamentDetail }>("GET", `/tournaments/${id}`)).tournament;
     },
     async enter(id: string): Promise<void> {
-      if (isMock) return delay();
+      if (isMock) return void (await delay());
       await request("POST", `/tournaments/${id}/enter`);
     },
     async withdraw(id: string): Promise<void> {
-      if (isMock) return delay();
+      if (isMock) return void (await delay());
       await request("DELETE", `/tournaments/${id}/enter`);
     },
   },

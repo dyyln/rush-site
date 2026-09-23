@@ -1,0 +1,76 @@
+.members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-3);
+}
+.member > button {
+  margin-left: auto;
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.open {
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+}
+.slot {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.invite {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.inviteLabel {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.inviteRow {
+  display: flex;
+  gap: var(--space-2);
+}
+.inviteInput {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.live {
+  font-size: var(--text-xs);
+  color: var(--color-win);
+  min-height: 1em;
+}
+.friends {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  font-size: var(--text-sm);
+}

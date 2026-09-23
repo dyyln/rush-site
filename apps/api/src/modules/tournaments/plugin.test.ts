@@ -54,6 +54,10 @@ async function harness(cups: CupDefinition[]) {
     authenticate: async (req) => (req.headers["x-steam-id"] as string | undefined) ?? null,
     getTrustLevels: async (ids) => Object.fromEntries(ids.map((id) => [id, trust[id] ?? "new"])),
     getRatings: async (ids) => Object.fromEntries(ids.map((id) => [id, ratings[id] ?? 1500])),
+    getProfiles: async (ids) =>
+      Object.fromEntries(
+        ids.filter((id) => id !== "p5").map((id) => [id, { displayName: `N-${id}`, avatarUrl: `https://a/${id}` }]),
+      ),
     getParty: async (id) => parties.find((p) => p.memberSteamIds.includes(id)) ?? null,
   })
   await app.ready()
@@ -85,7 +89,7 @@ async function harness(cups: CupDefinition[]) {
     only: () => {
       const all = [...store.tournaments.values()]
       if (all.length !== 1) throw new Error(`expected one tournament, got ${all.length}`)
-      return all[0]
+      return all[0]!
     },
     // Moves the clock past the tournament start and ticks.
     startNow: async (startsAt: Date) => {
@@ -191,9 +195,14 @@ describe("sign-up", () => {
     const ok = await h.enter(id, "p1")
     expect(ok.statusCode).toBe(201)
     expect(ok.json().entry.steamIds).toEqual(["p1"])
+    expect(ok.json().entry).toMatchObject({
+      name: "N-p1",
+      players: [{ steamId: "p1", displayName: "N-p1", avatarUrl: "https://a/p1" }],
+    })
     expect((await h.enter(id, "p1")).json().error).toBe("already_entered")
     const detail = await h.app.inject({ url: `/tournaments/${id}`, headers: { "x-steam-id": "p1" } })
     expect(detail.json().tournament.myEntryId).toBe(ok.json().entry.id)
+    expect(detail.json().tournament.entries[0].name).toBe("N-p1")
     expect(h.emitted.at(-1)?.payload).toMatchObject({ kind: "entries_changed" })
   })
 
@@ -239,11 +248,16 @@ describe("sign-up", () => {
     expect((await h.enter(id, "a1")).json().error).toBe("party_required")
     h.parties.push({ partyId: "p", leaderSteamId: "a1", memberSteamIds: ["a1"] })
     expect((await h.enter(id, "a1")).json().error).toBe("party_size")
-    h.parties[0].memberSteamIds.push("a2")
+    h.parties[0]!.memberSteamIds.push("a2")
     expect((await h.enter(id, "a2")).json().error).toBe("not_party_leader")
     const res = await h.enter(id, "a1")
     expect(res.statusCode).toBe(201)
     expect(res.json().entry.steamIds).toEqual(["a1", "a2"])
+    expect(res.json().entry.name).toBe("N-a1")
+    expect(res.json().entry.players.map((p: { displayName: string }) => p.displayName)).toEqual([
+      "N-a1",
+      "N-a2",
+    ])
     // Any member can withdraw the team.
     expect((await h.withdraw(id, "a2")).statusCode).toBe(204)
   })
@@ -274,6 +288,9 @@ describe("running a cup", () => {
     expect(h.emitted.some((e) => e.payload.kind === "started" && e.payload.bracket)).toBe(true)
     const seeds = [...h.store.entries.values()].sort((a, b) => (a.seed ?? 0) - (b.seed ?? 0))
     expect(seeds.map((e) => e.captainSteamId)).toEqual(["p1", "p2", "p3", "p4", "p5"])
+    const shown = (await h.app.inject({ url: `/tournaments/${t.id}` })).json().tournament.entries
+    // p5 has no profile and falls back to the SteamID.
+    expect(shown.find((e: { captainSteamId: string }) => e.captainSteamId === "p5").name).toBe("p5")
 
     // 4 v 5 in round one and 2 v 3 in round two are provisioned straight away.
     expect(h.started.map((s) => s.source.bracketMatchId).sort()).toEqual(["r1m1", "r2m1"])

@@ -1,0 +1,95 @@
+.filter {
+  width: 200px;
+  max-width: 100%;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+.card:hover,
+.card:focus-within {
+  border-color: var(--color-accent);
+}
+.cardTop {
+  display: flex;
+  gap: var(--space-2);
+}
+.cardTitle {
+  font-size: var(--text-xl);
+}
+/* Whole card is the link target */
+.cardLink {
+  color: var(--color-text);
+  text-decoration: none;
+}
+.cardLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.cardLink:focus-visible {
+  box-shadow: none;
+}
+.card:has(.cardLink:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.mode {
+  font-size: var(--text-sm);
+  color: var(--color-accent-hover);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.facts {
+  margin: var(--space-2) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.facts dt {
+  color: var(--color-text-muted);
+}
+.facts dd {
+  margin: 0;
+  text-align: right;
+}
+.fill {
+  margin-top: auto;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+.fill span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}

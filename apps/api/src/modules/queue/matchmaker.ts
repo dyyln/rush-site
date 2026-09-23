@@ -25,6 +25,9 @@ export type MatchmakerOptions = {
   canMix?: (waitSec: number) => boolean
 }
 
+// Individual players may sit further from the anchor than the team gap allows
+const CANDIDATE_SPREAD = 2
+
 const waitSec = (t: MmTicket, now: number) => Math.max(0, (now - t.enqueuedAt) / 1000)
 
 // Team rating is the mean over players, so a party ticket counts once per member
@@ -51,6 +54,7 @@ function subsetsSumming(pool: MmTicket[], target: number, start = 0): MmTicket[]
 }
 
 // Greedy pass from the longest waiting ticket. Each anchor gets the best balanced match in its window.
+// The window bounds the gap between team means.
 // Party teams face party teams and solo teams face solo teams until every ticket involved may mix.
 export function findMatches(tickets: MmTicket[], opts: MatchmakerOptions): Proposal[] {
   const windowFor = opts.windowFor ?? maxRatingDiffAfter
@@ -71,7 +75,7 @@ export function findMatches(tickets: MmTicket[], opts: MatchmakerOptions): Propo
           t.id !== anchor.id &&
           !used.has(t.id) &&
           t.region === anchor.region &&
-          Math.abs(t.rating - anchor.rating) <= window,
+          Math.abs(t.rating - anchor.rating) <= window * CANDIDATE_SPREAD,
       )
       .sort((a, b) => Math.abs(a.rating - anchor.rating) - Math.abs(b.rating - anchor.rating) || a.enqueuedAt - b.enqueuedAt)
       .slice(0, maxCandidates)

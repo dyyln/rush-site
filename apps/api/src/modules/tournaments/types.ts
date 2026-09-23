@@ -3,13 +3,15 @@ import type { PgDatabase } from "drizzle-orm/pg-core"
 
 import type {
   Mode,
+  TournamentDetail,
+  TournamentEntry as EntryView,
   TournamentStatus,
   TournamentSummary,
   TournamentUpdatePayload,
   TrustLevel,
 } from "@rushsite/shared"
 
-export type { Mode, TournamentStatus, TournamentSummary, TournamentUpdatePayload, TrustLevel }
+export type { EntryView, Mode, TournamentDetail, TournamentStatus, TournamentSummary, TournamentUpdatePayload, TrustLevel }
 export type CupCadence = TournamentSummary["cadence"]
 export type TournamentUpdateKind = TournamentUpdatePayload["kind"]
 export type BadgeKind = "cup_champion" | "cup_runner_up" | "cup_semifinalist"
@@ -67,6 +69,8 @@ export interface TournamentsPluginOptions {
   getRatings(steamIds: string[], mode: Mode): Promise<Record<string, number>>
   // Needed for 2v2 and 3v3 cups. The party leader enters the whole party.
   getParty(steamId: string): Promise<PartyInfo | null>
+  // Display names and avatars. Missing players fall back to their SteamID64.
+  getProfiles(steamIds: string[]): Promise<Record<string, ProfileInfo>>
   // Defaults to true. Tests turn it off.
   scheduler?: boolean
   schedulerIntervalMs?: number
@@ -74,11 +78,4 @@ export interface TournamentsPluginOptions {
   cups?: import("./config.js").CupDefinition[]
 }
 
-export interface EntryView {
-  id: string
-  captainSteamId: string
-  steamIds: string[]
-  seed: number | null
-  rating: number | null
-  registeredAt: string
-}
+export type ProfileInfo = { displayName: string; avatarUrl: string | null }

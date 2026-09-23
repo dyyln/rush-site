@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core"
 
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
+export { adminAudit } from "../modules/admin/schema.js"
 export { badges, bracketMatches, brackets, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
@@ -125,6 +126,7 @@ export const partyMembers = pgTable(
   (t) => [primaryKey({ columns: [t.partyId, t.steamId] }), uniqueIndex("party_members_user_uq").on(t.steamId)],
 )
 
+// One ticket per party. It waits in every listed mode until a match in one of them consumes it
 export const queueTickets = pgTable(
   "queue_tickets",
   {
@@ -132,17 +134,19 @@ export const queueTickets = pgTable(
     partyId: uuid("party_id")
       .notNull()
       .references(() => parties.id),
-    mode: modeEnum("mode").notNull(),
+    modes: modeEnum("modes").array().notNull(),
     region: text("region").notNull().default("eu"),
     steamIds: text("steam_ids").array().notNull(),
-    rating: doublePrecision("rating").notNull(),
+    // Party mean rating per queued mode
+    ratings: jsonb("ratings").$type<Partial<Record<"aim1v1" | "aim2v2" | "rush3v3", number>>>().notNull(),
     status: ticketStatusEnum("status").notNull().default("waiting"),
     matchId: uuid("match_id"),
+    matchedMode: modeEnum("matched_mode"),
     cancelReason: text("cancel_reason"),
     enqueuedAt: ts("enqueued_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("queue_tickets_status_idx").on(t.mode, t.status)],
+  (t) => [index("queue_tickets_status_idx").on(t.status), index("queue_tickets_party_idx").on(t.partyId)],
 )
 
 export type TeamRosterJson = { name: string; steamIds: string[] }
@@ -166,7 +170,10 @@ export const matches = pgTable(
     tournamentId: uuid("tournament_id"),
     bracketMatchKey: text("bracket_match_key"),
     gameNumber: integer("game_number"),
-    // Server allocation
+    bestOf: integer("best_of"),
+    // Server allocation. driver is hetzner or dathost, driverRef is the host id or the DatHost server id
+    driver: text("driver"),
+    driverRef: text("driver_ref"),
     hostId: uuid("host_id"),
     slotId: uuid("slot_id"),
     gsltId: uuid("gslt_id"),
@@ -179,6 +186,8 @@ export const matches = pgTable(
     readyAt: ts("ready_at"),
     startedAt: ts("started_at"),
     endedAt: ts("ended_at"),
+    // Set once the server is stopped and the slot and GSLT are free again
+    serverReleasedAt: ts("server_released_at"),
     cancelReason: text("cancel_reason"),
     ratingApplied: boolean("rating_applied").notNull().default(false),
     createdAt: createdAt(),

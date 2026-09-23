@@ -1,7 +1,8 @@
+import type { Metadata } from "next";
+import { DesignGuide } from "./DesignGuide";
+
+export const metadata: Metadata = { title: "Design system" };
+
 export default function DesignPage() {
-  return (
-    <div className="container page">
-      <h1>Design system</h1>
-    </div>
-  );
+  return <DesignGuide />;
 }

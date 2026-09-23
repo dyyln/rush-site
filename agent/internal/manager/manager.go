@@ -72,9 +72,22 @@ type server struct {
 	proc     procrun.Process
 	stopping bool
 	adopted  bool
+	webhook  hook
 	dir      string
 	log      *os.File
 	done     chan struct{}
+}
+
+// hook is where crash events go. Kept out of Info so the secret never reaches GET /servers.
+type hook struct {
+	URL    string `json:"webhookUrl"`
+	Secret string `json:"webhookSecret"`
+}
+
+// saved is one entry in the state file.
+type saved struct {
+	Info Info `json:"info"`
+	hook
 }
 
 // Manager owns the slots and the CS2 processes. Safe for concurrent use.
@@ -92,6 +105,9 @@ type Manager struct {
 	Alive func(pid int, matchID string) bool
 	// Adopt wraps a surviving server process. Used by Recover.
 	Adopt func(pid int) procrun.Process
+	// OnCrash is called when a server exits without being asked to.
+	// It gets the match webhook so the API can be told the match is abandoned.
+	OnCrash func(info Info, webhookURL, webhookSecret string)
 
 	mu        sync.Mutex
 	servers   map[string]*server
@@ -133,13 +149,13 @@ func (m *Manager) Recover() (int, error) {
 	if err := os.MkdirAll(m.cfg.DataDir, 0o755); err != nil {
 		return 0, err
 	}
-	var saved []Info
+	var entries []saved
 	b, err := os.ReadFile(m.statePath())
 	switch {
 	case err == nil:
-		if err := json.Unmarshal(b, &saved); err != nil {
+		if err := json.Unmarshal(b, &entries); err != nil {
 			m.log.Warn("ignoring unreadable state file", "path", m.statePath(), "err", err)
-			saved = nil
+			entries = nil
 		}
 	case !os.IsNotExist(err):
 		return 0, err
@@ -148,7 +164,8 @@ func (m *Manager) Recover() (int, error) {
 	keep := map[string]bool{}
 	var adopted []*server
 	m.mu.Lock()
-	for _, info := range saved {
+	for _, e := range entries {
+		info := e.Info
 		if !match.ValidMatchID(info.MatchID) || !m.Alive(info.PID, info.MatchID) {
 			continue
 		}
@@ -161,6 +178,7 @@ func (m *Manager) Recover() (int, error) {
 			info:    info,
 			proc:    m.Adopt(info.PID),
 			adopted: true,
+			webhook: e.hook,
 			dir:     filepath.Join(m.MatchesRoot(), info.MatchID),
 			done:    make(chan struct{}),
 		}
@@ -175,11 +193,11 @@ func (m *Manager) Recover() (int, error) {
 		m.log.Info("adopted running server", "match", s.info.MatchID, "port", s.info.Port, "pid", s.info.PID)
 		go m.watch(s)
 	}
-	entries, err := os.ReadDir(m.MatchesRoot())
+	dirs, err := os.ReadDir(m.MatchesRoot())
 	if err != nil && !os.IsNotExist(err) {
 		return len(adopted), err
 	}
-	for _, e := range entries {
+	for _, e := range dirs {
 		if !keep[e.Name()] {
 			_ = os.RemoveAll(filepath.Join(m.MatchesRoot(), e.Name()))
 		}
@@ -189,10 +207,10 @@ func (m *Manager) Recover() (int, error) {
 
 // persistLocked writes live servers to the state file. Caller holds m.mu.
 func (m *Manager) persistLocked() {
-	live := make([]Info, 0, len(m.servers))
+	live := make([]saved, 0, len(m.servers))
 	for _, s := range m.servers {
 		if s.proc != nil {
-			live = append(live, s.info)
+			live = append(live, saved{Info: s.info, hook: s.webhook})
 		}
 	}
 	b, err := json.Marshal(live)
@@ -278,8 +296,9 @@ func (m *Manager) Start(req match.StartRequest) (match.StartResponse, error) {
 			StartedAt: m.now().UTC(),
 			LogPath:   filepath.Join(m.logDir(), req.MatchID+".log"),
 		},
-		dir:  filepath.Join(m.MatchesRoot(), req.MatchID),
-		done: make(chan struct{}),
+		webhook: hook{URL: req.WebhookURL, Secret: req.WebhookSecret},
+		dir:     filepath.Join(m.MatchesRoot(), req.MatchID),
+		done:    make(chan struct{}),
 	}
 	m.servers[req.MatchID] = s
 	m.mu.Unlock()
@@ -421,6 +440,11 @@ func (m *Manager) watch(s *server) {
 	}
 	m.cleanupFiles(s)
 	close(s.done)
+	// Adopted servers have no exit code, so any exit we did not ask for counts.
+	unexpected := rec.Status == StatusCrashed || (s.adopted && rec.Status == StatusExited)
+	if unexpected && m.OnCrash != nil && s.webhook.URL != "" {
+		m.OnCrash(rec, s.webhook.URL, s.webhook.Secret)
+	}
 	if m.OnExit != nil {
 		m.OnExit()
 	}

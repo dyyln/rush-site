@@ -1,0 +1,110 @@
+.scroller {
+  overflow-x: auto;
+  padding-bottom: var(--space-3);
+  scroll-snap-type: x mandatory;
+  border-radius: var(--radius-md);
+}
+.rounds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--space-5);
+  min-width: min-content;
+}
+.round {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  scroll-snap-align: start;
+}
+.roundTitle {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3);
+  height: 20px;
+}
+.matches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: var(--space-3);
+}
+.slot {
+  position: relative;
+}
+.round:not(:last-child) .slot::after {
+  content: "";
+  position: absolute;
+  right: calc(-1 * var(--space-5));
+  top: 50%;
+  width: var(--space-5);
+  border-top: 1px solid var(--color-border-strong);
+}
+.match {
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+.live {
+  border-color: var(--color-win);
+}
+.side {
+  display: grid;
+  grid-template-columns: 24px 1fr 28px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+.side + .side {
+  border-top: 1px solid var(--color-border);
+}
+.seed {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+.entry {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.score {
+  text-align: right;
+}
+.won .entry,
+.won .score {
+  color: var(--color-win);
+  font-weight: 600;
+}
+.lost .entry {
+  color: var(--color-text-muted);
+}
+.me {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+.liveTag {
+  position: absolute;
+  top: 50%;
+  right: var(--space-6);
+  transform: translateY(-50%);
+}
+.resolution {
+  display: block;
+  padding: 2px var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-top: 1px solid var(--color-border);
+}

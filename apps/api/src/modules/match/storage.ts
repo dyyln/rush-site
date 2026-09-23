@@ -1,0 +1,69 @@
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import type { DemoUpload } from "@rushsite/shared"
+import type { Env } from "../../env.js"
+
+export type DemoBody = ReadableStream | Buffer
+
+export interface DemoStorage {
+  readonly enabled: boolean
+  presignUpload(matchId: string): Promise<DemoUpload>
+  upload(key: string, body: DemoBody): Promise<void>
+}
+
+// Upload URL lives long enough for a full match plus upload time
+const PUT_EXPIRY_SEC = 6 * 60 * 60
+
+export function demoKey(matchId: string, now = new Date()): string {
+  const d = now.toISOString().slice(0, 10)
+  return `demos/${d}/${matchId}.dem`
+}
+
+export class S3DemoStorage implements DemoStorage {
+  readonly enabled = true
+  private readonly client: S3Client
+
+  constructor(private readonly env: Env) {
+    this.client = new S3Client({
+      region: env.S3_REGION,
+      // Presigned URLs must point at an endpoint the game host can reach
+      endpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,
+      forcePathStyle: env.S3_FORCE_PATH_STYLE,
+      credentials: { accessKeyId: env.S3_ACCESS_KEY_ID!, secretAccessKey: env.S3_SECRET_ACCESS_KEY! },
+    })
+  }
+
+  async presignUpload(matchId: string): Promise<DemoUpload> {
+    const key = demoKey(matchId)
+    // No Content-Type in the signature so the plugin can upload with any header
+    const cmd = new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key })
+    const presignedPutUrl = await getSignedUrl(this.client, cmd, { expiresIn: PUT_EXPIRY_SEC })
+    return { bucket: this.env.S3_BUCKET, key, presignedPutUrl }
+  }
+
+  async upload(key: string, body: DemoBody): Promise<void> {
+    const bytes = Buffer.isBuffer(body) ? body : Buffer.from(await new Response(body).arrayBuffer())
+    await this.client.send(
+      new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key, Body: bytes, ContentType: "application/octet-stream" }),
+    )
+  }
+}
+
+// Used when no object storage is configured. The plugin upload will fail and the match still counts
+export class DisabledDemoStorage implements DemoStorage {
+  readonly enabled = false
+  constructor(private readonly bucket = "disabled") {}
+
+  async presignUpload(matchId: string): Promise<DemoUpload> {
+    return { bucket: this.bucket, key: demoKey(matchId), presignedPutUrl: "http://127.0.0.1:9/demo-upload-disabled" }
+  }
+
+  async upload(): Promise<void> {
+    // Nowhere to put it
+  }
+}
+
+export function createDemoStorage(env: Env): DemoStorage {
+  if (env.S3_ENDPOINT && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY) return new S3DemoStorage(env)
+  return new DisabledDemoStorage(env.S3_BUCKET)
+}

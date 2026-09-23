@@ -7,7 +7,8 @@
     "declarationMap": false,
     "paths": {
       "@rushsite/shared": ["../../packages/shared/src/index.ts"],
-      "@rushsite/faceit": ["../../packages/faceit/src/index.ts"]
+      "@rushsite/faceit": ["../../packages/faceit/src/index.ts"],
+      "@rushsite/dathost": ["../../packages/dathost/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "drizzle.config.ts"]

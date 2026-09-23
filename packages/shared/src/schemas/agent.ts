@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { SteamId64Schema, UuidSchema } from "./common.js"
-import { MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
+import { Cs2LaunchSchema, MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
 
 export const TeamRosterSchema = z.object({
   name: z.string().min(1),
@@ -26,6 +26,8 @@ export const StartServerRequestSchema = z.object({
   webhookUrl: z.url(),
   webhookSecret: z.string().min(16),
   demoUpload: DemoUploadSchema,
+  // Copied from the mode config
+  cs2: Cs2LaunchSchema.optional(),
 })
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 

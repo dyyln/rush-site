@@ -1,0 +1,36 @@
+.chip {
+  --tier-color: var(--tier-iron);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--tier-color);
+  border-radius: var(--radius-sm);
+  color: var(--tier-color);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--color-surface-1);
+}
+.sm {
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+}
+.mark {
+  width: 8px;
+  height: 8px;
+}
+.rating {
+  color: var(--color-text);
+  font-weight: 500;
+  text-transform: none;
+}
+.chip[data-tier="iron"] { --tier-color: var(--tier-iron); }
+.chip[data-tier="bronze"] { --tier-color: var(--tier-bronze); }
+.chip[data-tier="silver"] { --tier-color: var(--tier-silver); }
+.chip[data-tier="gold"] { --tier-color: var(--tier-gold); }
+.chip[data-tier="platinum"] { --tier-color: var(--tier-platinum); }
+.chip[data-tier="elite"] { --tier-color: var(--tier-elite); }

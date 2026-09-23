@@ -24,7 +24,47 @@ var (
 	reWorkshop = regexp.MustCompile(`^[0-9]{1,20}$`)
 	reGSLT     = regexp.MustCompile(`^[A-Za-z0-9]{8,64}$`)
 	rePassword = regexp.MustCompile(`^[A-Za-z0-9_\-]{4,64}$`)
+	reArgFlag  = regexp.MustCompile(`^[+-][A-Za-z0-9_]{1,64}$`)
+	reArgValue = regexp.MustCompile(`^[A-Za-z0-9_.\-]{1,64}$`)
 )
+
+// applyCS2 lays the request's cs2 block over the table spec.
+// Extra args come from the API here, so each one must look like a flag or a plain value.
+func applyCS2(spec ModeSpec, o *CS2Settings) (ModeSpec, error) {
+	if o == nil {
+		return spec, nil
+	}
+	if o.GameType != nil {
+		if *o.GameType < 0 || *o.GameType > 100 {
+			return spec, invalid("cs2.gameType out of range")
+		}
+		spec.GameType = o.GameType
+	}
+	if o.GameMode != nil {
+		if *o.GameMode < 0 || *o.GameMode > 100 {
+			return spec, invalid("cs2.gameMode out of range")
+		}
+		spec.GameMode = o.GameMode
+	}
+	if o.ExecCfg != "" {
+		if !reCfgName.MatchString(o.ExecCfg) {
+			return spec, invalid("cs2.execCfg must be a plain file name ending in .cfg")
+		}
+		spec.ExecCfg = o.ExecCfg
+	}
+	if o.ExtraArgs != nil {
+		if len(o.ExtraArgs) > 16 {
+			return spec, invalid("cs2.extraArgs has too many entries")
+		}
+		for _, a := range o.ExtraArgs {
+			if !reArgFlag.MatchString(a) && !reArgValue.MatchString(a) {
+				return spec, invalid("cs2.extraArgs entry %q is not allowed", a)
+			}
+		}
+		spec.ExtraArgs = o.ExtraArgs
+	}
+	return spec, nil
+}
 
 // ValidMatchID reports whether id is a UUID. Match ids end up in file paths so this is strict.
 func ValidMatchID(id string) bool { return reUUID.MatchString(id) }
@@ -38,6 +78,10 @@ func Validate(req *StartRequest, modes ModeTable) (ModeSpec, error) {
 	spec, ok := modes[req.Mode]
 	if !ok {
 		return ModeSpec{}, invalid("unknown mode %q", req.Mode)
+	}
+	spec, err := applyCS2(spec, req.CS2)
+	if err != nil {
+		return ModeSpec{}, err
 	}
 	if !spec.Configured() {
 		return ModeSpec{}, fmt.Errorf("%w: %s needs gameType and gameMode", ErrModeNotConfigured, req.Mode)

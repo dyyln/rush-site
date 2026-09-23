@@ -1,0 +1,90 @@
+import type { ServerDriver, StartServerRequest } from "@rushsite/shared"
+import { eq } from "drizzle-orm"
+import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { createHarness, finishVeto, makeUsers, type Harness } from "../../../test/helpers.js"
+import { matches } from "../../db/schema.js"
+import { matchmakeAll } from "../queue/loop.js"
+import { MatchesDathostStore } from "./dathost.js"
+
+class FakeSurge implements ServerDriver {
+  readonly name = "dathost" as const
+  started: StartServerRequest[] = []
+  stopped: string[] = []
+  demos: string[] = []
+  constructor(private readonly store: MatchesDathostStore) {}
+  async capacity() {
+    return { free: 10, total: 10 }
+  }
+  async start(req: StartServerRequest) {
+    this.started.push(req)
+    await this.store.set(req.matchId, `clone-${this.started.length}`)
+    return { matchId: req.matchId, ip: "1.2.3.4", port: 28015, connect: "connect 1.2.3.4:28015" }
+  }
+  async stop(matchId: string) {
+    this.stopped.push(matchId)
+    await this.store.delete(matchId)
+  }
+  async fetchDemo(matchId: string) {
+    this.demos.push(matchId)
+    return Buffer.from("demo")
+  }
+}
+
+describe("allocator drivers", () => {
+  let h: Harness
+  let surge: FakeSurge
+  beforeEach(async () => {
+    h = await createHarness({ rng: () => 0, env: { AGENT_URLS: "" } })
+    surge = new FakeSurge(new MatchesDathostStore(h.db))
+    h.ctx.allocator.setSurgeDriver(surge)
+    await h.ctx.allocator.seedGslt(["tok1"])
+  })
+  afterEach(async () => {
+    await h.close()
+  })
+
+  async function vetoedMatch(): Promise<string> {
+    const [a, b] = (await makeUsers(h.db, 2)) as [string, string]
+    await h.ctx.queue.join(a, ["aim1v1"])
+    await h.ctx.queue.join(b, ["aim1v1"])
+    const [matchId] = await matchmakeAll(h.ctx.queue, h.ctx.flow, h.clock.now())
+    await h.ctx.flow.respond(a, matchId!, true)
+    await h.ctx.flow.respond(b, matchId!, true)
+    await finishVeto(h, matchId!)
+    return matchId!
+  }
+
+  it("waits SURGE_WAIT_SEC for a Hetzner slot before using DatHost", async () => {
+    const matchId = await vetoedMatch()
+    let [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
+    expect(m!.status).toBe("allocating")
+    expect(surge.started).toHaveLength(0)
+    h.clock.advance((h.env.SURGE_WAIT_SEC + 1) * 1000)
+    await h.ctx.flow.tick()
+    ;[m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
+    expect(m!.status).toBe("starting")
+    expect(m!.driver).toBe("dathost")
+    expect(m!.driverRef).toBe("clone-1")
+    expect(surge.started[0]!.gslt).toBe("tok1")
+  })
+
+  it("prefers Hetzner when a slot is free", async () => {
+    await h.ctx.allocator.syncHosts(["http://agent.test:8080"])
+    await vetoedMatch()
+    expect(h.agent.started).toHaveLength(1)
+    expect(surge.started).toHaveLength(0)
+  })
+
+  it("pulls the DatHost demo before stopping the clone", async () => {
+    const matchId = await vetoedMatch()
+    h.clock.advance((h.env.SURGE_WAIT_SEC + 1) * 1000)
+    await h.ctx.flow.tick()
+    await h.ctx.flow.handleEvent(matchId, { type: "match_end", winnerTeam: "A", score: { A: 16, B: 3 }, players: [], demoUploaded: false })
+    expect(surge.stopped).toHaveLength(0)
+    await h.ctx.flow.handleEvent(matchId, { type: "demo_uploaded", ok: false, error: "no storage" })
+    expect(surge.stopped).toEqual([matchId])
+    const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
+    expect(m!.driverRef).toBeNull()
+    expect(m!.serverReleasedAt).not.toBeNull()
+  })
+})

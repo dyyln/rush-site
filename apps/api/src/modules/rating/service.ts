@@ -20,6 +20,8 @@ export type TeamMatchInput = {
   scoreA: number
   // Players recorded as forfeits. They still take the normal loss
   forfeiters?: string[]
+  // Players left unrated, such as teammates of a leaver. They still count toward team strength
+  exclude?: string[]
 }
 
 export type RollbackSummary = {
@@ -81,6 +83,7 @@ export class RatingService {
     const compA = teamComposite(a.map(cur))
     const compB = teamComposite(b.map(cur))
     const forfeit = new Set(input.forfeiters ?? [])
+    const exclude = new Set(input.exclude ?? [])
     const changes: RatingChange[] = []
     const now = new Date(this.now())
     for (const [team, opp, score] of [
@@ -88,6 +91,7 @@ export class RatingService {
       [b, compA, 1 - input.scoreA],
     ] as const) {
       for (const steamId of team) {
+        if (exclude.has(steamId)) continue
         const before = cur(steamId)
         const after = updateRating(before, [{ opponent: opp, score }])
         await tx.insert(ratingEvents).values({

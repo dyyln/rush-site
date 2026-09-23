@@ -43,6 +43,16 @@ type StartRequest struct {
 	WebhookURL      string     `json:"webhookUrl"`
 	WebhookSecret   string     `json:"webhookSecret"`
 	DemoUpload      DemoUpload `json:"demoUpload"`
+	// CS2 overrides the agent's mode table when present.
+	CS2 *CS2Settings `json:"cs2,omitempty"`
+}
+
+// CS2Settings is the optional cs2 block of StartRequest.
+type CS2Settings struct {
+	GameType  *int     `json:"gameType"`
+	GameMode  *int     `json:"gameMode"`
+	ExecCfg   string   `json:"execCfg"`
+	ExtraArgs []string `json:"extraArgs,omitempty"`
 }
 
 // StartResponse is the POST /servers reply.

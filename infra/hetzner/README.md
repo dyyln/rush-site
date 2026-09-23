@@ -147,14 +147,14 @@ crontab -e   # as deploy
 
 ### 5.2 Host agent under systemd
 
-The repo lives in `/srv/rushsite`. The agent binary lives at `/opt/rushsite/agent`.
+The repo lives in `/srv/rushsite`. The agent binary lives at `/opt/rushsite/bin/rushsite-agent`.
 
 ```bash
 useradd --system --create-home --home-dir /srv/cs2home --shell /usr/sbin/nologin cs2
 mkdir -p /opt/rushsite /etc/rushsite /srv/cs2
 chown cs2: /srv/cs2
 # build on a dev machine with: cd agent && GOOS=linux GOARCH=amd64 go build -o rushsite-agent .
-install -m 755 rushsite-agent /opt/rushsite/agent
+install -m 755 rushsite-agent /opt/rushsite/bin/rushsite-agent
 install -m 600 infra/systemd/agent.env.example /etc/rushsite/agent.env   # then edit
 cp infra/systemd/rushsite-agent.service /etc/systemd/system/
 systemctl daemon-reload

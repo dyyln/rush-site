@@ -11,11 +11,12 @@ Type=simple
 User=cs2
 Group=cs2
 EnvironmentFile=/etc/rushsite/agent.env
-ExecStart=/opt/rushsite/agent
+ExecStart=/opt/rushsite/bin/rushsite-agent
 Restart=always
 RestartSec=3
 # CS2 servers are children of the agent. Let them finish on agent restart.
 KillMode=process
+StateDirectory=rushsite-agent
 LimitNOFILE=1048576
 Nice=-5
 

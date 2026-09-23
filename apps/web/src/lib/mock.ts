@@ -1,5 +1,5 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, MODES, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { AIM_MAPS, MODES, RUSH_MAP, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import type {
   Bracket,
   BracketMatch,
@@ -44,10 +44,11 @@ export function mockSteamId(i: number): string {
 
 export const MOCK_ME: User = {
   steamId: mockSteamId(0),
-  displayName: "you",
+  displayName: "meridius",
   avatarUrl: null,
   trustLevel: "verified",
   region: "eu",
+  isAdmin: true,
 };
 
 export function mockUser(i: number): User {
@@ -116,7 +117,7 @@ function mockModeStats(steamId: string, mode: Mode): ModeStats {
   });
   const matches = 40 + Math.floor(r() * 200);
   const wins = Math.floor(matches * (0.45 + r() * 0.15));
-  const maps = mode === "rush3v3" ? [{ id: "rush_001" }] : AIM_MAPS;
+  const maps = mode === "rush3v3" ? [RUSH_MAP] : AIM_MAPS;
   const bestMaps = maps
     .map((m) => {
       const n = 5 + Math.floor(r() * 40);
@@ -152,7 +153,7 @@ function mockMatches(steamId: string): MatchSummary[] {
     return {
       matchId: `00000000-0000-4000-8000-${String(hash(steamId + i)).padStart(12, "0").slice(0, 12)}`,
       mode,
-      mapId: aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : "rush_001",
+      mapId: aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : RUSH_MAP.id,
       playedAt: new Date(MOCK_NOW - i * DAY * 0.6 - r() * DAY * 0.3).toISOString(),
       result: abandoned ? "abandoned" : win ? "win" : "loss",
       scoreFor: win ? (aim ? 16 : 4) : loserScore,

@@ -1,6 +1,14 @@
 // REST response shapes the web expects from the api.
 // WS payloads and config come from @rushsite/shared. These cover the HTTP side.
-import type { Mode, TierId, TrustLevel } from "@rushsite/shared";
+import type {
+  BracketMatchView,
+  BracketView,
+  Mode,
+  TierId,
+  TournamentStatus as SharedTournamentStatus,
+  TournamentSummary as SharedTournamentSummary,
+  TrustLevel,
+} from "@rushsite/shared";
 
 export type { Mode, TierId, TrustLevel };
 
@@ -10,6 +18,8 @@ export type User = {
   avatarUrl: string | null;
   trustLevel: TrustLevel;
   region: string;
+  // Only set on GET /me
+  isAdmin?: boolean;
 };
 
 export type RatingPoint = { ts: number; rating: number };
@@ -81,29 +91,11 @@ export type Leaderboard = {
   rows: LeaderboardRow[];
 };
 
-// Tournament shapes mirror apps/api/src/modules/tournaments/types.ts
+// Tournament shapes come from @rushsite/shared
 
-export type TournamentStatus = "open" | "running" | "completed" | "cancelled";
-export type CupCadence = "daily" | "weekly";
-
-export type TournamentSummary = {
-  id: string;
-  cupKey: string;
-  name: string;
-  mode: Mode;
-  cadence: CupCadence;
-  status: TournamentStatus;
-  startsAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  maxEntrants: number;
-  entrantCount: number;
-  minTrust: TrustLevel;
-  entryFee: number;
-  format: { type: "single_elimination"; bestOf: { default: number; semis: number; final: number } };
-  checkIn: false;
-  winnerEntryId: string | null;
-};
+export type TournamentStatus = SharedTournamentStatus;
+export type TournamentSummary = SharedTournamentSummary;
+export type CupCadence = TournamentSummary["cadence"];
 
 export type EntryPlayer = { steamId: string; displayName: string; avatarUrl: string | null };
 
@@ -119,35 +111,9 @@ export type EntryView = {
   players?: EntryPlayer[];
 };
 
-export type BracketSide = "a" | "b";
-export type BracketMatchStatus = "pending" | "ready" | "live" | "done";
-export type BracketResolution = "played" | "bye" | "walkover" | "forfeit" | "double_forfeit" | "void";
-
-export type BracketMatch = {
-  id: string;
-  round: number;
-  index: number;
-  bestOf: number;
-  // Entry ids
-  a: string | null;
-  b: string | null;
-  aSeed: number | null;
-  bSeed: number | null;
-  aResolved: boolean;
-  bResolved: boolean;
-  status: BracketMatchStatus;
-  games: { matchId: string; winner: BracketSide }[];
-  liveMatchId: string | null;
-  // Entry id
-  winner: string | null;
-  resolution: BracketResolution | null;
-};
-
-export type Bracket = {
-  size: number;
-  rounds: number;
-  matches: BracketMatch[];
-};
+export type BracketMatch = BracketMatchView;
+export type Bracket = BracketView;
+export type BracketMatchStatus = BracketMatch["status"];
 
 export type TournamentDetail = TournamentSummary & {
   entries: EntryView[];

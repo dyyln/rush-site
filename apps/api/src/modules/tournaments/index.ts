@@ -27,6 +27,7 @@ const tournamentsPlugin: FastifyPluginAsync<
     getTrustLevels: opts.getTrustLevels,
     getRatings: opts.getRatings,
     getParty: opts.getParty,
+    getProfiles: opts.getProfiles,
   })
 
   opts.onMatchResult(async (result) => {

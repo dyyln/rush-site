@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BRAND_NAME } from "@rushsite/shared";
+import { Avatar } from "@/components/ui/Avatar";
 import { isMock } from "@/lib/env";
+import { useSession } from "@/lib/session";
 import styles from "./SiteHeader.module.css";
 
 const NAV = [
@@ -16,6 +18,8 @@ const NAV = [
 export function SiteHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { user } = useSession();
+  const nav = user?.isAdmin ? [...NAV, { href: "/admin", label: "Admin" }] : NAV;
 
   return (
     <header className={styles.header}>
@@ -37,7 +41,7 @@ export function SiteHeader() {
         </button>
         <nav id="site-nav" aria-label="Main" className={`${styles.nav} ${open ? styles.navOpen : ""}`}>
           <ul>
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <li key={item.href}>
@@ -53,9 +57,21 @@ export function SiteHeader() {
               );
             })}
             <li>
-              <Link href="/login" className={`${styles.link} ${styles.signIn}`} onClick={() => setOpen(false)}>
-                Sign in
-              </Link>
+              {user ? (
+                <Link
+                  href={`/profile/${user.steamId}`}
+                  className={`${styles.link} ${styles.me}`}
+                  aria-current={pathname === `/profile/${user.steamId}` ? "page" : undefined}
+                  onClick={() => setOpen(false)}
+                >
+                  <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
+                  <span>{user.displayName}</span>
+                </Link>
+              ) : (
+                <Link href="/login" className={`${styles.link} ${styles.signIn}`} onClick={() => setOpen(false)}>
+                  Sign in
+                </Link>
+              )}
             </li>
           </ul>
         </nav>

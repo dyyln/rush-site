@@ -11,6 +11,15 @@ CREATE TYPE "public"."slot_status" AS ENUM('free', 'reserved', 'running');--> st
 CREATE TYPE "public"."ticket_status" AS ENUM('waiting', 'matched', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."trust_level" AS ENUM('new', 'verified', 'trusted');--> statement-breakpoint
 CREATE TYPE "public"."review_verdict" AS ENUM('cheat', 'clean');--> statement-breakpoint
+CREATE TABLE "admin_audit" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"admin_steam_id" text NOT NULL,
+	"action" text NOT NULL,
+	"target" text NOT NULL,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "badges" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"steam_id" text NOT NULL,
@@ -165,6 +174,9 @@ CREATE TABLE "matches" (
 	"tournament_id" uuid,
 	"bracket_match_key" text,
 	"game_number" integer,
+	"best_of" integer,
+	"driver" text,
+	"driver_ref" text,
 	"host_id" uuid,
 	"slot_id" uuid,
 	"gslt_id" uuid,
@@ -177,6 +189,7 @@ CREATE TABLE "matches" (
 	"ready_at" timestamp with time zone,
 	"started_at" timestamp with time zone,
 	"ended_at" timestamp with time zone,
+	"server_released_at" timestamp with time zone,
 	"cancel_reason" text,
 	"rating_applied" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -201,12 +214,13 @@ CREATE TABLE "party_members" (
 CREATE TABLE "queue_tickets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"party_id" uuid NOT NULL,
-	"mode" "mode" NOT NULL,
+	"modes" "mode"[] NOT NULL,
 	"region" text DEFAULT 'eu' NOT NULL,
 	"steam_ids" text[] NOT NULL,
-	"rating" double precision NOT NULL,
+	"ratings" jsonb NOT NULL,
 	"status" "ticket_status" DEFAULT 'waiting' NOT NULL,
 	"match_id" uuid,
+	"matched_mode" "mode",
 	"cancel_reason" text,
 	"enqueued_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -381,6 +395,8 @@ ALTER TABLE "tournament_entries" ADD CONSTRAINT "tournament_entries_tournament_i
 ALTER TABLE "trust_levels" ADD CONSTRAINT "trust_levels_steam_id_users_steam_id_fk" FOREIGN KEY ("steam_id") REFERENCES "public"."users"("steam_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trust_signals" ADD CONSTRAINT "trust_signals_steam_id_users_steam_id_fk" FOREIGN KEY ("steam_id") REFERENCES "public"."users"("steam_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vetoes" ADD CONSTRAINT "vetoes_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "admin_audit_target_idx" ON "admin_audit" USING btree ("target","created_at");--> statement-breakpoint
+CREATE INDEX "admin_audit_created_idx" ON "admin_audit" USING btree ("created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "badges_user_tournament_uq" ON "badges" USING btree ("steam_id","tournament_id");--> statement-breakpoint
 CREATE INDEX "badges_steam_idx" ON "badges" USING btree ("steam_id");--> statement-breakpoint
 CREATE INDEX "bans_user_idx" ON "bans" USING btree ("steam_id");--> statement-breakpoint
@@ -392,7 +408,8 @@ CREATE INDEX "match_players_user_idx" ON "match_players" USING btree ("steam_id"
 CREATE INDEX "matches_status_idx" ON "matches" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "matches_created_idx" ON "matches" USING btree ("created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "party_members_user_uq" ON "party_members" USING btree ("steam_id");--> statement-breakpoint
-CREATE INDEX "queue_tickets_status_idx" ON "queue_tickets" USING btree ("mode","status");--> statement-breakpoint
+CREATE INDEX "queue_tickets_status_idx" ON "queue_tickets" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "queue_tickets_party_idx" ON "queue_tickets" USING btree ("party_id");--> statement-breakpoint
 CREATE INDEX "rating_events_user_mode_idx" ON "rating_events" USING btree ("steam_id","mode","seq");--> statement-breakpoint
 CREATE INDEX "rating_events_match_idx" ON "rating_events" USING btree ("match_id");--> statement-breakpoint
 CREATE INDEX "ratings_mode_rating_idx" ON "ratings" USING btree ("mode","rating");--> statement-breakpoint

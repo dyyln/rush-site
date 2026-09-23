@@ -198,6 +198,7 @@ export class DrizzleTournamentStore implements TournamentStore {
     e: Omit<EntryRecord, "id" | "createdAt" | "seed" | "rating">,
   ): Promise<EntryRecord> {
     const [row] = await this.db.insert(tournamentEntries).values(e).returning()
+    if (!row) throw new Error("entry insert returned no row")
     return toEntry(row)
   }
 
@@ -225,6 +226,7 @@ export class DrizzleTournamentStore implements TournamentStore {
         set: { size: bracket.size, rounds: bracket.rounds },
       })
       .returning({ id: brackets.id })
+    if (!b) throw new Error("bracket upsert returned no row")
     const values = bracket.matches.map((m) => ({
       bracketId: b.id,
       key: m.id,

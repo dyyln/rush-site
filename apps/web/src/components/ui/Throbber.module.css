@@ -1,0 +1,23 @@
+.throbber {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-win-subtle);
+  border-top-color: var(--color-win);
+  border-right-color: var(--color-win);
+  animation: spin 900ms linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .throbber {
+    animation: none;
+    border-color: var(--color-win);
+  }
+}

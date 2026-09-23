@@ -1,9 +1,98 @@
 {
-  "id": "a0863240-a8bd-48e3-8a7a-44d61a132286",
+  "id": "c8f4e543-c835-46a8-b646-5306d6494ab2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.admin_audit": {
+      "name": "admin_audit",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "admin_steam_id": {
+          "name": "admin_steam_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "admin_audit_target_idx": {
+          "name": "admin_audit_target_idx",
+          "columns": [
+            {
+              "expression": "target",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "admin_audit_created_idx": {
+          "name": "admin_audit_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.badges": {
       "name": "badges",
       "schema": "",
@@ -1217,6 +1306,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "best_of": {
+          "name": "best_of",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "driver": {
+          "name": "driver",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "driver_ref": {
+          "name": "driver_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "host_id": {
           "name": "host_id",
           "type": "uuid",
@@ -1285,6 +1392,12 @@
         },
         "ended_at": {
           "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "server_released_at": {
+          "name": "server_released_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -1516,9 +1629,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "mode": {
-          "name": "mode",
-          "type": "mode",
+        "modes": {
+          "name": "modes",
+          "type": "mode[]",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
@@ -1536,9 +1649,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "rating": {
-          "name": "rating",
-          "type": "double precision",
+        "ratings": {
+          "name": "ratings",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
@@ -1553,6 +1666,13 @@
         "match_id": {
           "name": "match_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matched_mode": {
+          "name": "matched_mode",
+          "type": "mode",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -1582,13 +1702,22 @@
           "name": "queue_tickets_status_idx",
           "columns": [
             {
-              "expression": "mode",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "queue_tickets_party_idx": {
+          "name": "queue_tickets_party_idx",
+          "columns": [
             {
-              "expression": "status",
+              "expression": "party_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

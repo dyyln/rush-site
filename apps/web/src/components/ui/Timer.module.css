@@ -1,0 +1,50 @@
+.timer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.sm { font-size: var(--text-md); }
+.lg { font-size: var(--text-3xl); }
+.label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+}
+.urgent {
+  color: var(--color-loss);
+}
+.ring {
+  position: relative;
+  width: 112px;
+  height: 112px;
+}
+.ring svg {
+  width: 100%;
+  height: 100%;
+}
+.track {
+  fill: none;
+  stroke: var(--color-surface-3);
+  stroke-width: 6;
+}
+.progress {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 250ms linear;
+}
+.urgent .progress {
+  stroke: var(--color-loss);
+}
+.ringText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-3xl);
+  font-weight: 500;
+}

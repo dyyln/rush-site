@@ -2,7 +2,7 @@ import type { Redis } from "ioredis"
 import type { WsEnvelope } from "@rushsite/shared"
 
 export type Outgoing = WsEnvelope
-export type Audience = { kind: "users"; steamIds: string[] } | { kind: "broadcast" }
+export type Audience = { kind: "users"; steamIds: string[] } | { kind: "broadcast" } | { kind: "admins" }
 
 // Anything services use to push messages to connected players
 export interface Notifier {
@@ -24,8 +24,10 @@ const OPEN = 1
 // Sockets connected to this process
 export class LocalHub {
   private readonly byUser = new Map<string, Set<SocketLike>>()
+  private readonly admins = new Set<SocketLike>()
 
-  add(steamId: string, socket: SocketLike): void {
+  add(steamId: string, socket: SocketLike, isAdmin = false): void {
+    if (isAdmin) this.admins.add(socket)
     let set = this.byUser.get(steamId)
     if (!set) {
       set = new Set()
@@ -35,6 +37,7 @@ export class LocalHub {
   }
 
   remove(steamId: string, socket: SocketLike): void {
+    this.admins.delete(socket)
     const set = this.byUser.get(steamId)
     if (!set) return
     set.delete(socket)
@@ -46,7 +49,9 @@ export class LocalHub {
     const targets =
       audience.kind === "broadcast"
         ? [...this.byUser.values()]
-        : audience.steamIds.map((id) => this.byUser.get(id)).filter((s): s is Set<SocketLike> => !!s)
+        : audience.kind === "admins"
+          ? [this.admins]
+          : audience.steamIds.map((id) => this.byUser.get(id)).filter((s): s is Set<SocketLike> => !!s)
     for (const set of targets) {
       for (const socket of set) {
         if (socket.readyState === OPEN) socket.send(data)
