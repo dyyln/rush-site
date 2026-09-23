@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { validateLikeAgent } from "../../../test/agent-contract.js"
 import { createHarness, finishVeto, makeUsers, type Harness } from "../../../test/helpers.js"
-import { matches } from "../../db/schema.js"
+import { gsltTokens, matches } from "../../db/schema.js"
 import { matchmakeAll } from "../queue/loop.js"
 import { MatchesDathostStore } from "./dathost.js"
 
@@ -67,6 +67,17 @@ describe("allocator drivers", () => {
     expect(m!.driver).toBe("dathost")
     expect(m!.driverRef).toBe("clone-1")
     expect(surge.started[0]!.gslt).toBe("GSLTTOKEN0001")
+  })
+
+  it("starts on DatHost without a token when the pool is dry", async () => {
+    await h.db.delete(gsltTokens)
+    const matchId = await vetoedMatch()
+    h.clock.advance((h.env.SURGE_WAIT_SEC + 1) * 1000)
+    await h.ctx.flow.tick()
+    const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
+    expect(m!.status).toBe("starting")
+    expect(m!.driver).toBe("dathost")
+    expect(surge.started[0]!.gslt).toBe("")
   })
 
   it("prefers Hetzner when a slot is free", async () => {

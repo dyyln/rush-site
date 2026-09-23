@@ -256,11 +256,12 @@ export class Allocator {
     }
 
     if (this.surge && waitedMs >= this.opts.surgeWaitSec * 1000) {
+      // DatHost servers run without a token, so a dry pool does not block surge capacity
       const token = await this.db.transaction((tx) => this.reserveGslt(tx as unknown as Db, p.matchId))
-      if (!token) return { kind: "wait" }
+      if (!token) this.log.warn({ matchId: p.matchId }, "no free GSLT, starting surge server without a token")
       const demo = await this.storage.presignUpload(p.matchId)
       try {
-        const response = await this.surge.start(this.buildRequest(p, token.token, demo))
+        const response = await this.surge.start(this.buildRequest(p, token?.token ?? "", demo))
         this.log.info({ matchId: p.matchId, driver: this.surge.name }, "match allocated on surge capacity")
         return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, demo }
       } catch (err) {

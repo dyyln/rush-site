@@ -176,7 +176,7 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
             autostop_minutes: opts.autostopMinutes ?? 30,
             "cs2_settings.password": req.password,
             "cs2_settings.rcon": randomBytes(12).toString("hex"),
-            "cs2_settings.steam_game_server_login_token": req.gslt,
+            ...(req.gslt ? { "cs2_settings.steam_game_server_login_token": req.gslt } : {}),
             "cs2_settings.game_mode": mode.preset,
             "cs2_settings.enable_gotv": true,
             "cs2_settings.enable_metamod": true,

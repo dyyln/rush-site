@@ -22,7 +22,7 @@ export const StartServerRequestSchema = z.object({
   matchId: UuidSchema,
   mode: ModeSchema,
   map: MapEntrySchema,
-  gslt: z.string().min(1),
+  gslt: z.string(),   // empty on DatHost when the pool is dry, the Hetzner agent refuses an empty token
   password: z.string().min(1),
   allowedSteamIds: z.array(SteamId64Schema).min(1),
   teams: z.array(TeamRosterSchema).length(2),
