@@ -38,6 +38,7 @@ import type { TrustService } from "../trust/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
 import { resolveAbandon, resolveAccept, type AcceptOutcome } from "./accept.js"
 import type { Allocator } from "./allocator.js"
+import { roundView, teamScores, type MatchRoundView, type MatchUpdatePayload } from "./match-page.js"
 import { demoKey } from "./storage.js"
 
 type MatchRow = typeof matches.$inferSelect
@@ -277,6 +278,7 @@ export class MatchFlow {
     }
     const reason = outcome.reason === "declined" ? "decline" : "accept_timeout"
     this.sendCancelled(m, `accept_${outcome.reason}`)
+    await this.sendMatchUpdate(m.id)
     for (const id of outcome.penalize) await this.d.cooldowns.issue(id, reason, m.id)
     for (const t of outcome.dropTickets) await this.d.queue.cancelTicket(t, reason)
     for (const t of outcome.requeueTickets) await this.d.queue.requeue(t)
@@ -468,6 +470,7 @@ export class MatchFlow {
     }
     await this.d.queue.notifyParty(r.players.map((p) => p.steamId))
     this.sendCancelled(r.m, reason)
+    await this.sendMatchUpdate(matchId)
     this.d.events?.emit("match", { event: "match_cancelled", matchId, reason })
     await this.emitResult({ matchId, outcome: "cancelled", reason })
     return true
@@ -516,6 +519,7 @@ export class MatchFlow {
           .update(matches)
           .set({ status: "live", startedAt: new Date(this.now()) })
           .where(and(eq(matches.id, matchId), inArray(matches.status, ["starting", "ready"])))
+        await this.sendMatchUpdate(matchId)
         return
       }
       case "round_end": {
@@ -528,9 +532,15 @@ export class MatchFlow {
             winnerTeam: event.winnerTeam,
             score: event.score,
             arena: typeof arena === "string" ? arena : null,
+            endedAt: new Date(this.now()),
           })
           .onConflictDoNothing()
         await db.update(matches).set({ score: event.score }).where(eq(matches.id, matchId))
+        const [round] = await db
+          .select()
+          .from(matchRounds)
+          .where(and(eq(matchRounds.matchId, matchId), eq(matchRounds.round, event.round)))
+        await this.sendMatchUpdate(matchId, round ? roundView(round) : undefined)
         return
       }
       case "match_end":
@@ -542,6 +552,19 @@ export class MatchFlow {
         else await this.abandonMatch(matchId, event.missingSteamIds, event.reason)
         return
     }
+  }
+
+  // Live score for anyone following the match page
+  async sendMatchUpdate(matchId: string, lastRound?: MatchRoundView): Promise<void> {
+    const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
+    if (!m) return
+    const payload: MatchUpdatePayload = {
+      matchId,
+      status: m.status,
+      teams: teamScores(m.teams, m.score),
+      ...(lastRound ? { lastRound } : {}),
+    }
+    this.d.notifier.send({ kind: "match", matchId }, { type: "match_update", payload, ts: Date.now() })
   }
 
   private sendCancelled(m: MatchRow, reason: string): void {
@@ -625,6 +648,7 @@ export class MatchFlow {
       ratingChanges: r.changes,
     }
     toUsers(this.d.notifier, this.allSteamIds(r.m), "match_result", payload)
+    await this.sendMatchUpdate(matchId)
     await this.d.trust.recomputeMany(this.allSteamIds(r.m))
     await this.emitResult({ matchId, outcome: "completed", winnerTeam: r.winner ?? DRAW_WINNER, score: event.score })
   }
@@ -721,6 +745,7 @@ export class MatchFlow {
     }
     toUsers(this.d.notifier, this.allSteamIds(r.m), "match_result", payload)
     if (r.m.status !== "live") this.sendCancelled(r.m, reason)
+    await this.sendMatchUpdate(matchId)
     this.d.events?.emit("match", { event: "match_abandoned", matchId, reason, forfeiters: r.outcome.forfeiters })
     await this.emitResult({ matchId, outcome: "abandoned", reason, missingSteamIds: r.outcome.forfeiters })
   }

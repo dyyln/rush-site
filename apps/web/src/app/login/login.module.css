@@ -36,12 +36,3 @@
 .error {
   color: var(--color-loss);
 }
-.points {
-  margin: 0;
-  padding-left: var(--space-5);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}

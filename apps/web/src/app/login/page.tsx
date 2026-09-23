@@ -21,10 +21,7 @@ export default async function LoginPage({ searchParams }: Props) {
       <section className={styles.panel} aria-labelledby="login-heading">
         <p className="eyebrow">{BRAND_NAME}</p>
         <h1 id="login-heading">Sign in</h1>
-        <p className="muted">
-          Your Steam account is your identity here. We read your public profile and SteamID. We never see your
-          password.
-        </p>
+        <p className="muted">We never see your Steam password.</p>
         {error && (
           <p className={styles.error} role="alert">
             Steam sign in did not complete. Try again.
@@ -39,11 +36,6 @@ export default async function LoginPage({ searchParams }: Props) {
           </svg>
           <span>Sign in with Steam</span>
         </a>
-        <ul className={styles.points}>
-          <li>Three modes, each with its own rating</li>
-          <li>Rating shows from your first match</li>
-          <li>Free cups for Verified players</li>
-        </ul>
       </section>
     </div>
   );

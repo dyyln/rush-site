@@ -139,8 +139,7 @@ const QUEUE_ALL: QueueStatusPayload = {
 const lbColumns: Column<LeaderboardRow>[] = [
   { key: "rank", header: "#", cell: (r) => r.rank, numeric: true, width: "48px" },
   { key: "player", header: "Player", cell: (r) => r.displayName },
-  { key: "tier", header: "Tier", cell: (r) => <TierChip tier={r.tier} size="sm" />, hideOnMobile: true },
-  { key: "rating", header: "Rating", cell: (r) => r.rating, numeric: true },
+  { key: "rating", header: "Rating", cell: (r) => <TierChip tier={r.tier} rating={r.rating} size="sm" />, align: "right" },
 ];
 
 export function DesignGuide() {
@@ -232,10 +231,10 @@ export function DesignGuide() {
               <TierChip key={t.id} tier={t.id} />
             ))}
           </Specimen>
-          <Specimen label="With rating, small">
-            <TierChip rating={1729} showRating />
-            <TierChip rating={2311} showRating size="sm" />
-            <TierChip rating={940} showRating size="sm" />
+          <Specimen label="With rating">
+            <TierChip rating={1729} />
+            <TierChip rating={2311} size="sm" />
+            <TierChip rating={940} size="sm" />
           </Specimen>
         </Section>
 

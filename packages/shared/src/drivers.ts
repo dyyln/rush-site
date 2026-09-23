@@ -1,6 +1,8 @@
+import { z } from "zod"
 import type { StartServerRequest, StartServerResponse } from "./schemas/agent.js"
 
-export type ServerDriverName = "hetzner" | "dathost"
+export const ServerDriverNameSchema = z.enum(["hetzner", "dathost"])
+export type ServerDriverName = z.infer<typeof ServerDriverNameSchema>
 
 export interface ServerDriver {
   name: ServerDriverName

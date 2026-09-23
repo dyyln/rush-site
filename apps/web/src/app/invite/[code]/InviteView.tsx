@@ -30,7 +30,7 @@ export function InviteView({ code }: { code: string }) {
       <Card title="Party invite" tone="raised">
         <div className="stack">
           <p className="muted">
-            Invite code <span className="mono">{code}</span>. Joining a party leaves any queue you are in.
+            Invite code <span className="mono">{code}</span>
           </p>
           {error && (
             <p role="alert" style={{ color: "var(--color-loss)" }}>

@@ -94,7 +94,7 @@ The plugin reads its match config from `match.json` written by the agent next to
 
 Server -> client events:
 `queue_status`, `match_found` (accept window), `veto_state`, `server_ready` (ip, port, password, connect string), `match_result`, `party_update`, `tournament_update`, `mode_stats` (broadcast to all: per mode playersInQueue and matchesInProgress), `match_cancelled` (matchId, reason), `error` (code, message, sent to the client whose message was rejected), `admin_event` (admins only).
-Client -> server: `accept_match`, `veto_vote`, `queue_join` (payload `{ modes: Mode[] }`, every mode must have teamSize >= party size), `queue_leave` (payload `{ modes?: Mode[] }`, omit to leave all).
+Client -> server: `subscribe_match`, `unsubscribe_match`, `accept_match`, `veto_vote`, `queue_join` (payload `{ modes: Mode[] }`, every mode must have teamSize >= party size), `queue_leave` (payload `{ modes?: Mode[] }`, omit to leave all).
 
 One queue ticket per party holds a set of modes. Matching in any mode consumes the ticket and removes the party from every other mode. `queue_status` reports per-mode wait state.
 
@@ -146,3 +146,9 @@ interface ServerDriver {
 }
 ```
 Allocator order: every Hetzner host first. If none has a free slot, wait `SURGE_WAIT_SEC` (default 20) polling, then use DatHost. Matches record `driver` and `driverRef` on the matches table so stop and demo fetch route correctly. Env: `DATHOST_EMAIL` and `DATHOST_PASSWORD` (DatHost uses HTTP Basic, use a dedicated account), `DATHOST_TEMPLATE_SERVER_ID` (a prepared server with our plugin installed, cloned per match), `DATHOST_LOCATION` (default `dusseldorf`, their Frankfurt site), `SURGE_WAIT_SEC`. The API must call fetchDemo before stop, deleting the clone deletes its files.
+
+## Match pages
+
+`GET /matches/:id` is public and returns `{ match: { id, mode, mapId, status, driver, startedAt, endedAt, teams: [{ name, score, players: [{ steamId, displayName, avatarUrl, tier, rating, kills, deaths, headshots, damage }] }], rounds: [{ round, winnerTeam, score: Record<team, number>, arena?, endedAt }], tournament?: { id, name, bracketMatchId, bestOf, gameNumber } } }`. Connect info is only included for participants.
+Rounds come from `round_end` webhooks stored in `match_rounds`.
+Live: client sends `subscribe_match { matchId }` / `unsubscribe_match { matchId }`; server sends `match_update { matchId, status, teams: [{ name, score }], lastRound?: Round }` on every round_end, match_started, match_end and cancel to subscribers. Anyone may subscribe.

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { MODE_CONFIGS, MODES, type Mode, type ServerReadyPayload } from "@rushsite/shared";
-import { Badge } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -16,11 +15,10 @@ import { Timer } from "@/components/ui/Timer";
 import { useToast } from "@/components/ui/Toast";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { api } from "@/lib/api";
-import { isMock } from "@/lib/env";
 import { pct, signed } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
-import { MODE_COPY, hasLadderVeto, mapName, modeLabel } from "@/lib/modes";
+import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { usePlay } from "@/lib/usePlay";
 import styles from "./play.module.css";
@@ -58,7 +56,12 @@ export function PlayView() {
       const change = r.ratingChanges.find((c) => c.steamId === user?.steamId);
       toast.push({
         title: r.status === "abandoned" ? "Match abandoned" : `${modeLabel(r.mode)} match finished`,
-        body: change ? `Rating ${change.before} to ${change.after} (${signed(change.after - change.before)})` : undefined,
+        body: change ? (
+          <span className={styles.change}>
+            <TierChip tier={change.tierAfter} rating={change.after} size="sm" />
+            <span className={`mono ${change.after >= change.before ? styles.up : styles.down}`}>{signed(change.after - change.before)}</span>
+          </span>
+        ) : undefined,
         tone: r.status === "abandoned" ? "error" : "success",
       });
     }
@@ -80,7 +83,7 @@ export function PlayView() {
 
   function start() {
     if (eligible.length === 0) return;
-    if (!play.joinQueue(eligible)) toast.push({ title: "Not connected", body: "Live updates are reconnecting. Try again.", tone: "error" });
+    if (!play.joinQueue(eligible)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
   }
 
   async function createParty() {
@@ -104,7 +107,7 @@ export function PlayView() {
     return (
       <div className="container page">
         <Card title="Sign in to play" tone="raised">
-          <p className="muted">Queueing needs a Steam account so we can put you on the ladder.</p>
+          <p className="muted">Sign in with Steam to queue.</p>
           <div className={styles.signIn}>
             <ButtonLink href="/login">Sign in with Steam</ButtonLink>
           </div>
@@ -120,9 +123,8 @@ export function PlayView() {
       <header className="page-header">
         <div>
           <h1>Play</h1>
-          <p>Pick one or more modes, then start the queue.</p>
+          <p>Pick your modes.</p>
         </div>
-        {isMock && <Badge tone="warn">Mock data</Badge>}
       </header>
 
       <div className="grid-2">
@@ -221,14 +223,14 @@ export function PlayView() {
               </div>
               <p id="queue-hint" className={styles.hint}>
                 {!isLeader
-                  ? "Only the party leader can start the queue."
+                  ? "Leader starts the queue."
                   : queued
                     ? "Stop queue to change modes."
                     : cooldown
-                      ? "You declined or missed a match. Queue opens when the cooldown ends."
+                      ? "On cooldown."
                       : eligible.length === 0
-                        ? "Select at least one mode."
-                        : "The first match found takes you out of the other queues."}
+                        ? "Pick a mode."
+                        : ""}
               </p>
             </>
           )}
@@ -279,6 +281,10 @@ export function PlayView() {
             <Timer until={found.found.acceptDeadline} totalSec={found.found.acceptWindowSec} size="lg" label="Time to accept" />
             <div>
               <p className={styles.foundMode}>{modeLabel(found.found.mode)}</p>
+              {(() => {
+                const mine = me?.modes.find((m) => m.mode === found.found.mode);
+                return mine && mine.matches > 0 ? <TierChip tier={mine.tier} rating={mine.rating} size="sm" /> : null;
+              })()}
               <p className="muted" aria-live="polite">
                 {found.found.accepted} of {found.found.required} accepted
               </p>
@@ -287,8 +293,7 @@ export function PlayView() {
                   <li key={i} className={i < found.found.accepted ? styles.pipOn : undefined} />
                 ))}
               </ol>
-              {found.responded && <p className={styles.waiting}>Accepted. Waiting for the others.</p>}
-              {!found.responded && <p className="muted">Declining or letting the timer run out adds a short queue cooldown.</p>}
+              {found.responded && <p className={styles.waiting}>Accepted. Waiting for others.</p>}
             </div>
           </div>
         )}
@@ -303,13 +308,12 @@ function ServerReady({ server, mode }: { server: ServerReadyPayload; mode: Mode 
   const password = server.password || /password\s+(\S+)/.exec(server.connect)?.[1];
   const steamUrl = `steam://connect/${server.ip}:${server.port}${password ? `/${encodeURIComponent(password)}` : ""}`;
   const map = mode ? mapName(mode, server.mapId) : server.mapId;
-  const veto = mode ? hasLadderVeto(mode) : false;
 
   return (
     <Card tone="accent" eyebrow="Server ready" title={`Connect now, ${map}`}>
       <div className="stack">
         <p className="muted">
-          Players who do not connect forfeit and take the rating loss.{!veto && mode === "rush3v3" ? " Rooms are drawn by the server." : ""}
+          Join now or forfeit.
         </p>
         <label htmlFor="connect-string" className="visually-hidden">
           Console connect command
@@ -346,8 +350,7 @@ function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
   }
   return (
     <span className={styles.standing}>
-      <TierChip tier={s.tier} size="sm" />
-      <span className="mono">{s.rating}</span>
+      <TierChip tier={s.tier} rating={s.rating} size="sm" />
       <span className={`${styles.rank} mono`}>{s.leaderboardRank ? `#${s.leaderboardRank}` : "Unranked"}</span>
     </span>
   );

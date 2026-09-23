@@ -5,7 +5,7 @@ import { cx } from "./cx";
 import styles from "./Toast.module.css";
 
 export type ToastTone = "info" | "success" | "error";
-export type ToastInput = { title: string; body?: string; tone?: ToastTone; durationMs?: number };
+export type ToastInput = { title: string; body?: ReactNode; tone?: ToastTone; durationMs?: number };
 type ToastItem = ToastInput & { id: number; tone: ToastTone };
 
 type ToastApi = { push: (t: ToastInput) => void; dismiss: (id: number) => void };
@@ -67,7 +67,7 @@ export function Toast({
   onDismiss,
 }: {
   title: string;
-  body?: string;
+  body?: ReactNode;
   tone?: ToastTone;
   onDismiss?: () => void;
 }) {
@@ -75,7 +75,7 @@ export function Toast({
     <div className={cx(styles.toast, styles[tone])} role={tone === "error" ? "alert" : "status"}>
       <div className={styles.text}>
         <p className={styles.title}>{title}</p>
-        {body && <p className={styles.body}>{body}</p>}
+        {body && <div className={styles.body}>{body}</div>}
       </div>
       {onDismiss && (
         <button type="button" className={styles.close} onClick={onDismiss}>

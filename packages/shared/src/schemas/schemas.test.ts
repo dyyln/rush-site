@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
+  MatchDetailResponseSchema,
+  MatchDetailSchema,
   MatchEventSchema,
+  MatchRoundSchema,
   MatchWebhookBodySchema,
   StartServerRequestSchema,
   trustAtLeast,
@@ -161,6 +164,67 @@ describe("schemas", () => {
     expect(ServerMessageSchema.parse(eRef)).toEqual(eRef)
     expect(() => ServerMessageSchema.parse({ ...e, payload: { code: "x" } })).toThrow()
     expect(() => ServerMessageSchema.parse({ ...c, payload: { matchId: "bad", reason: "r" } })).toThrow()
+  })
+
+  it("parses match detail and live match messages", () => {
+    const round = { round: 1, winnerTeam: "a", score: { a: 1, b: 0 }, arena: "101", endedAt: "2026-09-23T12:00:00Z" }
+    const detail = {
+      match: {
+        id: MID,
+        mode: "rush3v3",
+        mapId: "rush_001",
+        status: "live",
+        driver: "hetzner",
+        startedAt: "2026-09-23T11:58:00Z",
+        endedAt: null,
+        teams: [
+          {
+            name: "a",
+            score: 1,
+            players: [
+              {
+                steamId: SID,
+                displayName: "p1",
+                avatarUrl: null,
+                tier: "silver",
+                rating: 1500,
+                kills: 2,
+                deaths: 0,
+                headshots: 1,
+                damage: 200,
+              },
+            ],
+          },
+          { name: "b", score: 0, players: [] },
+        ],
+        rounds: [round],
+        tournament: { id: MID, name: "Daily", bracketMatchId: MID, bestOf: 3, gameNumber: 1 },
+      },
+    }
+    expect(MatchDetailResponseSchema.parse(detail)).toEqual(detail)
+    expect(() => MatchDetailSchema.parse({ ...detail.match, status: "weird" })).toThrow()
+    expect(MatchRoundSchema.parse({ ...round, winnerTeam: "draw" }).winnerTeam).toBe("draw")
+
+    const update = serverMessage("match_update", {
+      matchId: MID,
+      status: "live",
+      teams: [
+        { name: "a", score: 1 },
+        { name: "b", score: 0 },
+      ],
+      lastRound: round,
+    })
+    expect(ServerMessageSchema.parse(update)).toEqual(update)
+    const bare = serverMessage("match_update", { matchId: MID, status: "cancelled", teams: [] })
+    expect(ServerMessageSchema.parse(bare)).toEqual(bare)
+
+    expect(ClientMessageSchema.parse({ type: "subscribe_match", payload: { matchId: MID }, ts: 1 }).type).toBe(
+      "subscribe_match",
+    )
+    expect(ClientMessageSchema.parse({ type: "unsubscribe_match", payload: { matchId: MID }, ts: 1 }).type).toBe(
+      "unsubscribe_match",
+    )
+    expect(() => ClientMessageSchema.parse({ type: "subscribe_match", payload: {}, ts: 1 })).toThrow()
   })
 
   it("veto state round trips", () => {

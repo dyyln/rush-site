@@ -2,7 +2,11 @@ import type { Redis } from "ioredis"
 import type { WsEnvelope } from "@rushsite/shared"
 
 export type Outgoing = WsEnvelope
-export type Audience = { kind: "users"; steamIds: string[] } | { kind: "broadcast" } | { kind: "admins" }
+export type Audience =
+  | { kind: "users"; steamIds: string[] }
+  | { kind: "broadcast" }
+  | { kind: "admins" }
+  | { kind: "match"; matchId: string }
 
 // Anything services use to push messages to connected players
 export interface Notifier {
@@ -20,11 +24,40 @@ export interface SocketLike {
 }
 
 const OPEN = 1
+export const MAX_MATCH_SUBSCRIPTIONS = 20
 
 // Sockets connected to this process
 export class LocalHub {
   private readonly byUser = new Map<string, Set<SocketLike>>()
   private readonly admins = new Set<SocketLike>()
+  private readonly matchSubs = new Map<string, Set<SocketLike>>()
+  private readonly socketMatches = new Map<SocketLike, Set<string>>()
+
+  // Returns false when the socket already follows the maximum number of matches
+  subscribeMatch(socket: SocketLike, matchId: string): boolean {
+    const mine = this.socketMatches.get(socket) ?? new Set<string>()
+    if (!mine.has(matchId) && mine.size >= MAX_MATCH_SUBSCRIPTIONS) return false
+    mine.add(matchId)
+    this.socketMatches.set(socket, mine)
+    const subs = this.matchSubs.get(matchId) ?? new Set<SocketLike>()
+    subs.add(socket)
+    this.matchSubs.set(matchId, subs)
+    return true
+  }
+
+  unsubscribeMatch(socket: SocketLike, matchId: string): void {
+    this.socketMatches.get(socket)?.delete(matchId)
+    const subs = this.matchSubs.get(matchId)
+    if (!subs) return
+    subs.delete(socket)
+    if (subs.size === 0) this.matchSubs.delete(matchId)
+  }
+
+  // Drops every match subscription of a closed socket
+  dropSocket(socket: SocketLike): void {
+    for (const id of this.socketMatches.get(socket) ?? []) this.unsubscribeMatch(socket, id)
+    this.socketMatches.delete(socket)
+  }
 
   add(steamId: string, socket: SocketLike, isAdmin = false): void {
     if (isAdmin) this.admins.add(socket)
@@ -38,6 +71,7 @@ export class LocalHub {
 
   remove(steamId: string, socket: SocketLike): void {
     this.admins.delete(socket)
+    this.dropSocket(socket)
     const set = this.byUser.get(steamId)
     if (!set) return
     set.delete(socket)
@@ -51,7 +85,9 @@ export class LocalHub {
         ? [...this.byUser.values()]
         : audience.kind === "admins"
           ? [this.admins]
-          : audience.steamIds.map((id) => this.byUser.get(id)).filter((s): s is Set<SocketLike> => !!s)
+          : audience.kind === "match"
+            ? [this.matchSubs.get(audience.matchId) ?? new Set<SocketLike>()]
+            : audience.steamIds.map((id) => this.byUser.get(id)).filter((s): s is Set<SocketLike> => !!s)
     for (const set of targets) {
       for (const socket of set) {
         if (socket.readyState === OPEN) socket.send(data)

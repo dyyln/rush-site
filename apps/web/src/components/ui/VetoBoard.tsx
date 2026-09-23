@@ -34,8 +34,7 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
     const h = state.history.find((e) => e.mapId === mapId);
     if (h) {
       const who = h.team === myTeam ? "your team" : "opponents";
-      const extra = h.noVotes ? ", no votes" : h.tieBroken ? ", tie broken" : "";
-      return { state: h.action === "ban" ? "banned" : "picked", note: `By ${who}${extra}` };
+      return { state: h.action === "ban" ? "banned" : "picked", note: `By ${who}` };
     }
     if (state.done && state.maps.includes(mapId)) return { state: "decider" };
     return { state: "available" };
@@ -48,12 +47,12 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
       : `Opponents ${step!.action}`;
 
   const sub = state.done
-    ? "Veto complete. Waiting for the server."
+    ? "Starting server."
     : myTurn
       ? myVote
-        ? `You voted ${mapName(mode, myVote)}. Change it until everyone has voted.`
-        : `Every teammate votes. Majority wins, ties are random.`
-      : "Waiting for the other team.";
+        ? `You voted ${mapName(mode, myVote)}.`
+        : "Pick a map to ban."
+      : "Waiting for opponents.";
 
   return (
     <section className={styles.board} aria-labelledby="veto-heading">

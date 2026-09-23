@@ -30,8 +30,7 @@ const columns: Column<LeaderboardRow>[] = [
       </Link>
     ),
   },
-  { key: "tier", header: "Tier", cell: (r) => <TierChip tier={r.tier} size="sm" />, hideOnMobile: true },
-  { key: "rating", header: "Rating", cell: (r) => r.rating, numeric: true },
+  { key: "rating", header: "Rating", cell: (r) => <TierChip tier={r.tier} rating={r.rating} size="sm" />, align: "right" },
   { key: "winrate", header: "Win %", cell: (r) => pct(winRate(r.wins, r.matches)), numeric: true, hideOnMobile: true },
   { key: "matches", header: "Matches", cell: (r) => r.matches, numeric: true, hideOnMobile: true },
 ];
@@ -60,7 +59,7 @@ export function LeaderboardView() {
       <header className="page-header">
         <div>
           <h1>Leaderboard</h1>
-          <p>Global, one ladder per mode. Players need {LEADERBOARD_MIN_MATCHES} matches in a mode to place.</p>
+          <p>{LEADERBOARD_MIN_MATCHES} matches to place.</p>
         </div>
       </header>
 

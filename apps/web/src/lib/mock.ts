@@ -1,5 +1,6 @@
 // Deterministic mock data so server and client renders match.
 import { AIM_MAPS, MODES, RUSH_MAP, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { MOCK_LIVE_MATCH_ID, MOCK_MATCH_HINTS } from "./mock-match";
 import type {
   Bracket,
   BracketMatch,
@@ -37,6 +38,12 @@ const NAMES = [
   "kettle", "embr", "crane", "dusk", "haze", "morrow", "pike", "ridley", "slate", "tovi",
   "umber", "wren", "yarrow", "zeph", "alder", "brisk", "cinder", "dover", "elm", "flint",
 ];
+
+// Stable fake UUID from any string
+export function mockUuid(key: string): string {
+  const hex = [hash(key), hash(key + "1"), hash(key + "2"), hash(key + "3")].map((n) => n.toString(16).padStart(8, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 export function mockSteamId(i: number): string {
   return String(76561198000000000n + BigInt(1000 + i * 7919));
@@ -141,23 +148,29 @@ function mockModeStats(steamId: string, mode: Mode): ModeStats {
   };
 }
 
+function hinted(id: string, mode: Mode, mapId: string): string {
+  MOCK_MATCH_HINTS.set(id, { mode, mapId });
+  return id;
+}
+
 function mockMatches(steamId: string): MatchSummary[] {
   const r = rng(hash(steamId + "matches"));
   return Array.from({ length: 12 }, (_, i) => {
     const mode = MODES[Math.floor(r() * MODES.length)]!;
     const aim = mode !== "rush3v3";
     const win = r() > 0.45;
-    const loserScore = Math.floor(r() * (aim ? 15 : 3));
+    const loserScore = Math.floor(r() * (aim ? 15 : 7));
+    const mapId = aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : RUSH_MAP.id;
     const kills = 8 + Math.floor(r() * 20);
     const abandoned = i === 7;
     return {
-      matchId: `00000000-0000-4000-8000-${String(hash(steamId + i)).padStart(12, "0").slice(0, 12)}`,
+      matchId: hinted(mockUuid(steamId + i), mode, mapId),
       mode,
-      mapId: aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : RUSH_MAP.id,
+      mapId,
       playedAt: new Date(MOCK_NOW - i * DAY * 0.6 - r() * DAY * 0.3).toISOString(),
       result: abandoned ? "abandoned" : win ? "win" : "loss",
-      scoreFor: win ? (aim ? 16 : 4) : loserScore,
-      scoreAgainst: win ? loserScore : aim ? 16 : 4,
+      scoreFor: win ? (aim ? 16 : 8) : loserScore,
+      scoreAgainst: win ? loserScore : aim ? 16 : 8,
       ratingDelta: abandoned ? -28 : win ? 8 + Math.round(r() * 14) : -(8 + Math.round(r() * 14)),
       kills,
       deaths: 6 + Math.floor(r() * 18),
@@ -332,8 +345,8 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
         const aWins = r() > 0.35;
         winner = aWins ? a : b;
         const need = Math.ceil(bestOf / 2);
-        for (let g = 0; g < need; g++) games.push({ matchId: `m-${round}-${index}-${g}`, winner: aWins ? "a" : "b" });
-        if (bestOf > 1) games.splice(1, 0, { matchId: `m-${round}-${index}-x`, winner: aWins ? "b" : "a" });
+        for (let g = 0; g < need; g++) games.push({ matchId: mockUuid(`${t.id}-${round}-${index}-${g}`), winner: aWins ? "a" : "b" });
+        if (bestOf > 1) games.splice(1, 0, { matchId: mockUuid(`${t.id}-${round}-${index}-x`), winner: aWins ? "b" : "a" });
       }
       winners.push(winner);
       matches.push({
@@ -349,7 +362,7 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
         bResolved: round === 1 || !!b,
         status: done ? "done" : live ? "live" : a && b ? "ready" : "pending",
         games,
-        liveMatchId: live ? "live-1" : null,
+        liveMatchId: live ? MOCK_LIVE_MATCH_ID : null,
         winner,
         resolution: bye ? "bye" : done ? "played" : null,
       });

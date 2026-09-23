@@ -95,7 +95,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
           </div>
           <h1 className={styles.title}>{t.name}</h1>
           <p>
-            {MODE_COPY[t.mode].label}. {formatLabel(t)}. No check in, absent players forfeit round one.
+            {MODE_COPY[t.mode].label}. {formatLabel(t)}.
           </p>
         </div>
         {t.status === "open" &&
@@ -104,8 +104,8 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
               <Button size="lg" variant={entered ? "danger" : "primary"} onClick={toggleEntry} loading={busy} disabled={!eligible || (!entered && full)}>
                 {entered ? "Withdraw" : full ? "Full" : "Enter cup"}
               </Button>
-              {!eligible && <p className={styles.note}>Your account needs {t.minTrust} trust to enter.</p>}
-              {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>The party leader enters the whole party.</p>}
+              {!eligible && <p className={styles.note}>Requires a {t.minTrust} account.</p>}
+              {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
             </div>
           ) : (
             <ButtonLink href="/login" size="lg">

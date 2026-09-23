@@ -164,9 +164,8 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
     <button type="button" className={`${styles.ratingCard} ${active ? styles.active : ""}`} onClick={onSelect} aria-pressed={active}>
       <span className={styles.ratingTop}>
         <span className="eyebrow">{MODE_COPY[mode].label}</span>
-        {stats && <TierChip tier={stats.tier} size="sm" />}
       </span>
-      <span className={`${styles.ratingValue} mono`}>{stats ? stats.rating : "--"}</span>
+      <span className={styles.ratingValue}>{stats ? <TierChip tier={stats.tier} rating={stats.rating} /> : <span className="mono">--</span>}</span>
       <span className={styles.ratingSub}>
         {stats ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "No matches"}
       </span>

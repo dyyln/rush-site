@@ -3,6 +3,7 @@ import { SteamId64Schema, UuidSchema } from "./schemas/common.js"
 import { ModeSchema } from "./schemas/mode.js"
 import { TrustLevelSchema } from "./schemas/trust.js"
 import { VetoStateSchema } from "./schemas/veto.js"
+import { MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
@@ -255,6 +256,15 @@ export const ErrorPayloadSchema = z.object({
 })
 export type ErrorPayload = z.infer<typeof ErrorPayloadSchema>
 
+// Sent to match subscribers on match_started, round_end, match_end and cancel
+export const MatchUpdatePayloadSchema = z.object({
+  matchId: UuidSchema,
+  status: MatchStatusSchema,
+  teams: z.array(z.object({ name: z.string(), score: z.number().int().nonnegative() })),
+  lastRound: MatchRoundSchema.optional(),
+})
+export type MatchUpdatePayload = z.infer<typeof MatchUpdatePayloadSchema>
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("queue_status", QueueStatusPayloadSchema),
   msg("match_found", MatchFoundPayloadSchema),
@@ -267,6 +277,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("admin_event", AdminEventPayloadSchema),
   msg("match_cancelled", MatchCancelledPayloadSchema),
   msg("error", ErrorPayloadSchema),
+  msg("match_update", MatchUpdatePayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]
@@ -297,11 +308,19 @@ export const QueueLeavePayloadSchema = z.object({
 })
 export type QueueLeavePayload = z.infer<typeof QueueLeavePayloadSchema>
 
+export const SubscribeMatchPayloadSchema = z.object({ matchId: UuidSchema })
+export type SubscribeMatchPayload = z.infer<typeof SubscribeMatchPayloadSchema>
+
+export const UnsubscribeMatchPayloadSchema = z.object({ matchId: UuidSchema })
+export type UnsubscribeMatchPayload = z.infer<typeof UnsubscribeMatchPayloadSchema>
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   msg("accept_match", AcceptMatchPayloadSchema),
   msg("veto_vote", VetoVotePayloadSchema),
   msg("queue_join", QueueJoinPayloadSchema),
   msg("queue_leave", QueueLeavePayloadSchema),
+  msg("subscribe_match", SubscribeMatchPayloadSchema),
+  msg("unsubscribe_match", UnsubscribeMatchPayloadSchema),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 export type ClientMessageType = ClientMessage["type"]

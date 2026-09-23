@@ -155,6 +155,7 @@ CREATE TABLE "match_rounds" (
 	"winner_team" text NOT NULL,
 	"score" jsonb NOT NULL,
 	"arena" text,
+	"ended_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "match_rounds_match_id_round_pk" PRIMARY KEY("match_id","round")
 );

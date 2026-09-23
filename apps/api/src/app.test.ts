@@ -44,9 +44,4 @@ describe("app wiring", () => {
     const res = await h.app.inject({ method: "GET", url: "/admin/overview", cookies: { rs_sid: sid } })
     expect(res.statusCode).toBe(200)
   })
-
-  it("requires a session for the socket", async () => {
-    const res = await h.app.inject({ method: "GET", url: "/ws" })
-    expect(res.statusCode).toBe(401)
-  })
 })

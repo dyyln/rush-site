@@ -2,9 +2,11 @@ import type { Mode, ModeStatsPayload, PartyUpdatePayload, QueueStatusPayload } f
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
 import { getRealtime } from "./ws";
+import { mockMatchDetail } from "./mock-match";
 import { MockRealtime, mockModeStats } from "./ws-mock";
 import type {
   Leaderboard,
+  MatchDetail,
   Profile,
   TournamentDetail,
   TournamentStatus,
@@ -123,6 +125,11 @@ export const api = {
   async modeStats(): Promise<ModeStatsPayload> {
     if (isMock) return mocked(mockModeStats());
     return request("GET", "/stats/modes");
+  },
+
+  async match(id: string): Promise<MatchDetail> {
+    if (isMock) return mocked(/^[0-9a-f-]{36}$/i.test(id) ? mockMatchDetail(id) : null, "Match not found");
+    return (await request<{ match: MatchDetail }>("GET", `/matches/${id}`)).match;
   },
 
   async leaderboard(mode: Mode, opts: { offset?: number; limit?: number } = {}): Promise<Leaderboard> {

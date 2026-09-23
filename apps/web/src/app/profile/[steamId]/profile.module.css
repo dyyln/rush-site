@@ -61,9 +61,8 @@
   gap: var(--space-2);
 }
 .ratingValue {
-  font-size: var(--text-3xl);
-  font-weight: 500;
-  line-height: 1.1;
+  font-size: var(--text-xl);
+  line-height: 1.2;
 }
 .ratingSub {
   font-size: var(--text-sm);

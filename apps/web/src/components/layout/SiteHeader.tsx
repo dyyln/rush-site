@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BRAND_NAME } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
-import { isMock } from "@/lib/env";
 import { useSession } from "@/lib/session";
 import styles from "./SiteHeader.module.css";
 
@@ -76,11 +75,6 @@ export function SiteHeader() {
           </ul>
         </nav>
       </div>
-      {isMock && (
-        <p className={styles.mockBar} role="note">
-          Mock data mode. No backend connected.
-        </p>
-      )}
     </header>
   );
 }

@@ -1,58 +1,20 @@
-import { MatchWebhookBodySchema, WEBHOOK_SIGNATURE_HEADER, type VetoState } from "@rushsite/shared"
+import { MatchWebhookBodySchema, WEBHOOK_SIGNATURE_HEADER } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { z } from "zod"
 import type { AppContext } from "../../context.js"
-import { matchPlayers, matches, vetoes } from "../../db/schema.js"
+import { matches } from "../../db/schema.js"
 import { badRequest, notFound } from "../../lib/errors.js"
 import { verifySignature } from "../../lib/hmac.js"
 import { requireUser } from "../auth/session.js"
+import { buildMatchPage } from "./match-page.js"
 
 const AcceptBody = z.object({ accept: z.boolean() })
 const VetoBody = z.object({ mapId: z.string().min(1) })
 const Uuid = z.uuid()
 
-export async function matchView(ctx: AppContext, matchId: string, viewer: string | null) {
-  const [m] = await ctx.db.select().from(matches).where(eq(matches.id, matchId))
-  if (!m) return null
-  const players = await ctx.db.select().from(matchPlayers).where(eq(matchPlayers.matchId, matchId))
-  const cards = await ctx.users.cards(players.map((p) => p.steamId))
-  const [veto] = await ctx.db.select().from(vetoes).where(eq(vetoes.matchId, matchId))
-  const participant = !!viewer && players.some((p) => p.steamId === viewer)
-  const showConnect = participant && (m.status === "ready" || m.status === "live" || m.status === "starting")
-  return {
-    id: m.id,
-    mode: m.mode,
-    status: m.status,
-    source: m.source,
-    region: m.region,
-    maps: m.maps ?? [],
-    mapId: m.mapId,
-    winnerTeam: m.winnerTeam,
-    score: m.score ?? {},
-    acceptDeadline: m.acceptDeadline?.getTime() ?? null,
-    createdAt: m.createdAt.toISOString(),
-    endedAt: m.endedAt?.toISOString() ?? null,
-    teams: m.teams.map((t, idx) => ({
-      name: t.name,
-      players: players
-        .filter((p) => p.team === idx)
-        .map((p) => ({
-          steamId: p.steamId,
-          displayName: cards.get(p.steamId)?.displayName ?? p.steamId,
-          avatarUrl: cards.get(p.steamId)?.avatarUrl ?? null,
-          accepted: p.accepted,
-          connected: p.connected,
-          abandoned: p.abandoned,
-          kills: p.kills,
-          deaths: p.deaths,
-          headshots: p.headshots,
-          damage: p.damage,
-        })),
-    })),
-    veto: veto ? { state: veto.state as VetoState, stepDeadline: veto.stepDeadline?.getTime() ?? null } : null,
-    connect: showConnect ? m.connect : null,
-  }
+export function matchView(ctx: AppContext, matchId: string, viewer: string | null) {
+  return buildMatchPage(ctx, matchId, viewer)
 }
 
 async function rawJsonParser(req: FastifyRequest, body: Buffer): Promise<unknown> {
@@ -72,9 +34,9 @@ export function registerMatchRoutes(app: FastifyInstance, ctx: AppContext): void
     const { id } = req.params as { id: string }
     if (!Uuid.safeParse(id).success) throw notFound("match_not_found")
     const viewer = await ctx.auth(req)
-    const view = await matchView(ctx, id, viewer)
-    if (!view) throw notFound("match_not_found")
-    return view
+    const match = await matchView(ctx, id, viewer)
+    if (!match) throw notFound("match_not_found")
+    return { match }
   })
 
   app.post("/matches/:id/accept", async (req, reply) => {

@@ -35,7 +35,7 @@ export function TournamentsView() {
       <header className="page-header">
         <div>
           <h1>Tournaments</h1>
-          <p>Free daily and weekly cups. Verified players only. Placings earn profile badges.</p>
+          <p>Free daily and weekly cups for Verified players.</p>
         </div>
         <Select
           label="Mode"

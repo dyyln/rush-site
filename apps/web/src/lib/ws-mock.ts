@@ -14,6 +14,7 @@ import {
   type VetoState,
 } from "@rushsite/shared";
 import { hasLadderVeto } from "./modes";
+import { mockMatchDetail } from "./mock-match";
 import { MOCK_ME, mockSteamId } from "./mock";
 import { Emitter, type ClientPayload, type ConnectionState, type Realtime } from "./ws-core";
 
@@ -60,6 +61,33 @@ export class MockRealtime extends Emitter implements Realtime {
     this.ticker = null;
     this.state = "closed";
     this.emitState("closed");
+  }
+
+  private matchSubs = new Map<string, ReturnType<typeof setInterval>>();
+
+  sendRaw(type: string, payload: unknown): boolean {
+    const matchId = (payload as { matchId?: string } | null)?.matchId;
+    if (!matchId) return false;
+    if (type === "subscribe_match" && !this.matchSubs.has(matchId)) {
+      let seen = mockMatchDetail(matchId).rounds.length;
+      const t = setInterval(() => {
+        const m = mockMatchDetail(matchId);
+        if (m.rounds.length === seen) return;
+        seen = m.rounds.length;
+        this.dispatchRaw("match_update", {
+          matchId,
+          status: m.status,
+          teams: m.teams.map((x) => ({ name: x.name, score: x.score })),
+          lastRound: m.rounds.at(-1),
+        });
+      }, 1000);
+      this.matchSubs.set(matchId, t);
+    }
+    if (type === "unsubscribe_match") {
+      clearInterval(this.matchSubs.get(matchId));
+      this.matchSubs.delete(matchId);
+    }
+    return true;
   }
 
   send<T extends ClientMessageType>(type: T, payload: ClientPayload<T>): boolean {
@@ -297,7 +325,7 @@ export class MockRealtime extends Emitter implements Realtime {
         mode,
         status: "completed",
         winnerTeam: "team_a",
-        score: mode === "rush3v3" ? { team_a: 4, team_b: 2 } : { team_a: 16, team_b: 11 },
+        score: mode === "rush3v3" ? { team_a: 8, team_b: 5 } : { team_a: 16, team_b: 11 },
         ratingChanges: [
           { steamId: MOCK_ME.steamId, before: 1712, after: 1729, tierBefore: "gold", tierAfter: "gold" },
         ],

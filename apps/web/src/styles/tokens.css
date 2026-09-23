@@ -35,6 +35,10 @@
   --color-warn: #e0c36a;
   --color-warn-subtle: #2a2414;
 
+  /* Neutral team colours for spectator views */
+  --team-a: var(--color-accent);
+  --team-b: #c9ccd4;
+
   /* Tiers. Each passes 4.5:1 on surface-1 */
   --tier-iron: #a7a9b0;
   --tier-bronze: #d19a6a;

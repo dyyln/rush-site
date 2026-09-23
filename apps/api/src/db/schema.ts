@@ -232,6 +232,7 @@ export const matchRounds = pgTable(
     score: jsonb("score").$type<Record<string, number>>().notNull(),
     // Rush arena the round was played on
     arena: text("arena"),
+    endedAt: ts("ended_at").notNull().defaultNow(),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.matchId, t.round] })],
