@@ -271,7 +271,7 @@ function Lineup({ m, sideOf }: Pick<StatsProps, "m" | "sideOf">) {
   return (
     <div className={styles.tables}>
       {m.teams.map((t, i) => (
-        <section key={t.name} aria-labelledby={`team-${i}`} className="stack">
+        <section key={t.name} aria-labelledby={`team-${i}`} className={cx("glass", styles.teamPanel)} data-side={sideOf(i)}>
           <h2 id={`team-${i}`} className={styles.teamHeading}>
             <TeamMarker side={sideOf(i)} />
             {t.displayName ?? t.name}
@@ -497,7 +497,7 @@ function PlayerTables({ m, sideOf, topDamage }: { m: MatchDetail; sideOf: (i: nu
   return (
     <div className={styles.tables}>
       {m.teams.map((t, i) => (
-        <section key={t.name} aria-labelledby={`team-${i}`} className="stack">
+        <section key={t.name} aria-labelledby={`team-${i}`} className={cx("glass", styles.teamPanel)} data-side={sideOf(i)}>
           <h2 id={`team-${i}`} className={styles.teamHeading}>
             <TeamMarker side={sideOf(i)} />
             {t.displayName ?? t.name}

@@ -84,18 +84,49 @@
 }
 .tables {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 @media (min-width: 900px) {
   .tables {
     grid-template-columns: 1fr 1fr;
   }
 }
+/* One glass panel per team, its header edged in the team colour like the veto band */
+.teamPanel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+}
 .teamHeading {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--team-own);
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team-own) 18%, transparent), transparent 70%);
+  font-family: var(--font-display);
   font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.teamPanel[data-side="enemy"] .teamHeading {
+  border-left-color: var(--team-enemy);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team-enemy) 16%, transparent), transparent 70%);
+}
+/* Tables sit flat inside the team panel */
+.teamPanel :global(.glass) {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .player {
   display: flex;
@@ -164,10 +195,15 @@
 .lineup {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: var(--space-2) 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+}
+.lineup > li {
+  padding: 0 var(--space-4);
+}
+.lineup > li + li {
+  border-top: 1px solid var(--color-border);
 }
 
 /* Status badges and actions share the top row of the header, the actions wrap under on phones */
@@ -226,7 +262,14 @@
 
 /* Series: a small totals tab, then one card per map that is also its tab */
 .seriesTitle {
-  font-size: var(--text-lg);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.7);
 }
 .seriesTabs {
   display: grid;
@@ -234,64 +277,90 @@
 }
 @media (min-width: 700px) {
   .seriesTabs {
-    grid-template-columns: auto repeat(var(--maps, 3), minmax(0, 1fr));
+    grid-template-columns: 140px repeat(var(--maps, 3), minmax(0, 1fr));
     align-items: stretch;
   }
 }
 .totalsTab,
 .mapTab {
+  position: relative;
   min-height: var(--target-min);
   padding: 0;
   font: inherit;
   color: var(--color-text);
   text-align: left;
   background: var(--color-surface-1);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-normal) var(--ease);
 }
 .totalsTab {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
   font-family: var(--font-display);
   font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  text-align: center;
   color: var(--color-text-muted);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.totalsTab:hover,
+.mapTab:hover:not([aria-disabled="true"]) {
+  border-color: rgb(255 255 255 / 0.4);
 }
 .totalsTab[aria-selected="true"],
 .mapTab[aria-selected="true"] {
   color: var(--color-text);
-  border-color: var(--color-accent);
-  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--color-accent);
+  border-color: var(--color-accent-hover);
+  box-shadow: inset 0 0 0 1px var(--color-accent), 0 0 24px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+.totalsTab:focus-visible,
+.mapTab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .mapTab {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-}
-@media (min-width: 700px) {
-  .mapTab {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 132px;
+  isolation: isolate;
 }
 .mapTab[data-status="live"]:not([aria-selected="true"]) {
-  border-color: var(--color-border-strong);
+  border-color: color-mix(in srgb, var(--color-win) 60%, transparent);
 }
 .mapTab[aria-disabled="true"] {
   cursor: default;
-  color: var(--color-text-muted);
 }
 .mapTab[aria-disabled="true"] .mapTabImage {
-  opacity: 0.45;
-  filter: grayscale(0.7);
+  opacity: 0.5;
+  filter: grayscale(0.8);
 }
+/* The art fills the tab. A scrim at the bottom carries the text */
 .mapTabImage {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   display: block;
 }
 .mapTabImage img,
-.mapTabImage > span {
+.mapTabImage:not(.roomRow) > span {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   border-radius: 0;
+}
+.mapTab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(8 7 12 / 0.1) 20%, rgb(8 7 12 / 0.88) 100%);
+  pointer-events: none;
 }
 .mapTabBody {
   display: flex;
@@ -311,13 +380,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
   font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mapTabName :global(.muted) {
+  color: var(--color-text);
 }
 .mapTabScore {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 0.7);
 }
 .mapTabScore [data-side="own"] {
   color: var(--team-own);
@@ -331,8 +409,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 16 / 6;
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-2) var(--space-6);
   background: var(--color-surface-1);
 }
 .roomRowItem {
