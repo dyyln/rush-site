@@ -100,4 +100,6 @@ public sealed class MatchSettings
     public int TeamJoinRefusalsBeforeKick { get; init; } = 3;
     // Rush. Hold warmup with mp_warmup_pausetimer until every player is in and on their side.
     public bool HoldRushWarmup { get; init; } = true;
+    // Rush. Send the veto's rushRooms to our rush_001.js on each map.
+    public bool RushRooms { get; init; } = true;
 }

@@ -2,7 +2,33 @@
 
 This is the handoff for the game side of the Rush room veto. The website side is being built separately: a team-vote veto in the match room behind a config flag. This doc covers what has to change on the server so the rooms picked on the site are the rooms played, and how to prove it on a Windows machine with CS2 Workshop Tools.
 
-Nothing here has been tested yet. The plan comes from reading Valve's shipped script. See "Verified" and "Unverified" at the end.
+The plan below came from reading Valve's script. Parts of it turned out wrong on a real server. Read "Results" first.
+
+## Results (24 Sep 2026, CS2 1.41.8.3, build 2000915)
+
+Tested on a local Windows dedicated server (`cs2.exe -dedicated -insecure`) driven over RCON, with no players connected. The script and install steps are in `plugin/rush-script/`.
+
+| Plan step | Result |
+|---|---|
+| Loose `rush_001.vjs_c` in a search path above `csgo` (`Game csgo/rushsite`) | **Fails.** CS2 searches every path's VPKs before any loose directory, so `csgo/pak01` wins |
+| `pak01_dir.vpk` inside that search path | **Fails.** The server exits with a fatal error mounting it |
+| Single-file VPK named in gameinfo.gi: `Game csgo/rushsite_rooms.vpk` above `Game csgo` | **Works.** Our script runs instead of Valve's |
+| `-addon` or `map rush_001 <addon>` on a dedicated server | Not mounted |
+| `ent_fire rush_gamemode RunScriptInput ...` from the console or RCON | **Does nothing**, with or without `sv_cheats 1`. Even `ent_fire <name> Kill` does nothing |
+| Console chat, `say rushsite_rooms 203,207,102,211,205`, into `Instance.OnPlayerChat` with no player | **Works.** Rooms applied, `rushsite: rooms 401,203,207,102,211,205,301` |
+| Bad sets (mid room in slot 3, duplicates) | Rejected, rooms unchanged |
+| Forced rooms after `mp_restartgame 1` and after `mp_warmup_end` | Kept |
+
+- The point_script's targetname is `rush_gamemode`.
+- `Instance.Msg` output is not written to `-condebug` logs, but it comes back in the RCON reply of the command that triggered it.
+- So the channel is console chat, not script inputs. The plugin sends the `say` line.
+
+Still to test, with real players:
+- Spawns, antenna, fog and the HUD room names follow the forced rooms during rounds.
+- A vanilla client joins with no consistency kick and needs no copy of the script.
+- The decider at 7-7 still swaps in Convoy.
+- The plugin end to end on a server with CounterStrikeSharp. That includes the per round `rush_rooms_mismatch` check.
+- Linux: the gameinfo.gi line and VPK on the Hetzner box, and on the DatHost template.
 
 ## How the draw works today
 
@@ -134,6 +160,8 @@ The compiled `rush_001.vjs_c` has to win over the copy in `pak01`.
 - **Clients:** point_script is expected to run only on the server, and clients get room names through the networked `rush_ui` entity. If that holds, players need nothing extra and `sv_pure` doesn't matter. This must be tested with a vanilla client.
 
 ### 3. Plugin changes (CounterStrikeSharp, `plugin/`)
+
+Built, with unit tests (`RushRoomsTests.cs`). Not yet run on a server. The plugin README under "Rush rooms from the veto" describes the behaviour. Slot pools are enforced: slot 3 takes a start room, the other slots mid rooms. The plugin sends console chat, not `ent_fire`, see "Results". The original plan follows.
 
 - **Config:** read `rushRooms` from match.json. It is an ordered array of 5 room ids for slots 1 to 5, written by the API after the veto. It is optional: when it's absent or invalid, do nothing and keep the random draw. Validate against the id table above and reject duplicates.
 - **Firing the rooms:** on map load in Rush mode, once the point_script entity exists and before the match goes live, fire the inputs. Use `ent_fire <point_script targetname> RunScriptInput rushsite_room_<slot>_<id>` for each slot, then `rushsite_rooms_apply`. Find the point_script entity's targetname in the map with the plugin or `ent_find point_script`. Check that `RunScriptInput` is the right input name.
