@@ -1,5 +1,5 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type MatchMap, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import { teamSize } from "./modes";
 import { MOCK_TRUST } from "./trust";
 import type {
@@ -534,6 +534,9 @@ export const MOCK_LIVE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a1";
 export const MOCK_DONE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000b2";
 // Live 3v3 Rush that gains a round every few seconds, for the room track
 export const MOCK_LIVE_RUSH_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000d4";
+// Bo3 cup finals on one server: a finished aim final that goes to three maps, and a live Rush final on map 2
+export const MOCK_SERIES_AIM_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000e5";
+export const MOCK_SERIES_RUSH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000f6";
 // Finished with the viewer playing and no demo uploaded
 export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
 
@@ -647,6 +650,85 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
   return { ...base, ...mockMatchExtras(base, seed, { demo }) };
 }
 
+// A Bo3 on one server from single map builds. Maps are played until a team has two. live stops at that map
+// after that many rounds, and later maps are upcoming. For a finished series the seeds are searched so
+// it goes the distance, which shows every part of the series view
+function buildSeries(
+  id: string,
+  mode: Mode,
+  mapIds: string[],
+  seed: number,
+  live: { map: number; rounds: number } | null,
+  startedAt: number,
+  cup: { id: string; name: string; bracketMatchId: string },
+): MatchDetail {
+  let base = seed;
+  const winnerOf = (m: MatchDetail) => ([...m.teams].sort((x, y) => y.score - x.score)[0]!.name);
+  if (!live) {
+    // First seed pair that splits the first two maps
+    while (winnerOf(build(id, mode, mapIds[0]!, base, null, startedAt)) === winnerOf(build(id, mode, mapIds[1]!, base + 1, null, startedAt))) base += 2;
+  }
+  const maps: MatchMap[] = [];
+  const all: MatchDetail[] = [];
+  const wins: Record<string, number> = {};
+  let at = startedAt;
+  for (let i = 0; i < mapIds.length; i++) {
+    const number = i + 1;
+    const decided = Object.values(wins).some((w) => w >= 2);
+    const isLive = live?.map === number;
+    const upcoming = decided || (live !== null && number > live.map);
+    const m = build(`${id}-map${number}`, mode, mapIds[i]!, base + i, isLive ? live!.rounds : upcoming ? 0 : null, at);
+    const finishedMap = !upcoming && m.status === "finished";
+    if (finishedMap) {
+      const w = winnerOf(m);
+      wins[w] = (wins[w] ?? 0) + 1;
+    }
+    if (!upcoming) all.push(m);
+    maps.push({
+      mapNumber: number,
+      mapId: mapIds[i]!,
+      status: upcoming ? "upcoming" : finishedMap ? "done" : "live",
+      winnerTeam: finishedMap ? winnerOf(m) : null,
+      score: Object.fromEntries(m.teams.map((t) => [t.name, upcoming ? 0 : t.score])),
+      ...(upcoming ? {} : { players: m.teams.flatMap((t) => t.players), demo: finishedMap ? m.demo : undefined }),
+      ...(m.rushRooms && !upcoming ? { rushRooms: m.rushRooms } : {}),
+    });
+    at += (m.rounds.length + 3) * 60_000;
+  }
+  const first = all[0]!;
+  // Series totals: maps won as the score, player stats summed over the maps played
+  const teams: MatchTeam[] = first.teams.map((t) => ({
+    ...t,
+    score: wins[t.name] ?? 0,
+    players: t.players.map((p) => {
+      const lines = all.flatMap((m) => m.teams.flatMap((x) => x.players)).filter((x) => x.steamId === p.steamId);
+      return {
+        ...p,
+        kills: lines.reduce((n, x) => n + x.kills, 0),
+        deaths: lines.reduce((n, x) => n + x.deaths, 0),
+        headshots: lines.reduce((n, x) => n + x.headshots, 0),
+        damage: lines.reduce((n, x) => n + x.damage, 0),
+      };
+    }),
+  }));
+  const done = live === null;
+  return {
+    ...first,
+    id,
+    mapId: mapIds[0]!,
+    status: done ? "finished" : "live",
+    endedAt: done ? new Date(at).toISOString() : null,
+    bestOf: 3,
+    maps,
+    teams,
+    rounds: all.flatMap((m, i) => m.rounds.map((r) => ({ ...r, mapNumber: i + 1 }))),
+    kills: all.flatMap((m, i) => (m.kills ?? []).map((k) => ({ ...k, mapNumber: i + 1 }))),
+    rushRooms: undefined,
+    tournament: { ...cup, bestOf: 3, gameNumber: 1 },
+    ...(done ? {} : { ratingDeltas: undefined, mvp: undefined }),
+  };
+}
+
 // The match the mock socket runs. The room starts at the accept step and the socket moves it on
 export const MOCK_ROOM_MATCH_ID = "9d4f1c2a-7b3e-4a5d-8c6f-1e2d3c4b5a69";
 export const MOCK_ROOM_SLUG = "brave-amber-falcon";
@@ -701,6 +783,22 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
     return build(id, "rush3v3", RUSH_MAP.id, 5, played, LIVE_START - 5 * 60_000, true);
   }
   if (id === MOCK_DONE_MATCH_ID) return build(id, "rush3v3", RUSH_MAP.id, 7, null, now - 3 * 3_600_000);
+  if (id === MOCK_SERIES_AIM_ID) {
+    return buildSeries(id, "aim2v2", ["aim_redline", "aim_usp", "awp_india"], 300, null, now - 5 * 3_600_000, {
+      id: MOCK_TOURNAMENT_IDS[1]!,
+      name: "Daily Aim Cup",
+      bracketMatchId: "final",
+    });
+  }
+  if (id === MOCK_SERIES_RUSH_ID) {
+    // Map 1 done, map 2 live and gaining a round every few seconds like the other live mocks
+    const played = 3 + (Math.floor((now - LIVE_START) / MOCK_ROUND_MS) % 12);
+    return buildSeries(id, "rush3v3", [RUSH_MAP.id, RUSH_MAP.id, RUSH_MAP.id], 400, { map: 2, rounds: played }, LIVE_START - 20 * 60_000, {
+      id: MOCK_TOURNAMENT_IDS[0]!,
+      name: "Daily Rush Cup",
+      bracketMatchId: "final",
+    });
+  }
   if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);
   const seed = hash(id);
   const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];
