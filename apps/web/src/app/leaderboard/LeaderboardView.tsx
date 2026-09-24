@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { isTestMode, LEADERBOARD_MIN_MATCHES, RANKED_MODES, type Mode } from "@rushsite/shared";
+import { isRushMode, isTestMode, LEADERBOARD_MIN_MATCHES, RANKED_MODES, type Mode } from "@rushsite/shared";
 import { useFriends } from "@/components/friends/store";
 import { TierDistributionBar } from "@/components/stats/TierDistributionBar";
 import { statsApi, type FriendRow, type FriendsLeaderboard } from "@/components/stats/statsApi";
@@ -12,13 +12,13 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
-import { Tabs } from "@/components/ui/Tabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { formatStat, winRate } from "@/lib/format";
 import { MODE_COPY, isMode } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
 import { useSession } from "@/lib/session";
+import { api } from "@/lib/api";
 import type { Leaderboard, LeaderboardRow } from "@/lib/types";
 
 // Says "1 match" or "N matches" depending on the count
@@ -184,6 +184,12 @@ export function LeaderboardView() {
   useEffect(() => setJump({ state: "idle" }), [mode, user?.steamId]);
 
   const columns = useMemo(() => buildColumns({ podium: !friends, friendIds, jumpedId }), [friends, friendIds, jumpedId]);
+  // The top three stand on a podium above the table on the first page of the global board
+  const allRows = (data.data?.rows ?? []) as BoardRow[];
+  const podium = !friends && page === 0 && !q && data.status === "success" ? allRows.filter((r) => !unplaced(r) && r.rank !== null && r.rank <= 3) : [];
+  const tableRows = podium.length === 3 ? allRows.filter((r) => !podium.includes(r)) : allRows;
+  const profile = useAsync(() => (user ? api.profile(user.steamId) : Promise.resolve(null)), [user?.steamId]);
+  const mine = profile.data?.modes.find((m) => m.mode === mode) ?? null;
   const totalPages = data.data && !friends ? Math.ceil(data.data.total / PAGE) : 1;
   const fb = friends ? (data.data as FriendsLeaderboard | null | undefined) : null;
   const friendsNote =
@@ -238,107 +244,146 @@ export function LeaderboardView() {
         : null;
 
   return (
-    <div className="container page">
-      <header className="page-header">
-        <div>
-          <h1>Leaderboard</h1>
-          <p>{matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place.</p>
+    <div className={cx("container", styles.page)}>
+      <h1 className="visually-hidden">Leaderboard</h1>
+      <div className={styles.head}>
+        <div className={styles.filters} role="group" aria-label="Mode">
+          {[...RANKED_MODES].sort((a, b) => Number(isRushMode(b)) - Number(isRushMode(a))).map((m) => (
+            <button key={m} type="button" aria-pressed={mode === m} onClick={() => go({ mode: m })}>
+              {MODE_COPY[m].label}
+            </button>
+          ))}
         </div>
-      </header>
+        <div className={styles.filters} role="group" aria-label="Board">
+          {(["global", "friends"] as const).map((b) => (
+            <button key={b} type="button" aria-pressed={board === b} onClick={() => go({ board: b })}>
+              {b === "global" ? "Global" : "Friends"}
+            </button>
+          ))}
+        </div>
+        <span className={styles.headNote}>{matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place</span>
+      </div>
 
-      <Tabs
-        label="Mode"
-        value={mode}
-        onChange={(m) => go({ mode: m })}
-        items={RANKED_MODES.map((m) => ({ key: m, label: MODE_COPY[m].label }))}
-      >
-        <div className="stack">
-          <TierDistributionBar data={dist.data ?? null} loading={dist.status === "loading"} />
-          <Tabs
-            label="Board"
-            idPrefix="board"
-            value={board}
-            onChange={(b) => go({ board: b })}
-            items={[
-              { key: "global", label: "Global" },
-              { key: "friends", label: "Friends" },
-            ]}
-          >
-            {!friends && (
-              <div className={styles.toolbar}>
-                <div className={styles.search} role="search">
-                  <label htmlFor={searchId} className="visually-hidden">
-                    Search players by name
-                  </label>
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className={styles.searchIcon}>
-                    <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
-                  <input
-                    id={searchId}
-                    type="search"
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={32}
-                    placeholder="Search by name"
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                  />
-                </div>
-                {user && (
-                  <Button variant="secondary" onClick={jumpToMe} loading={jump.state === "loading"} className={styles.jump}>
-                    Jump to my rank
-                  </Button>
-                )}
-              </div>
-            )}
-            {!friends && (jumpNote || q) && (
-              <p className={cx(styles.status, jumpNote && styles.statusWarn)} role="status">
-                {jumpNote ??
-                  (data.status === "success" && data.data
-                    ? `${searchHint} "${q}": ${data.data.total} ${data.data.total === 1 ? "player" : "players"}. Ranks are global.`
-                    : `Searching for "${q}"`)}
+      {podium.length === 3 && (
+        <ol className={styles.podiumCards} aria-label="Top three">
+          {[podium[1]!, podium[0]!, podium[2]!].map((r) => (
+            <li key={r.steamId} className={styles.podiumCard} data-place={r.rank}>
+              <Link href={`/profile/${r.steamId}`} id={rowId(r.steamId)} className={styles.podiumLink}>
+                <span className={styles.place}>
+                  <Medal rank={r.rank as 1 | 2 | 3} />
+                </span>
+                <Avatar name={r.displayName} src={r.avatarUrl} size="lg" />
+                <span className={styles.podiumName}>
+                  {r.displayName}
+                  {friendIds.has(r.steamId) && <FriendMark />}
+                </span>
+                <TierChip tier={r.tier} rating={r.rating} rank={r.rank} size="sm" link={false} />
+                <span className={styles.podiumMeta}>
+                  <span className="mono">{formatStat(winRate(r.wins, r.matches), "pct", r.matches)}</span> win · <span className="mono">{r.matches}</span>{" "}
+                  {r.matches === 1 ? "match" : "matches"}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <TierDistributionBar data={dist.data ?? null} loading={dist.status === "loading"} />
+
+      <div className={cx("glass", styles.panel)}>
+        {!friends && (
+          <div className={styles.toolbar}>
+            <div className={styles.search} role="search">
+              <label htmlFor={searchId} className="visually-hidden">
+                Search players by name
+              </label>
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className={styles.searchIcon}>
+                <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              <input
+                id={searchId}
+                type="search"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={32}
+                placeholder="Search by name"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+        {!friends && (jumpNote || q) && (
+          <p className={cx(styles.status, jumpNote && styles.statusWarn)} role="status">
+            {jumpNote ??
+              (data.status === "success" && data.data
+                ? `${searchHint} "${q}": ${data.data.total} ${data.data.total === 1 ? "player" : "players"}. Ranks are global.`
+                : `Searching for "${q}"`)}
+          </p>
+        )}
+        {friends && !user && !sessionLoading ? (
+          <Card as="div" tone="flat" padded={false} className={styles.notice}>
+            <p>Sign in to see where you stand against your Steam friends.</p>
+            <ButtonLink href="/login">Sign in with Steam</ButtonLink>
+          </Card>
+        ) : data.status === "error" ? (
+          <div className={styles.error} role="alert">
+            <p>Could not load the leaderboard.</p>
+            <Button variant="secondary" onClick={data.reload}>
+              Retry
+            </Button>
+          </div>
+        ) : (
+          <>
+            {friendsNote && (
+              <p className={styles.note} role="status">
+                {friendsNote}
               </p>
             )}
-            {friends && !user && !sessionLoading ? (
-              <Card as="div" tone="flat" padded={false} className={styles.notice}>
-                <p>Sign in to see where you stand against your Steam friends.</p>
-                <ButtonLink href="/login">Sign in with Steam</ButtonLink>
-              </Card>
-            ) : data.status === "error" ? (
-              <div className={styles.error} role="alert">
-                <p>Could not load the leaderboard.</p>
-                <Button variant="secondary" onClick={data.reload}>
-                  Retry
-                </Button>
-              </div>
-            ) : (
+            <Table
+              caption={`${MODE_COPY[mode].label} ${friends ? "friends " : ""}leaderboard`}
+              columns={columns}
+              rows={tableRows}
+              rowKey={(r) => r.steamId}
+              loading={data.status === "loading"}
+              highlight={(r) => r.steamId === user?.steamId}
+              empty={
+                friends
+                  ? `No placed friends yet. ${matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place.`
+                  : q
+                    ? `No placed players match "${q}".`
+                    : "No placed players yet."
+              }
+            />
+          </>
+        )}
+
+        {/* You stay pinned under the list, however far down you are */}
+        {user && !friends && (
+          <div className={styles.youRow}>
+            {mine && mine.matches >= LEADERBOARD_MIN_MATCHES && mine.leaderboardRank ? (
               <>
-                {friendsNote && (
-                  <p className={styles.note} role="status">
-                    {friendsNote}
-                  </p>
-                )}
-                <Table
-                  caption={`${MODE_COPY[mode].label} ${friends ? "friends " : ""}leaderboard`}
-                  columns={columns}
-                  rows={(data.data?.rows ?? []) as BoardRow[]}
-                  rowKey={(r) => r.steamId}
-                  loading={data.status === "loading"}
-                  highlight={(r) => r.steamId === user?.steamId}
-                  empty={
-                    friends
-                      ? `No placed friends yet. ${matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place.`
-                      : q
-                        ? `No placed players match "${q}".`
-                        : "No placed players yet."
-                  }
-                />
+                <span className={cx(styles.youRank, "mono")}>#{mine.leaderboardRank}</span>
+                <span className={styles.youPlayer}>
+                  <Avatar name={user.displayName} src={user.avatarUrl} size="sm" />
+                  <span className={styles.name}>{user.displayName}</span>
+                  <span className={styles.youTag}>You</span>
+                </span>
+                <TierChip tier={mine.tier} rating={mine.rating} rank={mine.leaderboardRank} size="sm" link={false} />
+                <span className={cx(styles.youStat, "mono")}>{formatStat(winRate(mine.wins, mine.matches), "pct", mine.matches)} win</span>
               </>
+            ) : (
+              <span className={styles.youNote}>
+                {mine && mine.matches > 0 ? `Not placed in ${MODE_COPY[mode].label} yet.` : `Play ${matchCountLabel(LEADERBOARD_MIN_MATCHES)} of ${MODE_COPY[mode].label} to get on this board.`}
+              </span>
             )}
-          </Tabs>
-        </div>
-      </Tabs>
+            <Button variant="secondary" onClick={jumpToMe} loading={jump.state === "loading"} className={styles.jump}>
+              Jump to my rank
+            </Button>
+          </div>
+        )}
+      </div>
 
       {totalPages > 1 && (
         <nav className={styles.pager} aria-label="Pages">
