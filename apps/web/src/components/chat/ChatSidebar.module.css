@@ -1,8 +1,9 @@
 /* Mobile first. The panel covers the screen and a button in the corner opens it */
+/* Sits above the dock on mobile, clear of its status pill */
 .toggle {
   position: fixed;
   left: var(--gutter);
-  bottom: var(--gutter);
+  bottom: calc(var(--dock-h) + var(--gutter));
   z-index: var(--z-chat);
   display: inline-flex;
   align-items: center;
@@ -93,6 +94,14 @@
 .modButton:hover {
   background: var(--color-surface-3);
   color: var(--color-text);
+}
+
+/* Message list and composer. Fills the panel, or Play's side panel */
+.bodyWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .list {

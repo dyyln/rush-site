@@ -150,8 +150,11 @@ export function Dock() {
       <div className={cx("container", styles.inner)}>
         <div className={styles.left}>
           <StatusPill status={service} />
-          <span className={styles.state} aria-live="polite">
-            <span className={styles.label}>{label}</span>
+          <span className={styles.state}>
+            {/* Only the state word is announced. The value holds ticking countdowns */}
+            <span className={styles.label} aria-live="polite">
+              {label}
+            </span>
             <span className={styles.value}>{value}</span>
           </span>
         </div>

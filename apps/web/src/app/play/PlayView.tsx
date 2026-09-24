@@ -1,55 +1,49 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { isTestMode, MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode, type TrustLevel } from "@rushsite/shared";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { useEffect, useRef, useState } from "react";
+import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode } from "@rushsite/shared";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
-import { PartyPanel } from "@/components/ui/PartyPanel";
-import { GetVerifiedCard } from "@/components/trust/GetVerifiedCard";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { readFlag, writeFlag } from "@/components/profile/flags";
-import { InvitePopover } from "@/components/party/InvitePopover";
 import { FriendsCard } from "@/components/friends/FriendsCard";
-import { PartySize } from "@/components/ui/PartySize";
-import { QueueStatus } from "@/components/ui/QueueStatus";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
-import { ModeCardWarning } from "@/components/stats/ModeCardWarning";
-import { modeUnavailable, offeredModes, useServiceStatus } from "@/components/stats/useServiceStatus";
-import { Throbber } from "@/components/ui/Throbber";
-import { SignInLink } from "@/components/ui/SignInLink";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { StatTile } from "@/components/ui/StatTile";
+import { offeredModes, useServiceStatus } from "@/components/stats/useServiceStatus";
+import { Card } from "@/components/ui/Card";
 import { FormDots } from "@/components/ui/FormDots";
+import { PartySize } from "@/components/ui/PartySize";
+import { Throbber } from "@/components/ui/Throbber";
 import { TierChip } from "@/components/ui/TierChip";
 import { useToast } from "@/components/ui/Toast";
-import { ApiError, api } from "@/lib/api";
+import { cx } from "@/components/ui/cx";
+import { api } from "@/lib/api";
 import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
-import { TRUST_NAMES } from "@/lib/trust";
+import { trustProgressLine, type TrustStatus } from "@/lib/trust";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { activeMatch, usePlay } from "@/lib/usePlay";
-import { StartCountdown } from "@/components/play/StartCountdown";
-import { ModeMapPool, mapPoolId } from "@/components/play/ModeMapPool";
-import { cancelCopy, describeError, knownError } from "@/lib/errors";
-import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
-import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
+import { mapPoolId } from "@/components/play/ModeMapPool";
+import { setGlobalParty, useGlobalPlay } from "@/components/play/playStore";
+import { modeBlockReason, partySizeOf, setSelectedModes, toggleSelectedMode, useSelectedModes } from "@/components/play/selectionStore";
+import { cancelCopy, describeError } from "@/lib/errors";
 import { useBackdrop } from "@/lib/useBackdrop";
+import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import { CooldownLine } from "./CooldownLine";
+import { PlayChat } from "./PlayChat";
 import styles from "./play.module.css";
 
-const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
-  { value: "new", label: "Any" },
-  { value: "verified", label: "Verified" },
-  { value: "trusted", label: "Trusted" },
-];
+// Full-bleed art per mode tile
+const MODE_ART: Record<Mode, string> = {
+  rush3v3: "/backdrops/rush_001_1.webp",
+  aim1v1: "/maps/aim_redline.webp",
+  aim2v2: "/maps/aim_deagle7k.webp",
+  rush1v1: "/rush-rooms/205.webp",
+};
 
-const MAX_PARTY = Math.max(...MODES.map((m) => MODE_CONFIGS[m].teamSize));
-
+// Play: the modes as picture tiles. The dock at the bottom of every page starts the queue for the picked ones,
+// and the party sits in the top bar
 export function PlayView() {
   const { user, loading } = useSession();
   const router = useRouter();
@@ -68,60 +62,21 @@ export function PlayView() {
       toast.push({ title: `${names} queue closed`, body: `You were taken out of the ${names} queue.`, tone: "info", durationMs: 8000 });
     },
   });
-  const [selected, setSelected] = useState<Mode[]>([]);
+  const global = useGlobalPlay();
+  const selected = useSelectedModes();
   useBackdrop(selected);
-  const [minTrust, setMinTrust] = useState<TrustLevel>("new");
-  useEffect(() => {
-    if (user?.settings?.minTrust) setMinTrust(user.settings.minTrust);
-  }, [user?.settings?.minTrust]);
-
-  async function changeMinTrust(v: TrustLevel) {
-    const prev = minTrust;
-    setMinTrust(v);
-    try {
-      await api.updateSettings({ minTrust: v });
-    } catch {
-      setMinTrust(prev);
-      toast.push({ title: "Could not save the setting", tone: "error" });
-    }
-  }
-  const [origin, setOrigin] = useState("");
   const profile = useAsync(() => (user ? api.profile(user.steamId) : Promise.resolve(null)), [user?.steamId]);
   const me = profile.data ?? null;
-  // Members without a level yet count as new
-  const memberTrust = (play.party?.members ?? []).filter((m) => m.steamId !== user?.steamId).map((m) => m.trustLevel ?? "new");
-  // The lowest trust in the party caps the opponent filter
-  const trustCap = useMemo(() => {
-    const own: TrustLevel = user?.trust?.level ?? user?.trustLevel ?? "new";
-    let level = own;
-    for (const t of memberTrust) if (!trustAtLeast(t, level)) level = t;
-    // True when the viewer is the one holding the cap down
-    return { level, own: level === own };
-  }, [user, memberTrust]);
-  // A stored preference above the cap falls back to the highest allowed
-  const effectiveMinTrust: TrustLevel = trustAtLeast(trustCap.level, minTrust) ? minTrust : trustCap.level;
-
-  useEffect(() => setOrigin(window.location.origin), []);
-
   const service = useServiceStatus();
   const offered = offeredModes(service);
+  const [railTab, setRailTab] = useState<"friends" | "chat">("friends");
 
-  // Drop modes the status page reports as unavailable from the selection
-  useEffect(() => {
-    if (!service) return;
-    setSelected((sel) => {
-      const next = sel.filter((m) => !modeUnavailable(service, m));
-      return next.length === sel.length ? sel : next;
-    });
-  }, [service]);
-
-  const queuedModes = useMemo(() => play.queue.modes.map((m) => m.mode), [play.queue.modes]);
+  const queuedModes = play.queue.modes.map((m) => m.mode);
   const queued = play.queue.state === "queued" && queuedModes.length > 0;
-  // Signed out viewers see the cards as a solo player
-  const partySize = user ? Math.max(1, play.party?.members.length ?? 1) : 1;
-  const isLeader = !play.party?.partyId || play.party.leaderSteamId === user?.steamId;
+  const party = global.party ?? play.party;
+  const partySize = user ? partySizeOf(party) : 1;
+  const isLeader = !party?.partyId || party.leaderSteamId === user?.steamId;
   const active = activeMatch(play.match);
-  const inMatch = !!active;
 
   // The match room holds accept, veto, connect and the result. Play always sends the player there
   // Replace keeps Play out of the history so Back does not bounce into the room again
@@ -131,18 +86,10 @@ export function PlayView() {
   }, [active?.matchId, active?.slug, user?.steamId]);
 
   // Mirror the live queue into the picker so it shows what is actually queued
+  const queuedKey = queuedModes.join(",");
   useEffect(() => {
-    if (queued) setSelected(queuedModes);
-  }, [queued, queuedModes]);
-
-  // Remember the queued modes for Play again, and restore them after a reload
-  useEffect(() => {
-    if (queued) saveLastModes(queuedModes);
-  }, [queued, queuedModes]);
-  useEffect(() => {
-    const last = loadLastModes();
-    if (last.length > 0) setSelected((s) => (s.length === 0 ? last : s));
-  }, []);
+    if (queued) setSelectedModes(queuedModes);
+  }, [queued, queuedKey]);
 
   // A result belongs to the match room. Play forgets it
   useEffect(() => {
@@ -174,28 +121,6 @@ export function PlayView() {
     // Only queue transitions matter here
   }, [play.queue.state, play.queue.cooldownUntil]);
 
-  function disabledReason(mode: Mode): string | null {
-    if (!offered.includes(mode)) return "Not offered right now";
-    const size = MODE_CONFIGS[mode].teamSize;
-    if (partySize > size) return `Party too big. ${MODE_COPY[mode].label} fits ${size === 1 ? "1 player" : `${size} players`}`;
-    const down = modeUnavailable(service, mode);
-    if (down) return `${down}. See server status below`;
-    return null;
-  }
-
-  function toggle(mode: Mode) {
-    setSelected((s) => (s.includes(mode) ? s.filter((m) => m !== mode) : [...s, mode]));
-  }
-
-  const eligible = selected.filter((m) => !disabledReason(m));
-  const cooldown = play.queue.state === "cooldown";
-  const locked = queued || cooldown;
-
-  function start() {
-    if (eligible.length === 0) return;
-    if (!play.joinQueue(eligible, effectiveMinTrust)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
-  }
-
   // A friend's Join queue link lands here with ?modes=a,b&start=1
   const linked = useRef<{ modes: Mode[]; start: boolean } | null>(null);
   useEffect(() => {
@@ -203,272 +128,197 @@ export function PlayView() {
     const modes = (q.get("modes") ?? "").split(",").filter((m): m is Mode => (MODES as readonly string[]).includes(m));
     if (modes.length === 0) return;
     linked.current = { modes, start: q.get("start") === "1" };
-    setSelected(modes);
+    setSelectedModes(modes);
     window.history.replaceState(null, "", "/play");
   }, []);
   useEffect(() => {
     const l = linked.current;
     if (!l || !play.loaded || play.connection !== "open") return;
     linked.current = null;
-    const ok = l.modes.filter((m) => !disabledReason(m));
-    if (l.start && isLeader && !locked && !inMatch && ok.length > 0) play.joinQueue(ok, effectiveMinTrust);
+    const ok = l.modes.filter((m) => !modeBlockReason(m, partySize, service));
+    // Opponent filter is hidden for now, so every queue accepts any trust level
+    if (l.start && isLeader && !queued && play.queue.state !== "cooldown" && !active && ok.length > 0) play.joinQueue(ok, "new");
   }, [play.loaded, play.connection]);
-
-  async function createParty() {
-    try {
-      play.setParty(await api.party.create());
-    } catch (e) {
-      partyError(e, "Could not create a party");
-    }
-  }
-
-  // Party changes are refused while the party is in a match
-  function partyError(e: unknown, title: string) {
-    const known = e instanceof ApiError && knownError(e.code);
-    const copy = describeError(e, { title, body: "Try again in a moment." });
-    toast.push({ title: known ? copy.title : title, body: copy.body, tone: "error" });
-  }
-
-  async function leaveParty() {
-    try {
-      await api.party.leave();
-      play.setParty(null);
-    } catch (e) {
-      partyError(e, "Could not leave the party");
-    }
-  }
 
   if (loading) return <PlaySkeleton />;
 
-  const inviteUrl = play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null;
-  async function ensureInvite(): Promise<string | null> {
-    const p = await api.party.create();
-    play.setParty(p);
-    return p.inviteCode ? `${window.location.origin}/invite/${p.inviteCode}` : null;
-  }
   const readOnly = !user;
+  const cooldown = play.queue.state === "cooldown";
+  const locked = readOnly || queued || cooldown || !isLeader;
+  // Rush is the headline mode, so it leads
+  const ranked = offered.filter((m) => !isTestMode(m)).sort((a, b) => Number(isRushMode(b)) - Number(isRushMode(a)));
+  const tests = offered.filter(isTestMode);
+
+  const tile = (mode: Mode) => (
+    <ModeTile
+      key={mode}
+      mode={mode}
+      checked={!readOnly && selected.includes(mode)}
+      reason={readOnly ? null : modeBlockReason(mode, partySize, service)}
+      searching={queuedModes.includes(mode)}
+      locked={locked}
+      partySize={partySize}
+      stats={play.stats?.modes.find((m) => m.mode === mode)}
+      profile={user ? me : undefined}
+    />
+  );
 
   return (
-    <div className="container page">
-      <header className="page-header">
-        <div>
-          <h1>Play</h1>
-          <p>{user ? "Pick your modes." : "Sign in with Steam to queue. These are the modes you can play."}</p>
-        </div>
-      </header>
+    <div className={cx("container", styles.page)}>
+      <h1 className="visually-hidden">Play</h1>
+      <div className={styles.main}>
+        <div className={styles.center}>
+          {user && <VerifyLine trust={user.trust} />}
 
-      <div className="grid-2">
-        <div className="stack">
+          <fieldset className={styles.picker} disabled={readOnly}>
+            <legend className="visually-hidden">Modes</legend>
+            <ul className={styles.tiles}>{ranked.map(tile)}</ul>
+          </fieldset>
 
-          {!inMatch && (
-            <>
-              <fieldset className={styles.picker} disabled={locked || readOnly}>
-                <legend className={styles.legend}>Modes</legend>
-                <ul className={styles.modes}>
-                  {offered.map((mode) => {
-                    const reason = disabledReason(mode);
-                    const checked = !readOnly && selected.includes(mode) && !reason;
-                    const q = play.queue.modes.find((m) => m.mode === mode);
-                    const st = play.stats?.modes.find((m) => m.mode === mode);
-                    const copy = MODE_COPY[mode];
-                    return (
-                      <li key={mode}>
-                        <label
-                          className={`glass ${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""} ${readOnly ? styles.readOnly : ""}`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="visually-hidden"
-                            checked={checked}
-                            disabled={readOnly || !!reason || !isLeader || locked}
-                            onChange={() => toggle(mode)}
-                            aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats ${mapPoolId(mode)}`}
-                          />
-                          <span className={styles.modeTop}>
-                            <span className={styles.modeName}>
-                              {copy.label}
-                              {isTestMode(mode) && (
-                                <Badge tone="warn" className={styles.testTag}>
-                                  Test
-                                </Badge>
-                              )}
-                              <span className={styles.format}>
-                                <PartySize
-                                  count={Math.min(partySize, MODE_CONFIGS[mode].teamSize)}
-                                  capacity={MODE_CONFIGS[mode].teamSize}
-                                  overflow={Math.max(0, partySize - MODE_CONFIGS[mode].teamSize)}
-                                  label={copy.players}
-                                />
-                              </span>
-                            </span>
-                            {modeUnavailable(service, mode) && !q ? (
-                              <ModeCardWarning />
-                            ) : readOnly ? null : (
-                              <span className={styles.check} aria-hidden="true">
-                                {q ? (
-                                  <Throbber />
-                                ) : (
-                                  <svg viewBox="0 0 16 16" width="14" height="14">
-                                    <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                )}
-                              </span>
-                            )}
-                          </span>
-                          {/* Disabled cards keep the reason in view, so they never reveal the map strip */}
-                          <ModeMapPool mode={mode} reveal={!reason}>
-                            <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
-                              {copy.blurb}
-                            </span>
-                            <span id={`mode-${mode}-reason`} className={styles.reason}>
-                              {reason ?? ""}
-                            </span>
-                            {user && <Standing profile={me} mode={mode} />}
-                            <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>
-                              {st ? `${st.playersInQueue} in queue · ${st.matchesInProgress} in progress` : "\u00a0"}
-                              {q && <span className="visually-hidden">, you are searching</span>}
-                            </span>
-                          </ModeMapPool>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
+          {tests.length > 0 && (
+            <details className={cx("glass", styles.tests)}>
+              <summary className={styles.testsSummary}>
+                <span className={styles.testsTitle}>Test queues</span>
+                <span className={styles.testsNote}>Unrated, for trying new modes</span>
+              </summary>
+              <fieldset className={styles.picker} disabled={readOnly}>
+                <legend className="visually-hidden">Test modes</legend>
+                <ul className={styles.tiles}>{tests.map(tile)}</ul>
               </fieldset>
-
-              <Card as="div" tone="flat" padded={false} className={styles.actionBar}>
-                {user ? (
-                  <>
-                    {isLeader || queued ? (
-                      <Button
-                        size="lg"
-                        variant={queued ? "danger" : "primary"}
-                        className={styles.queueButton}
-                        onClick={queued ? () => play.leaveQueue() : start}
-                        disabled={!queued && (eligible.length === 0 || cooldown)}
-                        aria-describedby="queue-hint"
-                      >
-                        {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
-                      </Button>
-                    ) : null}
-                    {cooldown && play.queue.cooldownUntil && (
-                      <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />
-                    )}
-                    <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
-                    <SegmentedControl
-                      label="Opponents"
-                      value={effectiveMinTrust}
-                      onChange={changeMinTrust}
-                      disabled={locked}
-                      options={TRUST_OPTIONS.map((o) => {
-                        const allowed = trustAtLeast(trustCap.level, o.value);
-                        const why = trustCap.own ? `Reach ${TRUST_NAMES[o.value]} to use this` : `A party member needs ${TRUST_NAMES[o.value]} to use this`;
-                        return { ...o, disabled: !allowed, title: allowed ? undefined : why };
-                      })}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <SignInLink size="lg" className={styles.queueButton} />
-                    <p className={styles.hint}>Free. Sign in with your Steam account, pick modes, and we hand you a server to join.</p>
-                  </>
-                )}
-              </Card>
-              {user && (
-                <p id="queue-hint" className={styles.hint}>
-                  {queued
-                    ? isLeader
-                      ? "Stop queue to change modes."
-                      : "Any member can stop the queue. The leader starts it."
-                    : !isLeader
-                      ? "Leader starts the queue."
-                      : cooldown
-                        ? "On cooldown."
-                        : eligible.length === 0
-                          ? "Pick a mode."
-                          : ""}
-                </p>
-              )}
-
-              <ModeAvailabilityHint status={service} />
-
-              {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
-
-              {user && <GetVerifiedCard trust={user.trust} />}
-
-              {me && <YourStats profile={me} />}
-            </>
+            </details>
           )}
+
+          {cooldown && play.queue.cooldownUntil && <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />}
+          {user && !isLeader && <p className={styles.hint}>{queued ? "Any member can cancel the queue. The leader starts it." : "The party leader picks the modes and starts the queue."}</p>}
+          <ModeAvailabilityHint status={service} />
+          {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
+          {me && <YourStats profile={me} />}
         </div>
 
-        <aside className="stack" aria-label={user ? "Party" : "How it works"}>
+        <aside className={cx("glass", styles.rail)} aria-label={user ? "Friends and chat" : "How it works"}>
           {user ? (
             <>
-              <PartyPanel
-                party={play.party}
-                mySteamId={user.steamId}
-                me={{ steamId: user.steamId, displayName: user.displayName, avatarUrl: user.avatarUrl }}
-                maxSize={MAX_PARTY}
-                inviteUrl={inviteUrl}
-                onCreate={createParty}
-                onLeave={play.party && play.party.members.length > 1 ? leaveParty : undefined}
-                onKick={async (id) => {
-                  try {
-                    await api.party.kick(id);
-                    play.setParty((p) => p && { ...p, members: p.members.filter((m) => m.steamId !== id) });
-                  } catch (e) {
-                    partyError(e, "Could not remove player");
-                  }
-                }}
-                onMakeLeader={async (id) => {
-                  try {
-                    await api.party.setLeader(id);
-                    play.setParty((p) => p && { ...p, leaderSteamId: id });
-                  } catch (e) {
-                    partyError(e, "Could not change the leader");
-                  }
-                }}
-                onRotateInvite={async () => {
-                  try {
-                    const next = await api.party.rotateInvite();
-                    play.setParty((p) => p && { ...p, inviteCode: next.inviteCode });
-                  } catch (e) {
-                    partyError(e, "Could not make a new link");
-                  }
-                }}
-                locked={queued || inMatch}
-                modes={partySize < 2 ? [] : queued ? queuedModes : isLeader ? eligible : offered.filter((m) => !disabledReason(m))}
-                renderInvite={(close, anchor) => (
-                  <InvitePopover
-                    inviteUrl={inviteUrl}
-                    ensureInvite={ensureInvite}
-                    onParty={play.setParty}
-                    onClose={close}
-                    returnFocus={anchor}
-                  />
-                )}
-              />
-              <FriendsCard inviteUrl={inviteUrl} ensureInvite={ensureInvite} onParty={play.setParty} canJoinQueue={partySize === 1 && !locked && !inMatch} />
+              <div className={styles.railTabs} role="tablist" aria-label="Side panel">
+                <button type="button" role="tab" id="rail-friends" aria-controls="rail-panel" aria-selected={railTab === "friends"} onClick={() => setRailTab("friends")}>
+                  Friends
+                </button>
+                <button type="button" role="tab" id="rail-chat" aria-controls="rail-panel" aria-selected={railTab === "chat"} onClick={() => setRailTab("chat")}>
+                  Chat
+                </button>
+              </div>
+              <div id="rail-panel" role="tabpanel" aria-labelledby={`rail-${railTab}`} className={styles.railPanel}>
+                {railTab === "friends" ? <FriendsCard onParty={setGlobalParty} canJoinQueue={partySize === 1 && !queued && !active} /> : <PlayChat />}
+              </div>
             </>
           ) : (
-            <Card title="How it works" tone="raised">
+            <Card title="How it works" tone="flat">
               <ol className={styles.howTo}>
                 <li>Sign in with Steam.</li>
-                <li>Pick one or more modes and start the queue. Friends can join your party.</li>
+                <li>Pick one or more modes and press Go. Friends can join your party.</li>
                 <li>Accept the match, ban maps with your team, then join the server we start for you.</li>
               </ol>
             </Card>
           )}
         </aside>
       </div>
-
     </div>
   );
 }
 
+type TileProps = {
+  mode: Mode;
+  checked: boolean;
+  reason: string | null;
+  searching: boolean;
+  locked: boolean;
+  partySize: number;
+  stats?: { playersInQueue: number; matchesInProgress: number };
+  // undefined when signed out, null while loading
+  profile?: Profile | null;
+};
+
+// One mode as a picture tile. A mode the party can't queue for is tinted, locked and says why
+function ModeTile({ mode, checked, reason, searching, locked, partySize, stats, profile }: TileProps) {
+  const copy = MODE_COPY[mode];
+  const cfg = MODE_CONFIGS[mode];
+  const size = cfg.teamSize;
+  const off = !!reason;
+  const on = checked && !off;
+  const pool = cfg.maps.length === 1 ? `Map: ${cfg.maps[0]!.displayName}.` : `Map pool: ${cfg.maps.map((m) => m.displayName).join(", ")}.`;
+  return (
+    <li>
+      <label className={cx(styles.tile, on && styles.on, off && styles.off, (locked || off) && styles.locked)}>
+        <input
+          type="checkbox"
+          className="visually-hidden"
+          checked={on}
+          disabled={locked || off}
+          onChange={() => toggleSelectedMode(mode)}
+          aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats ${mapPoolId(mode)}`}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={MODE_ART[mode]} alt="" className={styles.art} />
+        <span className={styles.shade} aria-hidden="true" />
+        <span className={styles.tileTop}>
+          <span className={cx(styles.chip, off && partySize > size && styles.chipOver)}>
+            <PartySize count={Math.min(partySize, size)} capacity={size} overflow={Math.max(0, partySize - size)} label={copy.players} />
+            <span className={styles.format}>{copy.format}</span>
+          </span>
+          <span className={styles.tick} aria-hidden="true">
+            {off ? <LockIcon /> : searching ? <Throbber /> : <TickIcon />}
+          </span>
+        </span>
+        <span className={styles.tileBottom}>
+          <span id={`mode-${mode}-reason`} className={reason ? styles.reason : "visually-hidden"}>
+            {reason ?? ""}
+          </span>
+          <span className={styles.tileName}>{copy.name}</span>
+          <span id={`mode-${mode}-desc`} className={styles.tileBlurb}>
+            {copy.blurb}
+          </span>
+          <span id={mapPoolId(mode)} className="visually-hidden">
+            {pool}
+          </span>
+          <span className={styles.tileFoot}>
+            {profile !== undefined && <Standing profile={profile} mode={mode} />}
+            <span id={`mode-${mode}-stats`} className={cx(styles.tileMeta, "mono")}>
+              {stats ? (
+                <>
+                  <span className={styles.liveDot} aria-hidden="true" />
+                  {stats.playersInQueue} searching · {stats.matchesInProgress} live
+                </>
+              ) : (
+                " "
+              )}
+              {searching && <span className="visually-hidden">, you are searching</span>}
+            </span>
+          </span>
+        </span>
+      </label>
+    </li>
+  );
+}
+
+function TickIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16">
+      <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16">
+      <rect x="3" y="7" width="10" height="7" rx="1" fill="currentColor" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
-  if (!profile) return <span className={styles.standing}>{"\u00a0"}</span>;
-  if (isTestMode(mode)) return <span className={`${styles.standing} muted`}>Unrated</span>;
+  if (!profile) return <span className={styles.standing}>{" "}</span>;
+  if (isTestMode(mode)) return <span className={styles.standing}>Unrated</span>;
   const s = profile.modes.find((m) => m.mode === mode);
   if (!s || s.matches === 0) {
     return (
@@ -480,8 +330,27 @@ function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
   return (
     <span className={styles.standing}>
       <TierChip tier={s.tier} rating={s.rating} size="sm" link={false} />
-      {s.leaderboardRank && <span className={`${styles.rank} mono`}>#{s.leaderboardRank}</span>}
+      {s.leaderboardRank && <span className="mono">#{s.leaderboardRank}</span>}
     </span>
+  );
+}
+
+// Get Verified as one line with a progress bar, until the player is Verified
+function VerifyLine({ trust }: { trust: TrustStatus | undefined }) {
+  if (!trust || trustAtLeast(trust.level, "verified")) return null;
+  const counted = trust.requirements.find((r) => !r.met && r.progress)?.progress;
+  const total = counted ? counted.required : trust.requirements.length;
+  const current = counted ? counted.current : trust.requirements.filter((r) => r.met).length;
+  return (
+    <p className={cx("glass", styles.notice)}>
+      <span className={styles.noticeTag}>Get Verified</span>
+      <span>{trust.blockedBy ?? `${trustProgressLine(trust)}. Verified unlocks cups.`}</span>
+      <span className={styles.progress} role="img" aria-label={`${current} of ${total}`}>
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} data-on={i < current || undefined} />
+        ))}
+      </span>
+    </p>
   );
 }
 
@@ -489,23 +358,37 @@ function YourStats({ profile }: { profile: Profile }) {
   const modes = profile.modes.filter((m) => m.matches > 0);
   const matches = modes.reduce((n, m) => n + m.matches, 0);
   const wins = modes.reduce((n, m) => n + m.wins, 0);
-  const weighted = (f: (m: Profile["modes"][number]) => number) =>
-    matches > 0 ? modes.reduce((n, m) => n + f(m) * m.matches, 0) / matches : 0;
+  const weighted = (f: (m: Profile["modes"][number]) => number) => (matches > 0 ? modes.reduce((n, m) => n + f(m) * m.matches, 0) / matches : 0);
   const last = profile.recentMatches.slice(0, 5);
-
   return (
-    <section aria-labelledby="your-stats" className={styles.yourStats}>
+    <section aria-labelledby="your-stats" className={cx("glass", styles.stats)}>
       <h2 id="your-stats" className="visually-hidden">
         Your stats
       </h2>
-      <StatTile size="sm" label="Win rate" value={formatStat(matches ? wins / matches : null, "pct", matches)} />
-      <StatTile size="sm" label="Headshot" value={formatStat(weighted((m) => m.headshotPct), "pct", matches)} />
-      <StatTile size="sm" label="K/D" value={formatStat(weighted((m) => m.kd), "kd", matches)} />
-      <StatTile size="sm" label="Matches" value={matches} />
-      <Card as="div" tone="flat" padded={false} className={styles.form}>
-        <p className={styles.formLabel}>Last 5</p>
-        <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} label="Last 5" />
-      </Card>
+      <dl>
+        <div>
+          <dt>Win rate</dt>
+          <dd className="mono">{formatStat(matches ? wins / matches : null, "pct", matches)}</dd>
+        </div>
+        <div>
+          <dt>Headshot</dt>
+          <dd className="mono">{formatStat(weighted((m) => m.headshotPct), "pct", matches)}</dd>
+        </div>
+        <div>
+          <dt>K/D</dt>
+          <dd className="mono">{formatStat(weighted((m) => m.kd), "kd", matches)}</dd>
+        </div>
+        <div>
+          <dt>Matches</dt>
+          <dd className="mono">{matches}</dd>
+        </div>
+        <div>
+          <dt>Last 5</dt>
+          <dd>
+            <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} label="Last 5" />
+          </dd>
+        </div>
+      </dl>
     </section>
   );
 }

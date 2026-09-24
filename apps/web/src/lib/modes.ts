@@ -12,7 +12,7 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "1v1",
     format: "1v1",
     players: "1 vs 1",
-    blurb: "Aim maps, first to 13",
+    blurb: "Duel 1v1 in aim maps",
   },
   aim2v2: {
     label: "2v2 Aim",
@@ -20,7 +20,7 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "2v2",
     format: "2v2",
     players: "2 vs 2",
-    blurb: "Aim maps, first to 13",
+    blurb: "Partner up in aim maps",
   },
   rush3v3: {
     label: "3v3 Rush",
