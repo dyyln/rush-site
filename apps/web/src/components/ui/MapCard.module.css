@@ -24,9 +24,11 @@
   height: 2px;
   background: var(--color-border-strong);
 }
-.voted::before,
-.decider::before {
+.voted::before {
   background: var(--color-accent);
+}
+.decider::before {
+  display: none;
 }
 /* Picks take the picking team's colour. A pick with no known team stays accent */
 .picked {
@@ -131,7 +133,7 @@
   transform: translate(-50%, -50%);
 }
 .stamp_decider {
-  color: var(--color-accent-hover);
+  color: var(--color-text);
   transform: translate(-50%, -50%);
 }
 .stamp_taken {
@@ -173,7 +175,7 @@
   color: var(--pick-hover, var(--color-accent-hover));
 }
 .label_decider {
-  color: var(--color-accent-hover);
+  color: var(--color-text);
 }
 .by {
   font-size: var(--text-xs);
@@ -338,10 +340,19 @@
 .taken .name {
   color: var(--color-text-muted);
 }
+/* Nobody picked the decider, so its border is half each team's colour, as a contested room on the match page */
 .decider {
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
-  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--color-accent);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+/* Drawn over the card so the thicker border never changes its size */
+.decider::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--team-own) 50%, var(--team-enemy) 50%) 1;
 }
 .picked {
   border-color: var(--pick);
