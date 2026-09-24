@@ -542,7 +542,8 @@ export const MOCK_MATCH_HINTS = new Map<string, { mode: Mode; mapId: string }>()
 const LIVE_START = Date.now();
 const LIVE_START_ROUNDS = 9;
 
-const MIDS = RUSH_ROOMS.midRooms.map((r) => r.displayName);
+// Room ids as the plugin reports them
+const MIDS = RUSH_ROOMS.midRooms.map((r) => String(r.id));
 
 // Plays out a whole match from a seed. Aim is first to 13, Rush first to 8 of 15
 function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[] } {
@@ -558,7 +559,7 @@ function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[
     score[w]!++;
     winners.push(w);
     if (isRushMode(mode)) {
-      arenas.push(room === 0 ? RUSH_ROOMS.castles.t.displayName : room === 6 ? RUSH_ROOMS.castles.ct.displayName : room === 3 ? RUSH_ROOMS.startRooms[Math.floor(r() * 4)]!.displayName : MIDS[Math.floor(r() * MIDS.length)]!);
+      arenas.push(String(room === 0 ? RUSH_ROOMS.castles.t.id : room === 6 ? RUSH_ROOMS.castles.ct.id : room === 3 ? RUSH_ROOMS.startRooms[Math.floor(r() * 4)]!.id : MIDS[Math.floor(r() * MIDS.length)]!));
       room = Math.max(0, Math.min(6, room + (w === 0 ? 1 : -1)));
       if (score[0] === 7 && score[1] === 7) room = -1;
     }
@@ -601,7 +602,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
       round: i + 1,
       winnerTeam: w,
       score: { ...score },
-      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.displayName : undefined,
+      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.id : undefined,
       endedAt: new Date(startedAt + (i + 1) * 60_000).toISOString(),
     });
   }

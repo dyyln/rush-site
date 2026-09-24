@@ -1,7 +1,7 @@
 import { rushRoomImage, rushRoomName } from "@/lib/rushRooms";
 import styles from "./Rush.module.css";
 
-// Layout image of a room, or a plain card with the name when there is no image yet
+// Screenshot of a room, or a plain card with the name for an unknown room
 export function RoomImage({ room, dim }: { room: string; dim?: boolean }) {
   const src = rushRoomImage(room);
   if (!src) {

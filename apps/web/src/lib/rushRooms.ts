@@ -1,14 +1,13 @@
 import { ALL_RUSH_ROOMS, RUSH_START_SLOT } from "@rushsite/shared";
 
-// Rooms with a cropped image in public/rush-rooms. The rest show a placeholder
-const WITH_IMAGE = new Set(["101", "102", "103", "104", "201", "202", "204", "212", "301", "401"]);
 
 export function rushRoomName(key: string): string {
   return ALL_RUSH_ROOMS.find((r) => String(r.id) === key)?.displayName ?? `Room ${key}`;
 }
 
+// Screenshot tile in public/rush-rooms, one per room id. Unknown keys show a placeholder
 export function rushRoomImage(key: string): string | null {
-  return WITH_IMAGE.has(key) ? `/rush-rooms/${key}.webp` : null;
+  return ALL_RUSH_ROOMS.some((r) => String(r.id) === key) ? `/rush-rooms/${key}.webp` : null;
 }
 
 // Slot 0 is the T castle and slot 6 the CT castle
