@@ -70,8 +70,8 @@ export function Backdrop() {
     let frame = 0;
 
     const tick = () => {
-      x += (tx - x) * 0.08;
-      y += (ty - y) * 0.08;
+      x += (tx - x) * 0.05;
+      y += (ty - y) * 0.05;
       if (Math.abs(tx - x) < 0.05 && Math.abs(ty - y) < 0.05) {
         x = tx;
         y = ty;

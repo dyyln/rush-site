@@ -24,7 +24,7 @@
   --backdrop-blur: 6px;
   --backdrop-tint: rgb(10 9 14 / 0.66);
   /* How far the scene drifts with the mouse, on fine pointers only */
-  --parallax-max: 12px;
+  --parallax-max: 5px;
   /* Edge of outlined controls. At least 3:1 on every surface */
   --color-border-control: #7a7292;
 
