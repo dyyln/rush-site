@@ -301,7 +301,7 @@ describe("schemas", () => {
 
 describe("config", () => {
   it("has the three ranked modes and the Rush test mode with expected pools", () => {
-    expect(Object.keys(MODE_CONFIGS)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
+    expect(Object.keys(MODE_CONFIGS)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1", "rush2v2"])
     expect(RANKED_MODES).toEqual(["aim1v1", "aim2v2", "rush3v3"])
     expect(isTestMode("rush1v1")).toBe(true)
     expect(isTestMode("rush3v3")).toBe(false)
@@ -310,6 +310,11 @@ describe("config", () => {
     expect(MODE_CONFIGS.rush1v1).toMatchObject({ teamSize: 1, vetoFormat: "none", winCondition: "valve_rush" })
     expect(MODE_CONFIGS.rush1v1.maps).toEqual(MODE_CONFIGS.rush3v3.maps)
     expect(MODE_CONFIGS.rush1v1.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush1v1.cfg" })
+    expect(isTestMode("rush2v2")).toBe(true)
+    expect(isRushMode("rush2v2")).toBe(true)
+    expect(MODE_CONFIGS.rush2v2).toMatchObject({ teamSize: 2, vetoFormat: "none", winCondition: "valve_rush" })
+    expect(MODE_CONFIGS.rush2v2.maps).toEqual(MODE_CONFIGS.rush3v3.maps)
+    expect(MODE_CONFIGS.rush2v2.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush2v2.cfg" })
     expect(MODE_CONFIGS.aim1v1.maps).toHaveLength(6)
     expect(MODE_CONFIGS.rush3v3.maps).toEqual([{ id: "rush_001", displayName: "Complex", mapName: "rush_001" }])
     expect(MODE_CONFIGS.rush3v3.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg" })
@@ -324,11 +329,12 @@ describe("config", () => {
     const cup = { name: "Test Cup", startsAt: "2026-09-25T18:00:00Z", maxEntrants: 8, minTrust: "verified" }
     expect(CreateCupSchema.safeParse({ ...cup, mode: "rush3v3" }).success).toBe(true)
     expect(CreateCupSchema.safeParse({ ...cup, mode: "rush1v1" }).success).toBe(false)
+    expect(CreateCupSchema.safeParse({ ...cup, mode: "rush2v2" }).success).toBe(false)
   })
 
   it("allows modes by party size", () => {
-    expect(allowedModesForParty(1)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
-    expect(allowedModesForParty(2)).toEqual(["aim2v2", "rush3v3"])
+    expect(allowedModesForParty(1)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1", "rush2v2"])
+    expect(allowedModesForParty(2)).toEqual(["aim2v2", "rush3v3", "rush2v2"])
     expect(allowedModesForParty(3)).toEqual(["rush3v3"])
     expect(allowedModesForParty(4)).toEqual([])
     expect(allowedModesForParty(0)).toEqual([])

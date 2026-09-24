@@ -120,4 +120,8 @@ func TestRushLaunchFromShared(t *testing.T) {
 	if t1.CS2.ExecCfg != "rushsite_rush1v1.cfg" || t1.CS2.MapName != "rush_001" || *t1.CS2.GameType != 0 || *t1.CS2.GameMode != 6 {
 		t.Fatalf("rush test launch %+v", t1.CS2)
 	}
+	t2 := f.Modes[Rush2v2].Launches[0]
+	if t2.CS2.ExecCfg != "rushsite_rush2v2.cfg" || t2.CS2.MapName != "rush_001" || *t2.CS2.GameType != 0 || *t2.CS2.GameMode != 6 {
+		t.Fatalf("rush 2v2 test launch %+v", t2.CS2)
+	}
 }

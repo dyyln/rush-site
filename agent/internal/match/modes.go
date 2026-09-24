@@ -33,5 +33,6 @@ func DefaultModes() ModeTable {
 		Aim2v2:  {TeamSize: 2, WinCondition: "first_to_13"},
 		Rush3v3: {TeamSize: 3, WinCondition: "valve_rush"},
 		Rush1v1: {TeamSize: 1, WinCondition: "valve_rush"},
+		Rush2v2: {TeamSize: 2, WinCondition: "valve_rush"},
 	}
 }

@@ -6,7 +6,7 @@ CounterStrikeSharp plugin that runs one rushsite match per CS2 server process. I
 
 The split is decided once, from `winCondition` in `match.json`. See `MatchController` in `src/RushsiteMatch.Core/Match/MatchController.cs`.
 
-| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush1v1 and rush3v3) |
+| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush1v1, rush2v2 and rush3v3) |
 |---|---|---|
 | Whitelist kick, `sv_password` check | yes | yes |
 | `bot_quota 0` and `bot_kick`, re-checked every second | yes | yes |

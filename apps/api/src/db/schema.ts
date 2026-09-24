@@ -30,7 +30,7 @@ const createdAt = () => ts("created_at").notNull().defaultNow()
 const id = () => uuid("id").primaryKey().defaultRandom()
 const steamId = (name = "steam_id") => text(name)
 
-export const modeEnum = pgEnum("mode", ["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
+export const modeEnum = pgEnum("mode", ["aim1v1", "aim2v2", "rush3v3", "rush1v1", "rush2v2"])
 export const trustLevelEnum = pgEnum("trust_level", ["new", "verified", "trusted"])
 export const ticketStatusEnum = pgEnum("ticket_status", ["waiting", "matched", "cancelled"])
 export const matchStatusEnum = pgEnum("match_status", [
@@ -153,7 +153,7 @@ export const queueTickets = pgTable(
     region: text("region").notNull().default("eu"),
     steamIds: text("steam_ids").array().notNull(),
     // Party mean rating per queued mode
-    ratings: jsonb("ratings").$type<Partial<Record<"aim1v1" | "aim2v2" | "rush3v3" | "rush1v1", number>>>().notNull(),
+    ratings: jsonb("ratings").$type<Partial<Record<"aim1v1" | "aim2v2" | "rush3v3" | "rush1v1" | "rush2v2", number>>>().notNull(),
     status: ticketStatusEnum("status").notNull().default("waiting"),
     matchId: uuid("match_id"),
     matchedMode: modeEnum("matched_mode"),

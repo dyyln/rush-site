@@ -185,6 +185,8 @@ public static class Modes
     public const string Rush3v3 = "rush3v3";
     // Unrated Rush test queue with one player per side
     public const string Rush1v1 = "rush1v1";
-    public static readonly IReadOnlySet<string> All = new HashSet<string> { Aim1v1, Aim2v2, Rush3v3, Rush1v1 };
-    public static readonly IReadOnlySet<string> Rush = new HashSet<string> { Rush3v3, Rush1v1 };
+    // Unrated Rush test queue with two players per side
+    public const string Rush2v2 = "rush2v2";
+    public static readonly IReadOnlySet<string> All = new HashSet<string> { Aim1v1, Aim2v2, Rush3v3, Rush1v1, Rush2v2 };
+    public static readonly IReadOnlySet<string> Rush = new HashSet<string> { Rush3v3, Rush1v1, Rush2v2 };
 }

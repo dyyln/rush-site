@@ -57,6 +57,7 @@ const MODE_WORDS: Record<Mode, RegExp> = {
   aim2v2: /\b2\s*v\s*2\b/i,
   rush3v3: /\b(3\s*v\s*3|rush)\b/i,
   rush1v1: /\b(rush\s*1\s*v\s*1|1\s*v\s*1\s*rush)\b/i,
+  rush2v2: /\b(rush\s*2\s*v\s*2|2\s*v\s*2\s*rush)\b/i,
 };
 
 function availabilityPhrase(reason?: string): string {

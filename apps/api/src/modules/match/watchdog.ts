@@ -17,7 +17,7 @@ export const MATCH_TIMEOUT = "timeout"
 export type WatchdogReason = typeof SERVER_LOST | typeof MATCH_TIMEOUT
 
 // Generous caps per map. Aim is first to 13 with overtime on a tie and Rush has at most 15 rounds
-export const DEFAULT_MAX_DURATION_MIN: Record<Mode, number> = { aim1v1: 60, aim2v2: 60, rush3v3: 40, rush1v1: 40 }
+export const DEFAULT_MAX_DURATION_MIN: Record<Mode, number> = { aim1v1: 60, aim2v2: 60, rush3v3: 40, rush1v1: 40, rush2v2: 40 }
 
 // Pause between series maps. About 30 s on aim and 110 s on Rush, where tv_delay holds the level change
 export const SERIES_MAP_GAP_MIN = 5

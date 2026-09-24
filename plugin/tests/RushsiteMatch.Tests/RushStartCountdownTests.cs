@@ -49,6 +49,7 @@ public class RushStartCountdownTests
 
     [Theory]
     [InlineData("rush1v1", 1)]
+    [InlineData("rush2v2", 2)]
     [InlineData("rush3v3", 3)]
     public void CompleteLineupRunsTheCountdownThenEndsWarmup(string mode, int teamSize)
     {
@@ -90,6 +91,7 @@ public class RushStartCountdownTests
 
     [Theory]
     [InlineData("rush1v1", 1)]
+    [InlineData("rush2v2", 2)]
     [InlineData("rush3v3", 3)]
     public void LeavingOrSwitchingSideCancelsTheCountdown(string mode, int teamSize)
     {
@@ -123,6 +125,7 @@ public class RushStartCountdownTests
 
     [Theory]
     [InlineData("rush1v1", 1)]
+    [InlineData("rush2v2", 2)]
     [InlineData("rush3v3", 3)]
     public void RoomsAreSentAndConfirmedBeforeWarmupEnds(string mode, int teamSize)
     {

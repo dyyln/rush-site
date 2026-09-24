@@ -6,6 +6,7 @@ const MODE_LABEL: Record<Mode, string> = {
   aim2v2: "2v2 Aim",
   rush3v3: "3v3 Rush",
   rush1v1: "1v1 Rush Test",
+  rush2v2: "2v2 Rush Test",
 }
 
 export interface CupFormat {

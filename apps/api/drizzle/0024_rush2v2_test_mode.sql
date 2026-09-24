@@ -1,0 +1,1 @@
+ALTER TYPE "public"."mode" ADD VALUE 'rush2v2';

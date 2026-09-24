@@ -154,6 +154,7 @@ export function buildContext(deps: ContextDeps): AppContext {
         aim2v2: env.MATCH_MAX_MIN_AIM,
         rush3v3: env.MATCH_MAX_MIN_RUSH,
         rush1v1: env.MATCH_MAX_MIN_RUSH,
+        rush2v2: env.MATCH_MAX_MIN_RUSH,
       },
       silenceSec: env.MATCH_SILENCE_SEC,
       intervalSec: env.WATCHDOG_INTERVAL_SEC,
