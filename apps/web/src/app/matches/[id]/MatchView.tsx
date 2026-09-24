@@ -26,12 +26,13 @@ import { buildRoster, ownTeamIndex } from "@/components/match/roster";
 import { useLiveExtras } from "@/components/match/useLiveExtras";
 import { AcceptPanel, AllocatingPanel, CancelledPanel, ConnectPanel, VetoPanel } from "@/components/match/room/StagePanels";
 import { RoomResult } from "@/components/match/room/RoomResult";
+import { RoomDock } from "@/components/match/room/RoomDock";
 import { RoomImage } from "@/components/rush/RoomImage";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
 import { signed } from "@/lib/format";
-import { mapName, modeLabel } from "@/lib/modes";
+import { MODE_ART, mapName, modeLabel } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
 import type { MatchDetail, MatchPlayer, MatchStatus } from "@/lib/types";
 import { useMatchRoom } from "@/lib/useMatchRoom";
@@ -116,15 +117,34 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
   return (
     <div className="container page">
-      <header className={cx(styles.header, "title-band")}>
+      {/* Scoreboard banner: the map's art behind the status, title and score */}
+      <header className={styles.hero}>
+        {!series && !isRushMode(m.mode) && currentMapId ? (
+          <MapThumb mapId={currentMapId} className={styles.heroArt} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={MODE_ART[m.mode]} alt="" className={styles.heroArt} />
+        )}
+        <span className={styles.heroShade} aria-hidden="true" />
         {/* Status on the left, actions on the right, so they share a row on wide screens */}
         <div className={styles.headTop}>
-          <div className="row">
+          <div className={styles.heroMeta}>
             <Badge tone={status.tone}>
               {m.status === "live" && <Throbber />}
               {status.label}
             </Badge>
             {m.unrated && <Badge tone="info">Unrated</Badge>}
+            {m.tournament && (
+              <span className={styles.cup}>
+                <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
+                {!series && m.tournament.bestOf > 1 && (
+                  <span>
+                    {" "}
+                    · Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
           <div className={actionStyles.actions}>
             {finished && (
@@ -137,41 +157,31 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
             {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
           </div>
         </div>
-        {/* An aim map's preview beside the title. Rush shows its rooms further down, a series has several maps */}
-        <div className={styles.titleRow}>
-          {currentMapId && !series && !isRushMode(m.mode) && <MapThumb mapId={currentMapId} className={styles.titleThumb} />}
-          <div className={styles.titleText}>
-            <h1 className={styles.title}>
-              {modeLabel(m.mode)}
-              {currentMapId && !series && (
-                <>
-                  {" "}
-                  <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
-                </>
-              )}
-            </h1>
-            {m.slug && (
-              <p className={roomStyles.roomId}>
-                <span>Room</span>
-                <span className="mono">{m.slug}</span>
-              </p>
+        <div className={styles.heroTitle}>
+          <h1 className={styles.title}>
+            {modeLabel(m.mode)}
+            {currentMapId && !series && (
+              <>
+                {" "}
+                <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
+              </>
             )}
-            {m.tournament && (
-              <p className={styles.cup}>
-                <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
-                {!series && m.tournament.bestOf > 1 && (
-                  <span className="muted">
-                    {" "}
-                    Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
+          </h1>
+          {m.slug && (
+            <p className={roomStyles.roomId}>
+              <span>Room</span>
+              <span className="mono">{m.slug}</span>
+            </p>
+          )}
         </div>
-        {scored && <ResultHeader m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} sideOf={sideOf} />}
+        {scored && (
+          <div className={styles.heroScore}>
+            <ResultHeader m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} sideOf={sideOf} />
+          </div>
+        )}
       </header>
 
+      <RoomDock m={m} room={room} stage={stage} viewer={viewer} participant={participant} />
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
       {/* Before the match starts the Rush rooms stand on their own. Once it has a score they move into the

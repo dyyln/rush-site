@@ -14,7 +14,8 @@ import styles from "./TopBar.module.css";
 
 // Cups and Leaderboard live beside Play as top level tabs
 const TABS = [
-  { href: "/play", label: "Play" },
+  // Match rooms belong to Play
+  { href: "/play", label: "Play", also: ["/matches"] },
   { href: "/tournaments", label: "Cups" },
   { href: "/leaderboard", label: "Leaderboard" },
 ];
@@ -42,7 +43,7 @@ export function TopBar() {
           <nav aria-label="Main">
             <ul className={styles.tabs}>
               {TABS.map((t) => {
-                const active = pathname === t.href || pathname.startsWith(t.href + "/");
+                const active = [t.href, ...(("also" in t && t.also) || [])].some((h) => pathname === h || pathname.startsWith(h + "/"));
                 return (
                   <li key={t.href}>
                     <Link href={t.href} className={styles.tab} aria-current={active ? "page" : undefined}>

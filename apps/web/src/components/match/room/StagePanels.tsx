@@ -164,13 +164,14 @@ export function ConnectPanel({
           Console connect command
         </label>
         <input id="connect-string" className={`${styles.connectInput} mono`} value={server.connect} readOnly onFocus={(e) => e.currentTarget.select()} />
+        {/* The big Connect button is in the dock. This keeps the console command for anyone joining by hand */}
         <div className="row">
-          <a className={styles.launch} href={steamConnectUrl(server)}>
-            Launch CS2 and connect
-          </a>
-          <CopyButton variant={live ? "secondary" : "primary"} text={server.connect}>
+          <CopyButton variant="secondary" text={server.connect}>
             Copy connect
           </CopyButton>
+          <a className={styles.launchSmall} href={steamConnectUrl(server)}>
+            Open in CS2
+          </a>
         </div>
       </div>
     </Card>

@@ -358,3 +358,75 @@
 .roomRowItem:has(> .roomRowBlank) {
   box-shadow: none;
 }
+
+/* Scoreboard banner at the top of the match room */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 220px;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: var(--radius-sm);
+  isolation: isolate;
+}
+.hero .heroArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  border: 0;
+  border-radius: 0;
+  filter: saturate(0.85) brightness(0.8);
+}
+/* Text sits on the art only over this scrim */
+.heroShade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(8 7 12 / 0.7) 0%, rgb(8 7 12 / 0.45) 40%, rgb(8 7 12 / 0.9) 100%);
+}
+.heroMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.heroMeta .cup {
+  color: var(--color-text);
+}
+.heroMeta .cup a {
+  min-height: auto;
+  color: var(--color-text);
+  font-weight: 600;
+}
+.heroTitle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: auto;
+}
+.hero .title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.7);
+}
+.hero .titleMap {
+  color: var(--color-text);
+  font-weight: 600;
+  opacity: 0.85;
+}
+.heroScore {
+  padding-top: var(--space-3);
+  border-top: 1px solid rgb(255 255 255 / 0.16);
+}

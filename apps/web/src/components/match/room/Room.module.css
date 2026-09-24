@@ -89,3 +89,13 @@
 .down {
   color: var(--color-loss);
 }
+
+/* Secondary link beside Copy. The big Connect is in the dock */
+.launchSmall {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  color: var(--color-accent-hover);
+  font-weight: 600;
+}

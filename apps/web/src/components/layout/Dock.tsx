@@ -17,6 +17,7 @@ import { describeError } from "@/lib/errors";
 import { mmss } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { getRealtime } from "@/lib/ws";
+import { usePageDockAction } from "./dockStore";
 import styles from "./Dock.module.css";
 
 const MATCH_LABEL: Record<NonNullable<GlobalMatch>["phase"], string> = {
@@ -34,6 +35,7 @@ export function Dock() {
   const play = useGlobalPlay();
   const selected = useSelectedModes();
   const service = useServiceStatus();
+  const page = usePageDockAction();
   const toast = useToast();
   const rt = getRealtime();
 
@@ -77,7 +79,12 @@ export function Dock() {
   let value: ReactNode;
   let action: ReactNode;
 
-  if (!user) {
+  if (page && !(user && matchOpen && room && !inRoom)) {
+    // The page's own action, such as Connect in the match room. A live match elsewhere still wins
+    label = page.label;
+    value = page.value;
+    action = page.action;
+  } else if (!user) {
     label = "Free for CS2";
     value = "Sign in to queue";
     action = (
@@ -176,4 +183,48 @@ function StatusPill({ status }: { status: ServiceStatus | null }) {
       <span className={styles.statusText}>{text}</span>
     </Link>
   );
+}
+
+// Building blocks for a page's dock action, so it matches the dock's own buttons
+
+type Tone = "accent" | "win" | "quiet";
+
+export function DockLink({ href, children, tone = "accent", external }: { href: string; children: ReactNode; tone?: Tone; external?: boolean }) {
+  const cls = cx(styles.go, styles.goText, tone === "win" && styles.goMatch, tone === "quiet" && styles.goQuiet);
+  // steam:// and other app links are plain anchors, so the router does not try to handle them
+  return external ? (
+    <a href={href} className={cls}>
+      {children}
+    </a>
+  ) : (
+    <Link href={href} className={cls}>
+      {children}
+    </Link>
+  );
+}
+
+export function DockButton({ children, onClick, disabled, tone = "accent" }: { children: ReactNode; onClick?: () => void; disabled?: boolean; tone?: Tone }) {
+  return (
+    <button type="button" className={cx(styles.go, styles.goText, tone === "win" && styles.goMatch, tone === "quiet" && styles.goQuiet)} onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
+}
+
+// A countdown in the action slot, for when there is nothing to press. The page carries the announced copy
+export function DockTimer({ until, label }: { until: number; label: string }) {
+  const now = useNow(true, 1000);
+  const left = now === null ? null : Math.max(0, Math.ceil((until - now) / 1000));
+  return (
+    <span className={styles.timerOnly} aria-hidden="true">
+      <span className={cx(styles.timerValue, "mono")}>{left === null ? "--:--" : mmss(left)}</span>
+      <span className={styles.timerSub}>{label}</span>
+    </span>
+  );
+}
+
+// Seconds left to a deadline, ticking. For the middle line
+export function DockCountdown({ until }: { until: number }) {
+  const now = useNow(true, 1000);
+  return <span className="mono">{now === null ? "--:--" : mmss(Math.max(0, Math.ceil((until - now) / 1000)))}</span>;
 }
