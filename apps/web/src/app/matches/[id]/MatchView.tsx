@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { RUSH_ROOM_VETO, connectDeadlineOf, isRushMode, roomSlots, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
-import { Tabs } from "@/components/ui/Tabs";
 import { Throbber } from "@/components/ui/Throbber";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
@@ -27,7 +26,7 @@ import { buildRoster, ownTeamIndex } from "@/components/match/roster";
 import { useLiveExtras } from "@/components/match/useLiveExtras";
 import { AcceptPanel, AllocatingPanel, CancelledPanel, ConnectPanel, VetoPanel } from "@/components/match/room/StagePanels";
 import { RoomResult } from "@/components/match/room/RoomResult";
-import { SeriesStrip } from "@/components/match/room/SeriesStrip";
+import { RoomImage } from "@/components/rush/RoomImage";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
@@ -112,7 +111,6 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
   const currentMapId = liveMap?.mapId ?? m.mapId;
   const names = useMemo(() => Object.fromEntries(base.teams.flatMap((t) => t.players.map((p) => [p.steamId, p.displayName]))), [base.teams]);
   const [a, b] = m.teams;
-  const teamInfo = a && b ? ([0, 1] as const).map((i) => ({ name: m.teams[i]!.name, label: m.teams[i]!.displayName ?? m.teams[i]!.name, side: sideOf(i) })) : null;
   // Scores and stats once the server is up or rounds are in
   const scored = SCORED.includes(stage) || m.rounds.length > 0 || finished;
 
@@ -184,19 +182,10 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
 
-      {series && teamInfo && (
-        <SeriesStrip
-          matchId={m.id}
-          mode={m.mode}
-          bestOf={Math.max(bestOf, maps.length)}
-          maps={maps}
-          teams={[teamInfo[0]!, teamInfo[1]!]}
-          wins={Object.fromEntries(m.teams.map((t) => [t.name, t.score]))}
-        />
-      )}
-
-      {scored ? (
-        series ? <SeriesStats m={m} maps={maps} liveMap={liveMap?.mapNumber ?? null} sideOf={sideOf} roster={roster} /> : <MapStats m={m} sideOf={sideOf} roster={roster} />
+      {series ? (
+        <SeriesView m={m} maps={maps} liveMap={liveMap?.mapNumber ?? null} sideOf={sideOf} roster={roster} before={<Lineup m={m} sideOf={sideOf} />} />
+      ) : scored ? (
+        <MapStats m={m} sideOf={sideOf} roster={roster} />
       ) : (
         <Lineup m={m} sideOf={sideOf} />
       )}
@@ -313,16 +302,6 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   );
   return (
     <>
-      {/* A single map has its score in the page header. A series map shows its own */}
-      {a && b && mapNumber !== undefined && (
-        <Card padded={false} className={styles.scoreboard} aria-label="Score">
-          <TeamScore team={a} side={sideOf(0)} />
-          <span className={styles.dash} aria-hidden="true">
-            :
-          </span>
-          <TeamScore team={b} side={sideOf(1)} />
-        </Card>
-      )}
       <PlayerTables m={m} sideOf={sideOf} topDamage={topDamage} />
       {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they share a card */}
       {rush ? (
@@ -337,20 +316,26 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   );
 }
 
-// Series view. One tab for totals and one per map that has started
-function SeriesStats({ m, maps, liveMap, sideOf, roster }: StatsProps & { maps: MatchMap[]; liveMap: number | null }) {
+// Series view. The map cards are the tabs, after a small one for the series totals. Upcoming maps show
+// but cannot be picked yet. Before any map starts the panel holds what comes before, the lineup
+function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & { maps: MatchMap[]; liveMap: number | null; before: ReactNode }) {
   const started = maps.filter((x) => x.status !== "upcoming");
   const [tab, setTab] = useState<string>(liveMap ? `map-${liveMap}` : "all");
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   // Follow the live map as the series moves on
   useEffect(() => {
     if (liveMap) setTab(`map-${liveMap}`);
   }, [liveMap]);
   const selected = started.find((x) => `map-${x.mapNumber}` === tab);
-  const items = [{ key: "all", label: "Series totals" }, ...started.map((x) => ({ key: `map-${x.mapNumber}`, label: `Map ${x.mapNumber} · ${mapName(m.mode, x.mapId)}` }))];
+  const current = selected ? `map-${selected.mapNumber}` : "all";
+  const keys = ["all", ...started.map((x) => `map-${x.mapNumber}`)];
+  const [a, b] = m.teams;
   const view: MatchDetail = selected
     ? {
         ...m,
         mapId: selected.mapId,
+        // Rating changes belong to the series, so they show on the totals only
+        ratingDeltas: undefined,
         teams: m.teams.map((t) => ({
           ...t,
           score: selected.score[t.name] ?? 0,
@@ -358,19 +343,116 @@ function SeriesStats({ m, maps, liveMap, sideOf, roster }: StatsProps & { maps: 
         })),
       }
     : m;
+
+  // Arrow keys move between the tabs that can be picked, as a tablist should
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const at = keys.indexOf(current);
+    const to = e.key === "ArrowRight" ? at + 1 : e.key === "ArrowLeft" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? keys.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    const key = keys[(to + keys.length) % keys.length]!;
+    setTab(key);
+    tabRefs.current[key]?.focus();
+  };
+
   return (
-    <Tabs label="Series stats" items={items} value={selected ? tab : "all"} onChange={setTab} idPrefix="series">
-      <div className="stack">
-        {selected ? (
-          <MapStats m={view} sideOf={sideOf} roster={roster} mapNumber={selected.mapNumber} />
+    <section aria-labelledby="series-heading" className="stack">
+      <h2 id="series-heading" className={styles.seriesTitle}>
+        Best of {Math.max(m.bestOf ?? 1, maps.length)}
+      </h2>
+      <div role="tablist" aria-label="Series maps" className={styles.seriesTabs} style={{ "--maps": maps.length } as CSSProperties}>
+        <button
+          ref={(el) => {
+            tabRefs.current.all = el;
+          }}
+          type="button"
+          role="tab"
+          id="series-tab-all"
+          aria-selected={current === "all"}
+          aria-controls="series-panel"
+          tabIndex={current === "all" ? 0 : -1}
+          className={cx("glass", styles.totalsTab)}
+          onClick={() => setTab("all")}
+          onKeyDown={onKey}
+        >
+          Series totals
+        </button>
+        {maps.map((x) => {
+          const key = `map-${x.mapNumber}`;
+          const upcoming = x.status === "upcoming";
+          return (
+            <button
+              key={key}
+              ref={(el) => {
+                tabRefs.current[key] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`series-tab-${key}`}
+              aria-selected={current === key}
+              aria-controls="series-panel"
+              aria-disabled={upcoming || undefined}
+              tabIndex={current === key ? 0 : -1}
+              className={cx("glass", styles.mapTab)}
+              data-status={x.status}
+              onClick={() => !upcoming && setTab(key)}
+              onKeyDown={onKey}
+            >
+              <SeriesMapImage mode={m.mode} map={x} />
+              <span className={styles.mapTabBody}>
+                <span className={styles.mapTabTop}>
+                  <span className={styles.mapTabName}>
+                    <span className="muted">Map {x.mapNumber} </span>
+                    <span className="mono">{mapName(m.mode, x.mapId)}</span>
+                  </span>
+                  <Badge tone={x.status === "live" ? "win" : x.status === "done" ? "neutral" : "info"}>{SERIES_STATUS[x.status]}</Badge>
+                </span>
+                {!upcoming && a && b && (
+                  <span className={styles.mapTabScore}>
+                    <span data-side={sideOf(0)}>{x.score[a.name] ?? 0}</span>
+                    <span aria-hidden="true"> : </span>
+                    <span className="visually-hidden"> to </span>
+                    <span data-side={sideOf(1)}>{x.score[b.name] ?? 0}</span>
+                    {x.winnerTeam && <span className="visually-hidden">. Won by {x.winnerTeam === a.name ? (a.displayName ?? a.name) : (b.displayName ?? b.name)}</span>}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel" id="series-panel" aria-labelledby={`series-tab-${current}`} className="stack">
+        {started.length === 0 ? (
+          before
+        ) : selected ? (
+          <>
+            {selected.status === "done" && selected.demo && (
+              <div className={actionStyles.actions}>
+                <DemoActions matchId={m.id} demo={selected.demo} mapNumber={selected.mapNumber} label={`Map ${selected.mapNumber} demo`} />
+              </div>
+            )}
+            <MapStats m={view} sideOf={sideOf} roster={roster} mapNumber={selected.mapNumber} />
+          </>
         ) : (
           <>
-            <p className="muted">Maps won in the big score. Player stats add up every map played.</p>
+            <p className="muted">Player stats add up every map played.</p>
             <MapStats m={{ ...m, rounds: [] }} sideOf={sideOf} roster={roster} />
           </>
         )}
       </div>
-    </Tabs>
+    </section>
+  );
+}
+
+const SERIES_STATUS: Record<MatchMap["status"], string> = { upcoming: "Upcoming", live: "Live", done: "Done" };
+
+// Aim maps show their preview. A Rush map shows its start room once the rooms are known, else the Complex tile
+function SeriesMapImage({ mode, map }: { mode: MatchDetail["mode"]; map: MatchMap }) {
+  const start = isRushMode(mode) ? map.rushRooms?.[3] : undefined;
+  return (
+    <span className={styles.mapTabImage} aria-hidden="true">
+      {start !== undefined ? <RoomImage room={String(start)} /> : <MapThumb mapId={map.mapId} />}
+    </span>
   );
 }
 
@@ -386,26 +468,6 @@ function PlayerTables({ m, sideOf, topDamage }: { m: MatchDetail; sideOf: (i: nu
           <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), topDamage, m.ratingDeltas)} rows={t.players} rowKey={(p) => p.steamId} />
         </section>
       ))}
-    </div>
-  );
-}
-
-function TeamScore({ team, side }: { team: MatchDetail["teams"][number]; side: TeamSide }) {
-  return (
-    <div className={styles.team} data-side={side}>
-      <span className={styles.score}>{team.score}</span>
-      <span className={styles.teamName}>
-        <TeamMarker side={side} />
-        {team.displayName ?? team.name}
-      </span>
-      <span className={styles.avatars}>
-        {team.players.map((p) => (
-          <Link key={p.steamId} href={`/profile/${p.steamId}`} title={p.displayName} className={styles.avatarLink}>
-            <Avatar name={p.displayName} src={p.avatarUrl} size="sm" />
-            <span className="visually-hidden">{p.displayName}</span>
-          </Link>
-        ))}
-      </span>
     </div>
   );
 }

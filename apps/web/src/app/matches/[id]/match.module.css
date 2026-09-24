@@ -223,3 +223,105 @@
   gap: var(--space-2);
   min-width: 0;
 }
+
+/* Series: a small totals tab, then one card per map that is also its tab */
+.seriesTitle {
+  font-size: var(--text-lg);
+}
+.seriesTabs {
+  display: grid;
+  gap: var(--space-2);
+}
+@media (min-width: 700px) {
+  .seriesTabs {
+    grid-template-columns: auto repeat(var(--maps, 3), minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+.totalsTab,
+.mapTab {
+  min-height: var(--target-min);
+  padding: 0;
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  background: var(--color-surface-1);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  cursor: pointer;
+  overflow: hidden;
+}
+.totalsTab {
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.totalsTab[aria-selected="true"],
+.mapTab[aria-selected="true"] {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--color-accent);
+}
+.mapTab {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+@media (min-width: 700px) {
+  .mapTab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.mapTab[data-status="live"]:not([aria-selected="true"]) {
+  border-color: var(--color-border-strong);
+}
+.mapTab[aria-disabled="true"] {
+  cursor: default;
+  color: var(--color-text-muted);
+}
+.mapTab[aria-disabled="true"] .mapTabImage {
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+.mapTabImage {
+  display: block;
+}
+.mapTabImage img,
+.mapTabImage > span {
+  border-radius: 0;
+}
+.mapTabBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+.mapTabTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.mapTabName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+.mapTabScore {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+.mapTabScore [data-side="own"] {
+  color: var(--team-own);
+}
+.mapTabScore [data-side="enemy"] {
+  color: var(--team-enemy);
+}
