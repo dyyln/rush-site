@@ -137,7 +137,7 @@ public class SeriesTests
         await m.UploadTask!;
         var d1 = _sink.Last<DemoUploaded>();
         Assert.Equal(1, d1.MapNumber);
-        Assert.Equal(("/srv/cs2/game/csgo/rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab_m1.dem", "https://s3.example/m1"), _uploader.Calls[0]);
+        Assert.Equal((Path.Combine(_game.CsgoDirectory, "rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab_m1.dem"), "https://s3.example/m1"), _uploader.Calls[0]);
 
         _clock.Advance(30);
         m.Tick();
@@ -150,7 +150,7 @@ public class SeriesTests
         m.Tick();
         await m.UploadTask!;
         Assert.Equal(2, _sink.Last<DemoUploaded>().MapNumber);
-        Assert.Equal(("/srv/cs2/game/csgo/rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab_m2.dem", "https://s3.example/m2"), _uploader.Calls[1]);
+        Assert.Equal((Path.Combine(_game.CsgoDirectory, "rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab_m2.dem"), "https://s3.example/m2"), _uploader.Calls[1]);
         Assert.Equal(MatchPhase.BetweenMaps, m.Phase);
     }
 

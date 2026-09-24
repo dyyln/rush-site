@@ -25,6 +25,22 @@ public sealed record MatchStarted() : MatchEvent("match_started")
     // Rush only. The 7 room ids the plugin asked the script for, castles included. Null when the draw is Valve's.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<int>? RushRooms { get; init; }
+
+    // Rush only, with RushRooms. True when our rush_001 script confirmed it applied exactly those rooms.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? RushRoomsConfirmed { get; init; }
+}
+
+// Rush only. The veto's rooms did not take. Sent at most once per map, normally still in warmup.
+// Reason: "no_reply" (our script is not installed), "rejected" (it refused the set, Detail says why)
+// or "different" (it applied other rooms, Detail lists them).
+public sealed record RushRoomsFailed(string Reason, IReadOnlyList<int> RushRooms) : MatchEvent("rush_rooms_failed")
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Detail { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
 }
 
 // Rush only. A round was played in another room than the veto picked, so the modified script did not take.

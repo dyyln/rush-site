@@ -17,6 +17,9 @@ public sealed class MatchState
     public string? Arena { get; init; }
     // Rush. True once rush_rooms_mismatch went out for this map.
     public bool? RushRoomsMismatchSent { get; init; }
+    // Rush. Our script confirmed the rooms, or rush_rooms_failed went out, for this map.
+    public bool? RushRoomsConfirmed { get; init; }
+    public bool? RushRoomsFailedSent { get; init; }
     // Rush only. Mirror of the rush_001.js front and wins per side.
     public int? RushFrontSlot { get; init; }
     public int? RushTWins { get; init; }

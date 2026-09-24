@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm"
 import { afterEach, describe, expect, it } from "vitest"
 import { createAppHarness, makeUsers } from "../../../test/helpers.js"
-import { adminAudit, users } from "../../db/schema.js"
+import { adminAudit, queueTickets, users } from "../../db/schema.js"
+import { publishServiceStatus } from "../stats/status.js"
 import { DEFAULT_CUPS, cupToSchedule } from "../tournaments/config.js"
 import { MemoryTournamentStore } from "../tournaments/memory-store.js"
 import { TournamentService } from "../tournaments/service.js"
@@ -69,6 +70,62 @@ describe("queue open flags", () => {
     expect(await h.ctx.queue.waiting("aim1v1")).toHaveLength(0)
     const rush = await h.ctx.queue.waiting("rush3v3")
     expect(rush.map((t) => t.steamIds)).toEqual([[a]])
+  })
+
+  it("tells drained players which mode closed and records why the ticket ended", async () => {
+    const { as } = await setup()
+    const [a, b] = await makeUsers(h.db, 2)
+    await h.ctx.queue.join(a!, ["aim1v1", "rush3v3"])
+    await h.ctx.queue.join(b!, ["aim1v1"])
+    h.notifier.clear()
+
+    await as("PUT", "/admin/flags/queue.aim1v1.open", { enabled: false })
+    const last = (id: string) =>
+      h.notifier
+        .ofType("queue_status")
+        .filter((s) => s.audience.kind === "users" && s.audience.steamIds.includes(id))
+        .at(-1)?.msg.payload as { state: string; modes: { mode: string }[]; removed?: unknown }
+
+    expect(last(a!)).toMatchObject({ state: "queued", removed: { modes: ["aim1v1"], reason: "mode_closed" } })
+    expect(last(a!).modes.map((m) => m.mode)).toEqual(["rush3v3"])
+    expect(last(b!)).toMatchObject({ state: "idle", modes: [], removed: { modes: ["aim1v1"], reason: "mode_closed" } })
+
+    const [ended] = await h.db.select().from(queueTickets).where(eq(queueTickets.status, "cancelled"))
+    expect(ended?.cancelReason).toBe("mode_closed")
+    // Later status reads carry no removal note
+    expect(await h.ctx.queue.status(a!)).not.toHaveProperty("removed")
+  })
+
+  it("broadcasts service_status when a queue closes or opens, and not without a change", async () => {
+    const { as } = await setup()
+    const sent = () => h.notifier.ofType("service_status")
+    const modeOf = (i: number, mode: string) =>
+      (sent()[i]?.msg.payload as { modes: { mode: string; available: boolean; reason?: string }[] }).modes.find((m) => m.mode === mode)
+
+    // The first pass sends the baseline, a second pass with nothing changed sends nothing
+    expect(await publishServiceStatus(h.ctx)).toBe(true)
+    expect(await publishServiceStatus(h.ctx)).toBe(false)
+    expect(sent()).toHaveLength(1)
+    expect(sent()[0]!.audience).toEqual({ kind: "broadcast" })
+
+    await as("PUT", "/admin/flags/queue.aim1v1.open", { enabled: false })
+    expect(sent()).toHaveLength(2)
+    expect(modeOf(1, "aim1v1")).toEqual({ mode: "aim1v1", available: false, reason: "closed" })
+
+    // Writing the same value again changes nothing
+    await as("PUT", "/admin/flags/queue.aim1v1.open", { enabled: false })
+    expect(await publishServiceStatus(h.ctx)).toBe(false)
+    expect(sent()).toHaveLength(2)
+
+    // Other flags do not push the status
+    await as("PUT", "/admin/flags/beta.cups", { enabled: true })
+    expect(sent()).toHaveLength(2)
+
+    // Deleting a closed queue flag reopens the mode
+    await as("DELETE", "/admin/flags/queue.aim1v1.open")
+    expect(sent()).toHaveLength(3)
+    // No agent runs in tests so the mode falls back to its capacity reason
+    expect(modeOf(2, "aim1v1")?.reason).not.toBe("closed")
   })
 
   it("deletes flags, hides admin routes and audits every write", async () => {

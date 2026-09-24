@@ -16,6 +16,7 @@ On every CS2 update that touches `rush_001.js`, fetch the new file into `valve/`
 - The set is kept for the life of the map, so `mp_restartgame` and the warmup end keep it.
 - The 7-7 Convoy decider is left as Valve made it.
 - It also keeps the `RunScriptInput rushsite_room_<slot>_<id>` and `rushsite_rooms_apply` inputs. They work only if something can fire entity inputs, for example CounterStrikeSharp `AcceptInput`. `ent_fire` from the console cannot.
+- It answers every set with a server command the match plugin registers: `rushsite_rooms_applied <7 ids in play>` or `rushsite_rooms_rejected <bad_set|too_late> <ids>`. Without the plugin the server just prints `Unknown command`.
 - It logs `rushsite: room veto script loaded` when it loads.
 
 ## Build (Windows, CS2 Workshop Tools)

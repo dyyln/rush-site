@@ -9,6 +9,7 @@ import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
 import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema, PresenceSchema } from "./schemas/friends.js"
 import { CupEntrantPreviewSchema, CupWinnerSchema } from "./schemas/cups-ux.js"
 import { ChatDeletedPayloadSchema, ChatMessageSchema } from "./schemas/chat.js"
+import { ServiceStatusSchema } from "./schemas/stats.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
 export const WsEnvelopeSchema = z.object({
@@ -61,6 +62,13 @@ export const QueueStatusPayloadSchema = z.object({
   minTrust: TrustLevelSchema.optional(),
   // True only on the periodic refresh. A slow socket may drop these, never a state change
   refresh: z.boolean().optional(),
+  // Set once when the server took modes out of the ticket, such as an admin closing a queue
+  removed: z
+    .object({
+      modes: z.array(ModeSchema).min(1),
+      reason: z.enum(["mode_closed"]),
+    })
+    .optional(),
 })
 export type QueueStatusPayload = z.infer<typeof QueueStatusPayloadSchema>
 
@@ -312,6 +320,10 @@ export const ModeStatsPayloadSchema = z.object({
 })
 export type ModeStatsPayload = z.infer<typeof ModeStatsPayloadSchema>
 
+// Same body as GET /status. Broadcast only when mode availability changes
+export const ServiceStatusPayloadSchema = ServiceStatusSchema
+export type ServiceStatusPayload = z.infer<typeof ServiceStatusPayloadSchema>
+
 export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user", "maps"])
 export type AdminEventKind = z.infer<typeof AdminEventKindSchema>
 
@@ -362,6 +374,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("party_update", PartyUpdatePayloadSchema),
   msg("tournament_update", TournamentUpdatePayloadSchema),
   msg("mode_stats", ModeStatsPayloadSchema),
+  msg("service_status", ServiceStatusPayloadSchema),
   msg("admin_event", AdminEventPayloadSchema),
   msg("match_cancelled", MatchCancelledPayloadSchema),
   msg("error", ErrorPayloadSchema),

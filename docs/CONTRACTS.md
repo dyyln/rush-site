@@ -98,7 +98,8 @@ type MatchEvent =
   | { type: "server_ready" }
   | { type: "player_connected"; steamId: string }
   | { type: "player_disconnected"; steamId: string }
-  | { type: "match_started"; mapNumber?: number; rushRooms?: number[] }   // a series sends it when each map goes live. rushRooms: Rush only, the 7 room ids castle to castle when the veto picked them
+  | { type: "match_started"; mapNumber?: number; rushRooms?: number[]; rushRoomsConfirmed?: boolean }   // a series sends it when each map goes live. rushRooms: Rush only, the 7 room ids castle to castle when the veto picked them. rushRoomsConfirmed: our rush_001 script confirmed it applied them
+  | { type: "rush_rooms_failed"; reason: "no_reply" | "rejected" | "different"; rushRooms: number[]; detail?: string; mapNumber?: number }   // Rush only, once per map, normally in warmup. no_reply: the modified script is not installed. rejected: it refused the set (detail is its reason). different: other rooms are in play (detail lists them)
   | { type: "rush_rooms_mismatch"; round: number; expected: string; detected: string; rushRooms: number[]; mapNumber?: number }   // Rush only, once per map. The room played is not the one the veto picked, so the modified script did not take
   | { type: "round_end"; round: number; winnerTeam: string; score: Record<string, number>; arena?: string; mapNumber?: number }   // winnerTeam may be "draw". arena only in rush
   | { type: "map_end"; mapNumber: number; mapId: string; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean }   // series only, every map including the last. winnerTeam is a team name, or "draw" if a Rush map ever ends level

@@ -167,6 +167,28 @@ describe("schemas", () => {
     expect(ServerMessageSchema.parse(status)).toEqual(status)
   })
 
+  it("parses service_status and a queue removal note", () => {
+    const status = serverMessage("service_status", {
+      regions: [{ region: "eu", hosts: 1, hostsOnline: 1, slotsTotal: 8, slotsFree: 8, updating: false }],
+      surge: { enabled: false, active: 0 },
+      modes: [
+        { mode: "aim1v1", available: false, reason: "closed" },
+        { mode: "rush3v3", available: true },
+      ],
+      updatedAt: "2026-09-24T12:00:00.000Z",
+    })
+    expect(ServerMessageSchema.parse(status)).toEqual(status)
+    const idle = serverMessage("queue_status", {
+      state: "idle",
+      partyId: null,
+      modes: [],
+      cooldownUntil: null,
+      removed: { modes: ["aim1v1"], reason: "mode_closed" },
+    })
+    expect(ServerMessageSchema.parse(idle)).toEqual(idle)
+    expect(() => ServerMessageSchema.parse({ ...idle, payload: { ...idle.payload, removed: { modes: [], reason: "mode_closed" } } })).toThrow()
+  })
+
   it("parses admin_event", () => {
     const ev = serverMessage("admin_event", { kind: "host", payload: { hostId: "h1", free: 3 } })
     expect(ServerMessageSchema.parse(ev)).toEqual(ev)

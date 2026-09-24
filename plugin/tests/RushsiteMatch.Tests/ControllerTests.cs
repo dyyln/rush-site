@@ -159,7 +159,7 @@ public class ControllerTests
         Assert.Equal(4096, demo.Bytes);
         Assert.Null(demo.Error);
         Assert.False(m.DemoPending);
-        Assert.Equal("/srv/cs2/game/csgo/rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab.dem", _uploader.Calls.Single().Path);
+        Assert.Equal(Path.Combine(_game.CsgoDirectory, "rushsite_5f0c7a3e-1b2c-4d5e-8f90-1234567890ab.dem"), _uploader.Calls.Single().Path);
     }
 
     [Fact]

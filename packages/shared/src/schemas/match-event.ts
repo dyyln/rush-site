@@ -32,6 +32,17 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     mapNumber: MapNumberSchema.optional(),
     // Rush only. The 7 room ids the plugin sent to the modified rush_001 script, castles included
     rushRooms: z.array(z.number().int()).length(7).optional(),
+    // Rush only, with rushRooms. True when our rush_001 script confirmed it applied exactly those rooms
+    rushRoomsConfirmed: z.boolean().optional(),
+  }),
+  // Rush only. The veto's rooms did not take, normally reported while still in warmup. Once per map.
+  // no_reply: our script is not installed. rejected: it refused the set. different: it applied other rooms
+  z.object({
+    type: z.literal("rush_rooms_failed"),
+    reason: z.enum(["no_reply", "rejected", "different"]),
+    rushRooms: z.array(z.number().int()),
+    detail: z.string().optional(),
+    mapNumber: MapNumberSchema.optional(),
   }),
   // Rush only. A round was played in another room than the veto picked, so the modified script did not take.
   // Sent once per map. The admin event log shows it

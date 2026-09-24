@@ -89,7 +89,9 @@ Needs our modified `rush_001` script from `rush-script/`, installed as described
 - Slot 3 must be a start room (101 to 104) and slots 1, 2, 4 and 5 mid rooms (201 to 212), with no duplicates. Ids may be numbers or numeric strings. A bad list is logged and ignored, and the match still loads.
 - In warmup, each time a Rush map comes up, the plugin runs `say rushsite_rooms 203,207,102,211,205` from the server console. The script only accepts that line when no player sent it. `ent_fire` is not used: it does nothing from the console of a dedicated server. Players see the line in chat during warmup.
 - Rooms are never sent once the map is live, because applying resets the script's game state. After a hot reload mid match the plugin keeps the plan for the check below but sends nothing.
-- `match_started` carries `rushRooms`: the 7 ids castle to castle, as sent.
+- Our script answers each set by running `rushsite_rooms_applied <7 ids in play>` or `rushsite_rooms_rejected <reason> <ids>` on the server console. The plugin registers both commands and ignores them from players. With no answer after `RushRoomsReplyTimeout` (5 s) the rooms are sent once more. With no answer again, or a rejection, or other rooms in play, the plugin sends `rush_rooms_failed { reason: no_reply | rejected | different, rushRooms, detail?, mapNumber? }` once per map. That normally happens while still in warmup, so the API can act before the match is live. `no_reply` means `rushsite_rooms.vpk` is not installed.
+- `match_started` carries `rushRooms`, the 7 ids castle to castle as sent, and `rushRoomsConfirmed`.
+- `rushsite_status` shows the rooms as `confirmed`, `unconfirmed` or `FAILED`.
 - At each `round_freeze_end` the detected arena is compared with the planned room for the current front slot. The 7 to 7 Convoy decider is skipped. The first difference on a map sends `rush_rooms_mismatch { round, expected, detected, rushRooms, mapNumber? }` and shows `MISMATCH` in `rushsite_status`. An arena that cannot be read is not a mismatch.
 - `rushsite_rush_rooms 0` turns all of this off. The console command `rushsite_rush_rooms_send` sends the rooms again during warmup.
 

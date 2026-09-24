@@ -20,7 +20,7 @@ export interface OpsDeps {
   store: AdminStore
   opts: Pick<
     AdminPluginOptions,
-    "db" | "flags" | "announcements" | "metrics" | "onModeClosed" | "resolveVanity" | "emitAdmin"
+    "db" | "flags" | "announcements" | "metrics" | "onModeClosed" | "onQueueFlagChanged" | "resolveVanity" | "emitAdmin"
   >
   now(): Date
 }
@@ -64,6 +64,15 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsDeps, adminOf: 
     return opts.announcements
   }
 
+  // A failed push must not fail the write. The status loop catches up
+  const queueFlagChanged = async () => {
+    try {
+      await opts.onQueueFlagChanged?.()
+    } catch {
+      // Ignored
+    }
+  }
+
   app.get("/admin/flags", async () => ({ flags: await flags().list() }))
 
   app.put<{ Params: { key: string } }>("/admin/flags/:key", async (req) => {
@@ -79,6 +88,8 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsDeps, adminOf: 
     let drained = 0
     if (mode) {
       const wasOpen = before?.enabled ?? true
+      // Cards change before the drained tickets hear why they left
+      if (wasOpen !== flag.enabled) await queueFlagChanged()
       if (wasOpen && !flag.enabled && opts.onModeClosed) drained = await opts.onModeClosed(mode)
       if (wasOpen !== flag.enabled) {
         opts.emitAdmin("queue", { action: flag.enabled ? "mode_opened" : "mode_closed", mode, drained, by: entry.adminSteamId })
@@ -94,6 +105,7 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsDeps, adminOf: 
     const entry = await audit(req, "flag.delete", key, { enabled: removed.enabled, value: removed.value })
     const mode = modeOfQueueFlag(key)
     // A missing queue flag means open
+    if (mode && !removed.enabled) await queueFlagChanged()
     if (mode && !removed.enabled) opts.emitAdmin("queue", { action: "mode_opened", mode, by: entry.adminSteamId })
     return { ok: true, audit: entry }
   })

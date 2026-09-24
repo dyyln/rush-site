@@ -23,7 +23,14 @@ import { getRealtime, type ConnectionState } from "./ws";
 export type MatchCancelled = MatchCancelledPayload;
 export type WsError = ErrorPayload;
 
-type Notices = { onCancelled?: (c: MatchCancelled) => void; onError?: (e: WsError) => void };
+export type QueueRemoved = NonNullable<QueueStatusPayload["removed"]>;
+
+type Notices = {
+  onCancelled?: (c: MatchCancelled) => void;
+  onError?: (e: WsError) => void;
+  // The server took modes out of the ticket, such as an admin closing a queue
+  onRemoved?: (r: QueueRemoved) => void;
+};
 
 export type MatchPhase =
   | { phase: "none" }
@@ -79,7 +86,10 @@ export function usePlay(notices: Notices = {}) {
         // The server only broadcasts stats on change, so take a fresh snapshot after every reconnect
         if (s === "open") loadStats();
       }),
-      rt.on("queue_status", setQueue),
+      rt.on("queue_status", (q) => {
+        setQueue(q);
+        if (q.removed) noticesRef.current.onRemoved?.(q.removed);
+      }),
       rt.on("party_update", setParty),
       // Presence of party mates arrives as friend updates
       rt.on("friend_update", (u) => {

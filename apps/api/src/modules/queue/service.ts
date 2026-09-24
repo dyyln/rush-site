@@ -106,6 +106,9 @@ export function toMmTicket(t: LiveTicket, mode: Mode): MmTicket {
   }
 }
 
+// One off fields sent with a queue status change
+export type QueueStatusExtra = Pick<QueueStatusPayload, "removed">
+
 export type EtaSource = (mode: Mode) => Promise<number | null>
 // Returns the reason a mode cannot queue, or null when it can
 export type AvailabilitySource = (mode: Mode) => Promise<string | null>
@@ -430,9 +433,27 @@ export class QueueService {
       await this.notifyParty([steamId])
       return
     }
+    await this.dropModes(ticket, modes, "left")
+  }
+
+  // Takes a closed mode out of every waiting ticket. Tickets with no mode left leave the queue
+  // Members are told which mode went and why. Returns how many tickets it touched
+  async closeMode(mode: Mode): Promise<number> {
+    let touched = 0
+    for (const t of await this.waiting(mode)) {
+      const ticket = await this.ticketForParty(t.partyId)
+      if (!ticket || !ticket.modes.includes(mode)) continue
+      await this.dropModes(ticket, [mode], "mode_closed", { removed: { modes: [mode], reason: "mode_closed" } })
+      touched++
+    }
+    return touched
+  }
+
+  // Without modes the ticket leaves every queue
+  private async dropModes(ticket: LiveTicket, modes: Mode[] | undefined, reason: string, extra?: QueueStatusExtra): Promise<void> {
     const remaining = modes ? ticket.modes.filter((m) => !modes.includes(m)) : []
     if (remaining.length === 0) {
-      await this.cancelParty(party.partyId, "left")
+      await this.cancelParty(ticket.partyId, reason, extra)
       return
     }
     const next: LiveTicket = { ...ticket, modes: remaining }
@@ -441,10 +462,10 @@ export class QueueService {
       .set({ modes: remaining, updatedAt: new Date(this.now()) })
       .where(eq(queueTickets.id, ticket.id))
     await this.putLive(next, ticket.modes)
-    await this.notifyParty(ticket.steamIds)
+    await this.notifyParty(ticket.steamIds, extra)
   }
 
-  async cancelParty(partyId: string, reason: string): Promise<void> {
+  async cancelParty(partyId: string, reason: string, extra?: QueueStatusExtra): Promise<void> {
     const ticket = await this.ticketForParty(partyId)
     if (!ticket) return
     await this.dropLive(ticket)
@@ -452,7 +473,7 @@ export class QueueService {
       .update(queueTickets)
       .set({ status: "cancelled", cancelReason: reason, updatedAt: new Date(this.now()) })
       .where(and(eq(queueTickets.id, ticket.id), eq(queueTickets.status, "waiting")))
-    await this.notifyParty(ticket.steamIds)
+    await this.notifyParty(ticket.steamIds, extra)
   }
 
   async waiting(mode: Mode): Promise<LiveTicket[]> {
@@ -645,8 +666,8 @@ export class QueueService {
     }
   }
 
-  async notifyParty(steamIds: string[]): Promise<void> {
-    for (const id of steamIds) toUsers(this.notifier, [id], "queue_status", await this.status(id))
+  async notifyParty(steamIds: string[], extra?: QueueStatusExtra): Promise<void> {
+    for (const id of steamIds) toUsers(this.notifier, [id], "queue_status", { ...(await this.status(id)), ...extra })
     for (const h of this.playerHooks) await h(steamIds).catch(() => undefined)
   }
 
