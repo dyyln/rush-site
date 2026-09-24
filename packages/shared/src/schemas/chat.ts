@@ -53,7 +53,13 @@ export const ChatPostSchema = z.object({
   channel: ChatChannelSchema.default(CHAT_GLOBAL_CHANNEL),
   body: z
     .string()
-    .transform((s) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim())
+    // Chat is one line per message: line breaks and tabs become a space, other control characters go
+    .transform((s) =>
+      s
+        .replace(/[\t\r\n\u2028\u2029]+/g, " ")
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .trim(),
+    )
     .pipe(z.string().min(1, "message is empty").max(CHAT_MAX_LENGTH, `at most ${CHAT_MAX_LENGTH} characters`)),
 })
 export type ChatPost = z.input<typeof ChatPostSchema>

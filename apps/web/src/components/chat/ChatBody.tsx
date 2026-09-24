@@ -242,9 +242,10 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // One line per message: Enter sends, Shift+Enter does nothing
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      void send();
+      if (!e.shiftKey) void send();
     }
   }
 
@@ -315,7 +316,8 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
                 placeholder="Message global chat"
                 value={draft}
                 onChange={(e) => {
-                  setDraft(e.target.value);
+                  // Pasted line breaks become spaces, like the server does
+                  setDraft(e.target.value.replace(/[\r\n\u2028\u2029]+/g, " "));
                   // Timed refusals stay up so the countdown is not lost while typing
                   if (sendError && sendError.until === null) setSendError(null);
                 }}
