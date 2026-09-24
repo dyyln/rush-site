@@ -6,11 +6,11 @@ CounterStrikeSharp plugin that runs one rushsite match per CS2 server process. I
 
 The split is decided once, from `winCondition` in `match.json`. See `MatchController` in `src/RushsiteMatch.Core/Match/MatchController.cs`.
 
-| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush3v3) |
+| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush1v1 and rush3v3) |
 |---|---|---|
 | Whitelist kick, `sv_password` check | yes | yes |
 | `bot_quota 0` and `bot_kick`, re-checked every second | yes | yes |
-| Warmup hold and start | held until everyone is in and on their side, then a countdown starts the match | held until all six are in and on their side, then Valve's warmup runs out |
+| Warmup hold and start | held until everyone is in and on their side, then a countdown starts the match | held until everyone is in and on their side and the rooms are settled, then the same countdown ends warmup with `mp_warmup_end` |
 | Map loadout, no buying, spawn immunity | yes | no |
 | Side validation on `jointeam` | yes, first team on a side claims it | yes, fixed from `match.json`. Wrong joins are redirected, repeated ones kicked |
 | Sets `mp_maxrounds`, clinch, overtime and halftime | yes, overtime on | no. Never touches any `mp_` round convar |
@@ -55,7 +55,10 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 
 - Valve's `rush_001.js` owns round time, max rounds and the match end. The plugin never sets an `mp_` round convar.
 - Teams are fixed from `match.json`. See "Rush teams" below.
-- Warmup is held with `mp_warmup_pausetimer 1` until every player is connected and on their side. Then the plugin sets it to 0 and Valve's warmup timer runs out as normal. Turn this off with `rushsite_rush_hold_warmup 0`.
+- Warmup is held with `mp_warmup_pausetimer 1`. Once every player is connected and on their side, the aim start countdown runs (`rushsite_start_countdown`, same chat and center text). When it runs out the plugin sends `mp_warmup_pausetimer 0`, `tv_record` (a no-op when already recording) and `mp_warmup_end`. Leaving or switching side during the countdown stops it, as in aim.
+- Why the plugin ends warmup itself: in a live rush1v1 test Valve's warmup never ended. The likely cause is `mp_endwarmup_player_count`, which defaults to 0 and means "require maximum players for mode". `gamemodes.txt` gives Rush `maxplayers 6` and `gamemode_rush.cfg` does not change it. `rush_001.js` has no warmup or player count logic of its own. Ending warmup explicitly works whatever the engine waits for. Ending warmup when everyone is present is not a rule change. Round rules, rooms, economy and timers stay Valve's.
+- With `rushRooms` the countdown does not end warmup until the script has answered the room set (`rushsite_rooms_applied`) or `rush_rooms_failed` has gone out. The countdown waits at zero and chat says the rooms are loading. That wait is at most about 10 s, the reply timeout twice. So the rooms are always applied in warmup, before the first live round.
+- `rushsite_rush_hold_warmup 0` stops holding Valve's warmup timer. The countdown still ends warmup once everyone is in.
 - No loadout, spawn immunity or overtime. Rush is Valve's rules as shipped.
 - A Rush map cannot normally end tied. Every round has a tower owner who wins it, so 15 rounds always give someone 8. A tie needs a round that `rush_001.js` ends with the `DRAW` reason, which the documented rules never do. If it happens, the plugin reports `winnerTeam: "draw"` in `match_end`, or in `map_end` for a series. No tiebreak is invented.
 - The match counts as live on the first of these:
@@ -76,7 +79,7 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 ## Chat
 
 - Every line starts with the brand prefix in purple. Scores are gold and team names follow the site colours, purple for the first team and amber for the second.
-- Aim start countdown: announced when it starts, every 10 seconds above 10, then each of the last 5 seconds. The center of the screen shows every second. When it stops, chat names who left the server or switched side.
+- Start countdown, every mode: announced when it starts, every 10 seconds above 10, then each of the last 5 seconds. The center of the screen shows every second. When it stops, chat names who left the server or switched side.
 - Disconnect: `<name> disconnected. 3:00 to return or they forfeit.` The time is `rushsite_disconnect_grace`. Aim adds that the match pauses at the next freeze time. The time left is repeated every minute and at 30 and 10 seconds, and `<name> is back.` is printed on return. This runs in warmup, live and between series maps, in every mode.
 - Match end: the final score, the match link when `brand.siteUrl` is set, and the time until the kick. Players are kicked after `rushsite_match_end_kick_delay` with the score in the kick reason. Anyone who reconnects after that is kicked again.
 - Series: each map end prints the map score, the series score and the next map. The series end prints the series score, every map score and the match link.
@@ -101,7 +104,7 @@ When `match.json` has a `series`, the whole series is played on this server:
 
 - The server launches on map `series.startMapNumber`, normally 1. `series.wins` holds maps already won before it, which is non-zero only when a series resumes after a crash.
 - When a map ends, the plugin sends `map_end` and keeps everyone on the server. That includes the last map. It stops the demo after `tv_delay` + `rushsite_demo_stop_extra`, and waits at least `rushsite_series_map_break` seconds. In Rush that is about 110 s because of `tv_delay 105`. Then it loads the next map with `host_workshop_map <workshopId>` or `changelevel <mapName>`.
-- On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Aim counts down again once everyone is in. Rush holds warmup again. Sides are not swapped between maps.
+- On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Both count down again once everyone is in. Rush holds warmup again and waits for the new map's rooms. Sides are not swapped between maps.
 - Players reload with the map. The plugin sends `player_disconnected` for each of them when it changes the map. It sends `player_connected` again as each one is fully in on the new map.
 - Once a team has a majority of maps, or the last map is played, the plugin sends `match_end` with the series result and then kicks everyone. A drawn Rush map credits nobody. If the maps run out level, `match_end` is `draw`.
 - `match_abandoned` ends the whole series. That can be a no-show, a disconnect past the grace, or a next map that has not loaded within 5 minutes (`map_load_failed`).
@@ -272,7 +275,7 @@ Launch the server with:
 | `rushsite_match_config` | empty | Path to match.json. Used when `RUSHSITE_MATCH_JSON` is not set |
 | `rushsite_connect_grace` | 300 | Seconds for every player to connect once. Then match_abandoned `no_show` |
 | `rushsite_disconnect_grace` | 180 | Seconds a player may stay away after leaving. Then match_abandoned `disconnected` |
-| `rushsite_start_countdown` | 10 | Aim only. Countdown once every player is in and on their side |
+| `rushsite_start_countdown` | 10 | Every mode. Countdown once every player is in and on their side, then warmup ends |
 | `rushsite_aim_loadout` | 1 | Aim only. Hand out the map loadout, stop buying and strip other weapons on spawn |
 | `rushsite_aim_spawn_immunity` | 2 | Aim only. Seconds for `mp_respawn_immunitytime` |
 | `rushsite_overtime_maxrounds` | 6 | Aim only. Rounds per overtime period for a tied map. 0 turns overtime off |
@@ -286,7 +289,7 @@ Launch the server with:
 | `rushsite_kick_bots` | 1 | Hold `bot_quota` at 0. `gamemode_rush.cfg` sets 2 |
 | `rushsite_try_changeteam` | 0 | Also try `ChangeTeam` when a player must move. Broken on the current CS2 build |
 | `rushsite_team_refusals` | 3 | Rush only. Wrong side joins before the player is kicked |
-| `rushsite_rush_hold_warmup` | 1 | Rush only. Hold warmup until every player is in and on their side |
+| `rushsite_rush_hold_warmup` | 1 | Rush only. Hold Valve's warmup timer until the start countdown ends warmup |
 | `rushsite_webhook_max_attempts` | 10 | Attempts per webhook event before it is dropped |
 
 The plugin sets these fake convars when it loads. To change them, use rcon or a cfg that is exec'd after the plugin loads. Durations are read when the match config loads.
@@ -315,7 +318,7 @@ Delivery:
 | `server_ready` | match.json loaded and the server is set up |
 | `player_connected` | a whitelisted player finishes connecting |
 | `player_disconnected` | a whitelisted player leaves before the match ends, and in a series for everyone when the next map loads |
-| `match_started` | aim: the start countdown ran out. Rush: the match goes live. Sent on every map of a series with `mapNumber` |
+| `match_started` | aim: the start countdown ran out. Rush: the match goes live after the countdown ends warmup. Sent on every map of a series with `mapNumber` |
 | `round_end` | every live round. `winnerTeam` is a team name, or `draw`. Rush adds `arena`. A series adds `mapNumber` and rounds restart at 1 on each map |
 | `kill` | every frag between two match players in a live round, sent as it happens. See below |
 | `map_end` | series only, after every map, the last one included. `{ mapNumber, mapId, winnerTeam, score, players, demoUploaded }`. `score` is rounds, `players` are this map's stats, `demoUploaded` is `false` |

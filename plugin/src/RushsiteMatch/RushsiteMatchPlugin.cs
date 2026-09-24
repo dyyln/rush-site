@@ -25,7 +25,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<string> MatchConfigPath = new(MatchConfigLoader.ConVarName, "Path to match.json. Relative paths resolve against game/csgo.", "");
     public FakeConVar<int> ConnectGrace = new("rushsite_connect_grace", "Seconds a player may take to first connect before the match is abandoned.", 300);
     public FakeConVar<int> DisconnectGrace = new("rushsite_disconnect_grace", "Seconds a player may stay disconnected before the match is abandoned.", 180);
-    public FakeConVar<int> StartCountdown = new("rushsite_start_countdown", "Aim modes. Seconds of countdown once every player is in and on their side.", 10);
+    public FakeConVar<int> StartCountdown = new("rushsite_start_countdown", "Seconds of countdown once every player is in and on their side. Then warmup ends.", 10);
     public FakeConVar<float> AimSpawnImmunity = new("rushsite_aim_spawn_immunity", "Aim modes. Seconds of spawn immunity, sets mp_respawn_immunitytime.", 2f);
     public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout on spawn and strip everything else.", true);
     public FakeConVar<int> OvertimeMaxRounds = new("rushsite_overtime_maxrounds", "Aim modes. Rounds per overtime period for a tied map. 0 turns overtime off.", 6);
@@ -39,7 +39,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<bool> KickBots = new("rushsite_kick_bots", "Hold bot_quota at 0 and kick bots.", true);
     public FakeConVar<bool> TryChangeTeam = new("rushsite_try_changeteam", "Also try ChangeTeam to put players on their side. Broken on CS2 1.41.8.2.", false);
     public FakeConVar<int> TeamJoinRefusals = new("rushsite_team_refusals", "Rush. Wrong side joins before the player is kicked.", 3);
-    public FakeConVar<bool> HoldRushWarmup = new("rushsite_rush_hold_warmup", "Rush. Hold warmup until every player is in and on their side.", true);
+    public FakeConVar<bool> HoldRushWarmup = new("rushsite_rush_hold_warmup", "Rush. Hold Valve's warmup timer until the start countdown ends warmup.", true);
     public FakeConVar<bool> RushRooms = new("rushsite_rush_rooms", "Rush. Send the veto's rushRooms to the modified rush_001 script.", true);
     public FakeConVar<int> WebhookMaxAttempts = new("rushsite_webhook_max_attempts", "Delivery attempts per webhook event before it is dropped.", 10);
 

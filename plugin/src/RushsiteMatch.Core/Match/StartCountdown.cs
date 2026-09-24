@@ -8,8 +8,9 @@ public enum CountdownChange
     Fired,
 }
 
-// Aim modes. Replaces ready-up. The countdown runs while every player is in and on their side,
+// Every mode. Replaces ready-up. The countdown runs while every player is in and on their side,
 // goes back to waiting when that stops being true, and fires once when it runs out.
+// With mayFire false it stays at zero and fires on a later update. Rush uses that to wait for the rooms.
 public sealed class StartCountdown
 {
     private readonly TimeSpan _length;
@@ -23,7 +24,7 @@ public sealed class StartCountdown
     public bool Running => Deadline is not null && !Fired;
     public bool Fired { get; private set; }
 
-    public CountdownChange Update(bool lineupComplete, DateTimeOffset now)
+    public CountdownChange Update(bool lineupComplete, DateTimeOffset now, bool mayFire = true)
     {
         if (Fired) return CountdownChange.None;
         if (!lineupComplete)
@@ -37,7 +38,7 @@ public sealed class StartCountdown
             Deadline = now + _length;
             if (_length > TimeSpan.Zero) return CountdownChange.Started;
         }
-        if (now < Deadline) return CountdownChange.None;
+        if (now < Deadline || !mayFire) return CountdownChange.None;
         Fired = true;
         return CountdownChange.Fired;
     }
