@@ -1,5 +1,5 @@
 // Mirrors the response shapes in apps/api/src/modules/admin/types.ts
-import type { AdminEventKind, Mode, TrustLevel } from "@rushsite/shared";
+import type { AdminEventKind, Mode, TrustLevel, WorkshopItem } from "@rushsite/shared";
 
 export type { AdminEventKind, Mode, TrustLevel };
 
@@ -99,7 +99,11 @@ export type AuditAction =
   | "announcement.delete"
   | "chat.delete"
   | "chat.mute"
-  | "chat.unmute";
+  | "chat.unmute"
+  | "map.add"
+  | "map.update"
+  | "map.reorder"
+  | "map.remove";
 
 export type AuditEntry = {
   id: string;
@@ -176,5 +180,8 @@ export type OverviewView = {
 export type ActionResult = { ok: true; audit: AuditEntry };
 
 export type { Announcement, FeatureFlag, MetricPoint, MetricsRange, MetricsView } from "@rushsite/shared";
+export type { MapLoadout, PoolMap, PoolMode, PoolView, WorkshopItem } from "@rushsite/shared";
+
+export type WorkshopPreview = { item: WorkshopItem; suggestedId: string; existingId: string | null };
 
 export type ResolvedProfile = { steamId: string; registered: boolean; user: UserCard | null };

@@ -24,6 +24,7 @@ import { MODE_STATS_KEY, type LiveTicket } from "./modules/queue/service.js"
 import { registerStatsFeatures } from "./modules/stats/features.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { sampleMetrics } from "./modules/admin/metrics.js"
+import { fetchWorkshopItem } from "./modules/maps/workshop.js"
 import { LocalHub, type Audience } from "./modules/ws/hub.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
 
@@ -193,6 +194,9 @@ export function adminOptions(ctx: AppContext) {
     chat: ctx.chat,
     onModeClosed: (mode: Mode) => drainMode(ctx, mode),
     resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
+    mapPool: ctx.maps,
+    fetchWorkshop: (workshopId: string) =>
+      fetchWorkshopItem(ctx.fetch, workshopId, async (id) => (await ctx.steam.playerSummaries([id]))[0]?.personaname ?? null),
     now: () => new Date(ctx.now()),
   }
 }

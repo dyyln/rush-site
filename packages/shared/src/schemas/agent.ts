@@ -35,6 +35,9 @@ export const SeriesConfigSchema = z
   .refine((s) => s.startMapNumber <= s.bestOf, "startMapNumber is past the last map")
 export type SeriesConfig = z.infer<typeof SeriesConfigSchema>
 
+// Seven room ids in slot order
+export const RushRoomsSchema = z.array(z.number().int().positive()).length(7)
+
 export const StartServerRequestSchema = z.object({
   matchId: UuidSchema,
   mode: ModeSchema,
@@ -50,6 +53,8 @@ export const StartServerRequestSchema = z.object({
   cs2: Cs2StartSchema,
   // map, cs2 and demoUpload describe the map at series.startMapNumber
   series: SeriesConfigSchema.optional(),
+  // Rush room ids from the room veto, T castle first. Passed through to match.json
+  rushRooms: RushRoomsSchema.optional(),
 })
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 
@@ -86,5 +91,7 @@ export const PluginMatchConfigSchema = z.object({
   demoUpload: DemoUploadSchema,
   winCondition: WinConditionSchema,
   series: SeriesConfigSchema.optional(),
+  // The plugin ignores this until the server can load chosen rooms
+  rushRooms: RushRoomsSchema.optional(),
 })
 export type PluginMatchConfig = z.infer<typeof PluginMatchConfigSchema>

@@ -60,7 +60,8 @@ export function mockStatus(): ServiceStatus {
     modes: [
       { mode: "aim1v1", available: true },
       { mode: "aim2v2", available: true },
-      { mode: "rush3v3", available: false, reason: "not_configured" },
+      // Available so the Rush room veto can be clicked through in mock mode
+      { mode: "rush3v3", available: true },
     ],
     updatedAt: new Date(MOCK_NOW).toISOString(),
   };

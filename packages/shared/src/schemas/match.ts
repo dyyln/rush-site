@@ -3,7 +3,7 @@ import { SteamId64Schema, UuidSchema } from "./common.js"
 import { ModeSchema } from "./mode.js"
 import { TierIdSchema } from "../config/tiers.js"
 import { ServerDriverNameSchema } from "../drivers.js"
-import { VetoStateSchema } from "./veto.js"
+import { VetoKindSchema, VetoStateSchema } from "./veto.js"
 
 export const MatchStatusSchema = z.enum([
   "accepting",
@@ -97,6 +97,8 @@ export const MatchVetoViewSchema = z.object({
   state: VetoStateSchema,
   // Epoch ms. null once the veto is done
   stepDeadline: z.number().nullable(),
+  // Left out means maps
+  kind: VetoKindSchema.optional(),
 })
 export type MatchVetoView = z.infer<typeof MatchVetoViewSchema>
 
@@ -129,6 +131,8 @@ export const MatchDetailSchema = z.object({
   bestOf: z.number().int().positive().optional(),
   // One entry per map. In a series teams[].score is maps won and player stats are totals
   maps: z.array(MatchMapSchema).optional(),
+  // Rush room ids from T castle to CT castle when the room veto ran
+  rushRooms: z.array(z.number().int()).optional(),
   // Participants only, while the match is in that step
   accept: MatchAcceptViewSchema.optional(),
   veto: MatchVetoViewSchema.optional(),

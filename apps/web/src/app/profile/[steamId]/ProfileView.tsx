@@ -27,6 +27,7 @@ import { TrustChip } from "@/components/trust/TrustChip";
 import { MyReports } from "@/components/review/MyReports";
 import { WeaponIcon, weaponLabel } from "@/components/icons";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
+import { MapThumb } from "@/components/play/MapThumb";
 import styles from "./profile.module.css";
 
 const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
@@ -237,7 +238,10 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
                 const wr = winRate(m.wins, m.matches);
                 return (
                   <li key={m.mapId} className={styles.mapRow}>
-                    <span className="mono">{mapName(stats.mode, m.mapId)}</span>
+                    <span className={styles.mapName}>
+                      <MapThumb mapId={m.mapId} className={styles.mapThumb} />
+                      <span className="mono">{mapName(stats.mode, m.mapId)}</span>
+                    </span>
                     <span className={styles.bar} aria-hidden="true">
                       <span style={{ width: pct(wr) }} />
                     </span>

@@ -2,6 +2,7 @@ import { ACCEPT_WINDOW_SEC, type MatchAcceptView, type MatchVetoView, type VetoS
 import { eq } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { matchPlayers, matches, vetoes } from "../../db/schema.js"
+import { vetoKindOf } from "./room-veto.js"
 
 type MatchRow = typeof matches.$inferSelect
 type PlayerRow = typeof matchPlayers.$inferSelect
@@ -33,7 +34,14 @@ export async function buildRoomView(db: Db, m: MatchRow, players: PlayerRow[], v
     const [row] = await db.select().from(vetoes).where(eq(vetoes.matchId, m.id))
     if (!row) return {}
     const state = row.state as VetoState
-    return { veto: { state: vetoViewFor(state, me.team), stepDeadline: state.done ? null : (row.stepDeadline?.getTime() ?? null) } }
+    const kind = vetoKindOf(row.format)
+    return {
+      veto: {
+        state: vetoViewFor(state, me.team),
+        stepDeadline: state.done ? null : (row.stepDeadline?.getTime() ?? null),
+        ...(kind === "rooms" ? { kind } : {}),
+      },
+    }
   }
   if (m.status === "ready" || m.status === "starting") {
     return { warmup: { connected: players.filter((p) => p.connected).length, expected: players.length } }

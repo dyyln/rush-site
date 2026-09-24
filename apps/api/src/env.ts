@@ -97,6 +97,8 @@ export const EnvSchema = z.object({
   DEMO_WAIT_SEC: z.coerce.number().int().nonnegative().default(180),
   // Lets modes with placeholder map or game ids queue outside production
   ALLOW_UNRESOLVED_MODES: bool.default(false),
+  // Rush room ban and pick. Unset follows RUSH_ROOM_VETO.enabled in shared config
+  RUSH_ROOM_VETO: bool.optional(),
   // Disable background loops, for tests and one-off scripts
   DISABLE_LOOPS: bool.default(false),
   // Per route HTTP rate limits backed by Redis

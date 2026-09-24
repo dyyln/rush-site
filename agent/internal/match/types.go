@@ -80,6 +80,8 @@ type StartRequest struct {
 	CS2 *CS2Settings `json:"cs2"`
 	// Series is set for best-of series. Map and CS2 then describe the first map to load.
 	Series *Series `json:"series,omitempty"`
+	// RushRooms holds room ids from the room veto, T castle first. It is passed through to match.json.
+	RushRooms []int `json:"rushRooms,omitempty"`
 }
 
 // CS2Settings is the cs2 block of StartRequest. It mirrors the shared Cs2Start type.
@@ -113,4 +115,5 @@ type PluginConfig struct {
 	DemoUpload      DemoUpload `json:"demoUpload"`
 	WinCondition    string     `json:"winCondition"`
 	Series          *Series    `json:"series,omitempty"`
+	RushRooms       []int      `json:"rushRooms,omitempty"`
 }

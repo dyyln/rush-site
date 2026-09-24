@@ -7,9 +7,14 @@ import type {
   ChatMuteView,
   FeatureFlag,
   MetricsRange,
+  MapLoadout,
   MetricsView,
   Mode,
+  PoolMap,
+  PoolMode,
+  PoolView,
   TrustLevel,
+  WorkshopItem,
 } from "@rushsite/shared"
 
 export type { AdminEventKind, Announcement, ChatMuteStatus, ChatMuteView, FeatureFlag, MetricsRange, MetricsView, Mode, TrustLevel }
@@ -109,6 +114,22 @@ export interface ChatModerationLike {
   mutes(): Promise<ChatMuteView[]>
 }
 
+// Live aim map pool. MapPoolService in modules/maps satisfies it
+export interface MapPoolLike {
+  view(): Promise<PoolView>
+  add(
+    input: { id: string; displayName: string; mapName?: string; modes: PoolMode[]; loadout?: MapLoadout; workshop: WorkshopItem },
+    by: string,
+  ): Promise<PoolMap>
+  update(
+    id: string,
+    patch: { displayName?: string; modes?: PoolMode[]; loadout?: MapLoadout | null },
+    by: string,
+  ): Promise<{ before: PoolMap; after: PoolMap }>
+  reorder(ids: string[], by: string): Promise<PoolMap[]>
+  remove(id: string, by: string): Promise<PoolMap>
+}
+
 export interface AdminPluginOptions {
   db: Db
   redis: RedisLike
@@ -145,6 +166,10 @@ export interface AdminPluginOptions {
   onModeClosed?(mode: Mode): Promise<number>
   // Turns a /id/<vanity> profile URL into a SteamID64. Null when unknown or Steam is not configured
   resolveVanity?(vanity: string): Promise<string | null>
+  // Map pool routes answer 404 without these
+  mapPool?: MapPoolLike
+  // Reads a Workshop item from Steam
+  fetchWorkshop?(workshopId: string): Promise<WorkshopItem>
   now?: () => Date
 }
 
@@ -289,6 +314,10 @@ export type AuditAction =
   | "chat.delete"
   | "chat.mute"
   | "chat.unmute"
+  | "map.add"
+  | "map.update"
+  | "map.reorder"
+  | "map.remove"
 
 export interface AdminView {
   steamId: string

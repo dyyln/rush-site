@@ -44,3 +44,7 @@ export const VetoStateSchema = z.object({
   maps: z.array(z.string()),
 })
 export type VetoState = z.infer<typeof VetoStateSchema>
+
+// maps is the map veto. rooms is the Rush room ban and pick, where pool entries are room ids
+export const VetoKindSchema = z.enum(["maps", "rooms"])
+export type VetoKind = z.infer<typeof VetoKindSchema>

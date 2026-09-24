@@ -127,7 +127,7 @@ export function applyRoomEvent(s: RoomState, e: RoomEvent): RoomState {
       const p = e.payload
       const status = advance(s.status, p.state.done ? "allocating" : "veto")
       if (RANK[status] > RANK.allocating) return s
-      return { ...s, slug: p.slug ?? s.slug, status, veto: { state: p.state, stepDeadline: p.stepDeadline } }
+      return { ...s, slug: p.slug ?? s.slug, status, veto: { state: p.state, stepDeadline: p.stepDeadline, ...(p.kind ? { kind: p.kind } : {}) } }
     }
     case "server_ready": {
       if (isRoomOver(s.status)) return s

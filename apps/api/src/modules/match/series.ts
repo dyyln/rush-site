@@ -85,14 +85,18 @@ export async function seedPriorMaps(tx: Db, matchId: string, maps: string[], pri
     .onConflictDoNothing()
 }
 
-// The series block of the start request. Null when a map id is no longer in the mode config
-export function seriesParams(m: MatchRow, rows: MapRow[]): SeriesParams | null {
+// The series block of the start request. Null when a map id is no longer in the pool
+export function seriesParams(
+  m: MatchRow,
+  rows: MapRow[],
+  lookup: (mode: MatchRow["mode"], mapId: string) => MapEntry | undefined = findMap,
+): SeriesParams | null {
   const bestOf = m.bestOf ?? 1
   const ids = padMaps(m.maps ?? [], bestOf)
   if (ids.length !== bestOf) return null
   const maps: MapEntry[] = []
   for (const id of ids) {
-    const map = findMap(m.mode, id)
+    const map = lookup(m.mode, id)
     if (!map) return null
     maps.push(map)
   }

@@ -58,6 +58,7 @@ export async function buildMatchPage(
   const page: MatchPage = {
     id: m.id,
     ...(m.slug ? { slug: m.slug } : {}),
+    ...(m.rushRooms ? { rushRooms: m.rushRooms } : {}),
     mode: m.mode,
     mapId: m.mapId,
     status: m.status as MatchStatus,

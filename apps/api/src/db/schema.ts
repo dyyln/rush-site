@@ -23,6 +23,7 @@ export { challenges } from "../modules/challenges/schema.js"
 export { userSettings } from "../modules/queue/schema.js"
 export { friendRequests, friendships, partyInvites } from "../modules/friends/schema.js"
 export { chatMessages, chatMutes } from "../modules/chat/schema.js"
+export { mapPool } from "../modules/maps/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()
@@ -186,6 +187,8 @@ export const matches = pgTable(
     teams: jsonb("teams").$type<TeamRosterJson[]>().notNull(),
     // Played map ids in order after the veto
     maps: jsonb("maps").$type<string[]>(),
+    // Rush room ids from T castle to CT castle, set when the room veto ran
+    rushRooms: jsonb("rush_rooms").$type<number[]>(),
     mapId: text("map_id"),
     winnerTeam: text("winner_team"),
     score: jsonb("score").$type<Record<string, number>>(),

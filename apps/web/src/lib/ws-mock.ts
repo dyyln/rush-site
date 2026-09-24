@@ -3,6 +3,9 @@ import {
   MODES,
   MODE_CONFIGS,
   maxRatingDiffAfter,
+  RUSH_MAP,
+  RUSH_ROOM_VETO,
+  createRoomVeto,
   type ModeStatsPayload,
   type QueueModeStatus,
   type QueueStatusPayload,
@@ -30,6 +33,7 @@ export class MockRealtime extends Emitter implements Realtime {
   private queued: { mode: Mode; queuedAt: number }[] = initialQueue();
   private ticker: ReturnType<typeof setInterval> | null = null;
   private veto: VetoState | null = null;
+  private vetoKind: "maps" | "rooms" = "maps";
   private accepted = 0;
   // The first match found is cancelled to show that flow once
   private cancelShown = false;
@@ -261,6 +265,22 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 
   private afterAccept(mode: Mode) {
+    this.vetoKind = "maps";
+    // The mock always runs the Rush room veto so it can be clicked through
+    if (mode === "rush3v3") {
+      const us = [MOCK_ME.steamId, mockSteamId(4), mockSteamId(5)];
+      const them = [mockSteamId(20), mockSteamId(21), mockSteamId(22)];
+      this.vetoKind = "rooms";
+      this.veto = createRoomVeto(
+        [
+          { id: "team_a", steamIds: us },
+          { id: "team_b", steamIds: them },
+        ],
+        RUSH_ROOM_VETO.format,
+      );
+      this.pushVeto();
+      return;
+    }
     if (!hasLadderVeto(mode)) {
       this.later(1500, () => this.ready(mode, MODE_CONFIGS[mode].maps[0]!.id));
       return;
@@ -295,9 +315,10 @@ export class MockRealtime extends Emitter implements Realtime {
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: v.done ? null : Date.now() + STEP_SEC * 1000,
+      ...(this.vetoKind === "rooms" ? { kind: "rooms" as const } : {}),
     });
     if (v.done) {
-      this.later(1500, () => this.ready(this.mode!, v.maps[0]!));
+      this.later(1500, () => this.ready(this.mode!, this.vetoKind === "rooms" ? RUSH_MAP.id : v.maps[0]!));
       return;
     }
     const step = v.steps[v.stepIndex]!;
@@ -337,6 +358,7 @@ export class MockRealtime extends Emitter implements Realtime {
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: Date.now() + STEP_SEC * 1000,
+      ...(this.vetoKind === "rooms" ? { kind: "rooms" as const } : {}),
     });
   }
 

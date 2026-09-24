@@ -6,7 +6,6 @@ import {
   VETO_STEP_SEC,
   VetoError,
   createVeto,
-  findMap,
   getModeConfig,
   resolveStep,
   unresolvedConfig,
@@ -24,6 +23,11 @@ import {
   type VetoFormat,
   type VetoState,
   type VetoStatePayload,
+  type VetoKind,
+  RUSH_MAP,
+  RUSH_ROOM_VETO,
+  createRoomVeto,
+  rushRoomsFromVeto,
 } from "@rushsite/shared"
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm"
 import type { FastifyBaseLogger } from "fastify"
@@ -41,10 +45,12 @@ import type { RatingService } from "../rating/service.js"
 import type { TrustService } from "../trust/service.js"
 import { toUsers, type Notifier } from "../ws/hub.js"
 import { resolveAbandon, resolveAccept, type AcceptOutcome } from "./accept.js"
+import { configMaps, type MapPoolReader } from "../maps/pool.js"
 import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
 import { newMatchSlug } from "./slug.js"
+import { ROOM_VETO_FORMAT, vetoKindOf } from "./room-veto.js"
 import { demoKey } from "./storage.js"
 import {
   isSeries,
@@ -101,6 +107,8 @@ export type FlowOptions = {
   // Server teardown waits this long for demo_uploaded after the match ends
   demoWaitSec: number
   allowUnresolvedModes?: boolean
+  // Rush room ban and pick before allocation. Defaults to the shared config flag
+  rushRoomVeto?: boolean
   // Per match allocation lock. It is renewed while a server boots, so this only matters after a crash
   allocationLeaseMs?: number
 }
@@ -116,6 +124,8 @@ export type FlowDeps = {
   allocator: Allocator
   log: FastifyBaseLogger
   events?: EventLog
+  // Live aim map pool. Defaults to the shared config
+  maps?: MapPoolReader
   // Ends matches whose server is gone or that ran too long
   watchdog?: MatchWatchdog
   now?: () => number
@@ -146,12 +156,14 @@ export class MatchFlow {
   private readonly matchHooks: ((m: MatchRow) => Promise<void>)[] = []
   private readonly now: () => number
   private readonly rng: Rng
+  private readonly maps: MapPoolReader
   private lastCooldownSweep: number | null = null
   private lastWatchdogRun: number | null = null
 
   constructor(private readonly d: FlowDeps) {
     this.now = d.now ?? Date.now
     this.rng = d.rng ?? Math.random
+    this.maps = d.maps ?? configMaps
   }
 
   onResult(listener: ResultListener): void {
@@ -446,8 +458,26 @@ export class MatchFlow {
     return { format: cfg.vetoFormat }
   }
 
+  private roomVetoOn(m: MatchRow): boolean {
+    return m.mode === "rush3v3" && !isSeries(m) && (this.d.options.rushRoomVeto ?? RUSH_ROOM_VETO.enabled)
+  }
+
   // Runs inside the accept transaction. Starts the veto or goes straight to allocation
   private async enterPostAccept(tx: Db, m: MatchRow): Promise<PostAccept> {
+    if (this.roomVetoOn(m)) {
+      const state = createRoomVeto(
+        [
+          { id: m.teams[0]!.name, steamIds: m.teams[0]!.steamIds },
+          { id: m.teams[1]!.name, steamIds: m.teams[1]!.steamIds },
+        ],
+        RUSH_ROOM_VETO.format,
+        this.rng() < 0.5 ? 0 : 1,
+      )
+      const stepDeadline = this.now() + VETO_STEP_SEC * 1000
+      await tx.insert(vetoes).values({ matchId: m.id, format: ROOM_VETO_FORMAT, state, stepDeadline: new Date(stepDeadline) })
+      await tx.update(matches).set({ status: "veto" }).where(eq(matches.id, m.id))
+      return { kind: "veto", state, stepDeadline, format: ROOM_VETO_FORMAT }
+    }
     let game1Maps: string[] | null = null
     // A later game or a resumed series plays the maps the first veto chose
     if (m.source === "tournament" && (m.gameNumber ?? 1) > 1 && m.tournamentId && m.bracketMatchKey) {
@@ -478,7 +508,7 @@ export class MatchFlow {
       return { kind: "allocate" }
     }
     const state = createVeto({
-      pool: getModeConfig(m.mode).maps.map((x) => x.id),
+      pool: this.maps.entries(m.mode).map((x) => x.id),
       teams: [
         { id: m.teams[0]!.name, steamIds: m.teams[0]!.steamIds },
         { id: m.teams[1]!.name, steamIds: m.teams[1]!.steamIds },
@@ -489,25 +519,25 @@ export class MatchFlow {
     const stepDeadline = this.now() + VETO_STEP_SEC * 1000
     await tx.insert(vetoes).values({ matchId: m.id, format: plan.format, state, stepDeadline: new Date(stepDeadline) })
     await tx.update(matches).set({ status: "veto" }).where(eq(matches.id, m.id))
-    return { kind: "veto", state, stepDeadline }
+    return { kind: "veto", state, stepDeadline, format: plan.format }
   }
 
   // allocateNow false leaves the server start to the allocation loop
   private async afterPostAccept(matchId: string, post: PostAccept, allocateNow = true): Promise<void> {
     if (post.kind === "veto") {
       const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
-      if (m) this.sendVeto(m, post.state, post.stepDeadline)
+      if (m) this.sendVeto(m, post.state, post.stepDeadline, vetoKindOf(post.format))
     } else if (allocateNow) {
       await this.tryAllocate(matchId)
     }
   }
 
   // Each team only sees votes while its own team is acting
-  private sendVeto(m: MatchRow, state: VetoState, stepDeadline: number | null): void {
+  private sendVeto(m: MatchRow, state: VetoState, stepDeadline: number | null, kind: VetoKind = "maps"): void {
     const acting = state.done ? null : state.steps[state.stepIndex]?.team ?? null
     m.teams.forEach((team, idx) => {
       const view: VetoState = acting === idx || acting === null ? state : { ...state, votes: {} }
-      const payload: VetoStatePayload = { matchId: m.id, ...(m.slug ? { slug: m.slug } : {}), mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline }
+      const payload: VetoStatePayload = { matchId: m.id, ...(m.slug ? { slug: m.slug } : {}), mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline, ...(kind === "rooms" ? { kind } : {}) }
       toUsers(this.d.notifier, team.steamIds, "veto_state", payload)
     })
   }
@@ -528,19 +558,26 @@ export class MatchFlow {
         throw err
       }
       const stepDeadline = next.stepIndex !== state.stepIndex ? this.now() + VETO_STEP_SEC * 1000 : row.stepDeadline!.getTime()
-      await this.saveVeto(tx, m, next, stepDeadline)
-      return { m, next, stepDeadline }
+      await this.saveVeto(tx, m, next, stepDeadline, row.format)
+      return { m, next, stepDeadline, format: row.format }
     })
-    this.sendVeto(r.m, r.next, r.stepDeadline)
+    this.sendVeto(r.m, r.next, r.stepDeadline, vetoKindOf(r.format))
     if (r.next.done) await this.tryAllocate(matchId)
   }
 
-  private async saveVeto(tx: Db, m: MatchRow, state: VetoState, stepDeadline: number): Promise<void> {
+  private async saveVeto(tx: Db, m: MatchRow, state: VetoState, stepDeadline: number, format: string): Promise<void> {
     await tx
       .update(vetoes)
       .set({ state, stepDeadline: state.done ? null : new Date(stepDeadline), done: state.done, updatedAt: new Date(this.now()) })
       .where(eq(vetoes.matchId, m.id))
-    if (state.done) {
+    if (state.done && format === ROOM_VETO_FORMAT) {
+      // Rush plays one map. The rooms go to the server in slot order
+      const rushRooms = rushRoomsFromVeto(state, RUSH_ROOM_VETO.format)
+      await tx
+        .update(matches)
+        .set({ status: "allocating", maps: [RUSH_MAP.id], mapId: RUSH_MAP.id, rushRooms, allocationStartedAt: new Date(this.now()) })
+        .where(eq(matches.id, m.id))
+    } else if (state.done) {
       const maps = isSeries(m) ? padMaps(state.maps, m.bestOf ?? 1) : state.maps
       await tx
         .update(matches)
@@ -560,14 +597,14 @@ export class MatchFlow {
         await this.cancelMatch(matchId, "mode_unavailable", { requeue: false })
         return
       }
-      const map = m.mapId ? findMap(m.mode, m.mapId) : undefined
+      const map = m.mapId ? this.maps.find(m.mode, m.mapId) : undefined
       if (!map) {
         await this.cancelMatch(matchId, "unknown_map", { requeue: true })
         return
       }
       const waitedMs = m.source === "tournament" ? Number.POSITIVE_INFINITY : this.now() - started
       // A series runs every map on this one server. The plugin changes level between maps
-      const series = isSeries(m) ? seriesParams(m, await loadMapRows(this.d.db, matchId)) : undefined
+      const series = isSeries(m) ? seriesParams(m, await loadMapRows(this.d.db, matchId), (mode, id) => this.maps.find(mode, id)) : undefined
       if (series === null) {
         await this.cancelMatch(matchId, "unknown_map", { requeue: true })
         return
@@ -582,6 +619,7 @@ export class MatchFlow {
             password: m.password!,
             webhookSecret: m.webhookSecret,
             ...(series ? { series } : {}),
+            ...(m.rushRooms ? { rushRooms: m.rushRooms } : {}),
           },
           waitedMs,
         )
@@ -1336,11 +1374,11 @@ export class MatchFlow {
       if (!row || row.done || !row.stepDeadline || row.stepDeadline.getTime() > this.now()) return null
       const next = resolveStep(row.state as VetoState, this.rng)
       const stepDeadline = this.now() + VETO_STEP_SEC * 1000
-      await this.saveVeto(tx, m, next, stepDeadline)
-      return { m, next, stepDeadline }
+      await this.saveVeto(tx, m, next, stepDeadline, row.format)
+      return { m, next, stepDeadline, format: row.format }
     })
     if (!r) return
-    this.sendVeto(r.m, r.next, r.stepDeadline)
+    this.sendVeto(r.m, r.next, r.stepDeadline, vetoKindOf(r.format))
     if (r.next.done && allocateNow) await this.tryAllocate(matchId)
   }
 
@@ -1393,6 +1431,7 @@ export class MatchFlow {
           mode: m.mode,
           state: view,
           stepDeadline: row.stepDeadline?.getTime() ?? null,
+          ...(vetoKindOf(row.format) === "rooms" ? { kind: "rooms" as const } : {}),
         }
         toUsers(this.d.notifier, [steamId], "veto_state", payload)
       }
@@ -1411,6 +1450,6 @@ export class MatchFlow {
   }
 }
 
-type PostAccept = { kind: "veto"; state: VetoState; stepDeadline: number } | { kind: "allocate" }
+type PostAccept = { kind: "veto"; state: VetoState; stepDeadline: number; format: string } | { kind: "allocate" }
 
 type MatchEndPlayers = Extract<MatchEvent, { type: "match_end" }>["players"]

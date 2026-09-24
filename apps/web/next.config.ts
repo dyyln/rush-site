@@ -18,7 +18,7 @@ const csp = [
   `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://*.steamstatic.com https://steamcdn-a.akamaihd.net",
+  "img-src 'self' data: blob: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://images.steamusercontent.com",
   `connect-src 'self' ${origin(apiUrl)} ${origin(wsUrl)}${dev ? " ws: http://localhost:*" : ""}`,
   "media-src 'self'",
   "object-src 'none'",

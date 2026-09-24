@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify"
 import { registerAdminsRoutes } from "./admins-routes.js"
 import { registerChatModerationRoutes } from "./chat-routes.js"
+import { registerMapsRoutes } from "./maps-routes.js"
 import { registerOpsRoutes } from "./ops-routes.js"
 import { registerRoutes, requireAdmin } from "./routes.js"
 import { DrizzleAdminStore, type AdminStore } from "./store.js"
@@ -48,6 +49,7 @@ const adminPlugin: FastifyPluginAsync<AdminPluginOptions & AdminPluginInternals>
   registerOpsRoutes(app, { store, opts, now }, adminOf)
   registerAdminsRoutes(app, { store, opts }, adminOf)
   registerChatModerationRoutes(app, { store, opts, now }, adminOf)
+  registerMapsRoutes(app, { store, opts }, adminOf)
 }
 
 export default adminPlugin

@@ -9,6 +9,7 @@ import { Timer } from "@/components/ui/Timer";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { VetoSummary } from "@/components/play/VetoSummary";
 import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
+import { RoomVetoBoard } from "@/components/rush/RoomVetoBoard";
 import { cancelCopy } from "@/lib/errors";
 import { mapName, modeLabel } from "@/lib/modes";
 import styles from "./Room.module.css";
@@ -81,7 +82,11 @@ export function VetoPanel({
   }
   return (
     <Card tone="accent">
-      <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      {veto.kind === "rooms" ? (
+        <RoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      ) : (
+        <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      )}
     </Card>
   );
 }
@@ -100,7 +105,7 @@ export function AllocatingPanel({
   return (
     <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={modeLabel(mode)}>
       <div className="stack">
-        {veto?.state.done && viewer && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
+        {veto?.state.done && viewer && veto.kind !== "rooms" && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
         <ConnectSteps step={step} />
       </div>
     </Card>

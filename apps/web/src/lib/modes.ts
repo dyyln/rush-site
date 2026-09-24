@@ -1,4 +1,5 @@
 import { MODE_CONFIGS, MODES, type Mode } from "@rushsite/shared";
+import { knownMap } from "./mapPoolStore";
 
 export { MODES };
 
@@ -58,7 +59,8 @@ const MAP_NAMES: Record<string, string> = {
 };
 
 export function mapName(mode: Mode, mapId: string): string {
-  const configured = MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName;
+  // Admin edits in the live pool win over the shared config
+  const configured = knownMap(mapId)?.displayName ?? MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName;
   // A lower case name with underscores is still a raw map id
   if (configured && !/^[a-z0-9_]+$/.test(configured)) return configured;
   return MAP_NAMES[mapId] ?? configured ?? mapId;

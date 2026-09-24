@@ -164,6 +164,7 @@ func PluginJSON(p Params) ([]byte, error) {
 		DemoUpload:      p.Req.DemoUpload,
 		WinCondition:    p.Spec.WinCondition,
 		Series:          p.Req.Series,
+		RushRooms:       p.Req.RushRooms,
 	}
 	return json.MarshalIndent(pc, "", "  ")
 }

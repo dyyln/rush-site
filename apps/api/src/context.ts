@@ -17,6 +17,7 @@ import { FriendsService } from "./modules/friends/service.js"
 import { PresenceService } from "./modules/friends/presence.js"
 import { HttpAgentClient, type AgentApi } from "./modules/match/agent.js"
 import { Allocator } from "./modules/match/allocator.js"
+import { MapPoolService } from "./modules/maps/pool.js"
 import { MatchFlow } from "./modules/match/flow.js"
 import { MatchWatchdog } from "./modules/match/watchdog.js"
 import { createDemoStorage, type DemoStorage } from "./modules/match/storage.js"
@@ -62,6 +63,7 @@ export type AppContext = {
   flags: FlagService
   announcements: AnnouncementService
   chat: ChatService
+  maps: MapPoolService
 }
 
 export type ContextDeps = {
@@ -88,6 +90,8 @@ export function buildContext(deps: ContextDeps): AppContext {
   const sessions = new SessionStore(redis, env.SESSION_TTL_DAYS * 86400)
   const admins = new AdminRegistry(db, env.ADMIN_STEAM_IDS, log)
   void admins.refresh().catch(() => undefined)
+  const maps = new MapPoolService(db, log)
+  void maps.refresh().catch(() => undefined)
   const steam = new SteamWebApi(env.STEAM_API_KEY, fetchFn)
   const users = new UsersService(db)
   let faceit: FaceitLookup | undefined
@@ -155,6 +159,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     log,
     events,
     watchdog,
+    maps,
     now,
     ...(deps.rng ? { rng: deps.rng } : {}),
     options: {
@@ -162,6 +167,7 @@ export function buildContext(deps: ContextDeps): AppContext {
       connectTimeoutSec: env.CONNECT_TIMEOUT_SEC,
       demoWaitSec: env.DEMO_WAIT_SEC,
       allowUnresolvedModes,
+      ...(env.RUSH_ROOM_VETO !== undefined ? { rushRoomVeto: env.RUSH_ROOM_VETO } : {}),
     },
   })
   const presence = new PresenceService({ db, redis, notifier, queue, parties, log, now })
@@ -207,5 +213,6 @@ export function buildContext(deps: ContextDeps): AppContext {
     flags,
     announcements: new AnnouncementService(db, now),
     chat: new ChatService({ db, redis, notifier, isAdmin: (id) => admins.isAdmin(id), now }),
+    maps,
   }
 }

@@ -1,9 +1,10 @@
-import type { TrustLevel } from "@rushsite/shared";
+import type { MapLoadout, PoolMap, PoolMode, PoolView, TrustLevel } from "@rushsite/shared";
 import { api, ApiError } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { mockCall } from "@/lib/mock";
 import { MockNotFound, mockAdmin } from "./mock";
 import { mockOps } from "./ops-mock";
+import { mockMaps } from "./maps-mock";
 import type {
   ActionResult,
   EventView,
@@ -19,7 +20,11 @@ import type {
   MetricsRange,
   MetricsView,
   ResolvedProfile,
+  WorkshopPreview,
 } from "./types";
+
+export type PoolMapInput = { workshop: string; id?: string; displayName?: string; modes: PoolMode[]; loadout?: MapLoadout };
+export type PoolMapPatch = { displayName?: string; modes?: PoolMode[]; loadout?: MapLoadout | null };
 
 export type AnnouncementInput = {
   text: string;
@@ -126,6 +131,31 @@ export const adminApi = {
   deleteAnnouncement(id: string): Promise<{ ok: true; audit: AuditEntry }> {
     if (isMock) return mocked(() => mockOps.deleteAnnouncement(id));
     return api.del(`/admin/announcements/${id}`);
+  },
+
+  maps(): Promise<PoolView> {
+    if (isMock) return mocked(() => mockMaps.view());
+    return api.get("/admin/maps");
+  },
+  workshopPreview(q: string): Promise<WorkshopPreview> {
+    if (isMock) return mocked(() => mockMaps.preview(q));
+    return api.get("/admin/maps/workshop", { q });
+  },
+  addMap(input: PoolMapInput): Promise<{ map: PoolMap; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.add(input));
+    return api.post("/admin/maps", input);
+  },
+  updateMap(id: string, patch: PoolMapPatch): Promise<{ map: PoolMap; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.update(id, patch));
+    return api.patch(`/admin/maps/${encodeURIComponent(id)}`, patch);
+  },
+  reorderMaps(ids: string[]): Promise<{ maps: PoolMap[]; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.reorder(ids));
+    return api.put("/admin/maps/order", { ids });
+  },
+  removeMap(id: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.remove(id));
+    return api.del(`/admin/maps/${encodeURIComponent(id)}`);
   },
 };
 

@@ -26,6 +26,7 @@ import { useLiveExtras } from "@/components/match/useLiveExtras";
 import { AcceptPanel, AllocatingPanel, CancelledPanel, ConnectPanel, VetoPanel } from "@/components/match/room/StagePanels";
 import { RoomResult } from "@/components/match/room/RoomResult";
 import { SeriesStrip } from "@/components/match/room/SeriesStrip";
+import { RoomsCard } from "@/components/rush/RoomsCard";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
@@ -160,6 +161,10 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
       </header>
 
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
+
+      {m.mode === "rush3v3" && stage !== "veto" && (
+        <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} />
+      )}
 
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
 

@@ -2,7 +2,7 @@ import { z } from "zod"
 import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./schemas/common.js"
 import { ModeSchema } from "./schemas/mode.js"
 import { TrustLevelSchema } from "./schemas/trust.js"
-import { VetoStateSchema } from "./schemas/veto.js"
+import { VetoKindSchema, VetoStateSchema } from "./schemas/veto.js"
 import { MatchMapSchema, MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
@@ -75,6 +75,8 @@ export const VetoStatePayloadSchema = z.object({
   state: VetoStateSchema,
   // Epoch ms when the current step resolves. null once the veto is done
   stepDeadline: z.number().nullable(),
+  // Left out means maps
+  kind: VetoKindSchema.optional(),
 })
 export type VetoStatePayload = z.infer<typeof VetoStatePayloadSchema>
 
@@ -269,7 +271,7 @@ export const ModeStatsPayloadSchema = z.object({
 })
 export type ModeStatsPayload = z.infer<typeof ModeStatsPayloadSchema>
 
-export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user"])
+export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user", "maps"])
 export type AdminEventKind = z.infer<typeof AdminEventKindSchema>
 
 // Sent to admin clients only

@@ -42,6 +42,8 @@ export type StartParams = {
   webhookSecret: string
   // A best-of series played on this one server
   series?: SeriesParams
+  // Rush room ids from the room veto, T castle first
+  rushRooms?: number[]
 }
 
 export type AllocationResult =
@@ -251,6 +253,7 @@ export class Allocator {
       webhookSecret: p.webhookSecret,
       demoUpload,
       cs2: resolveLaunch(p.mode, p.map),
+      ...(p.rushRooms ? { rushRooms: [...p.rushRooms] } : {}),
       ...(p.series && demoUploads
         ? {
             series: {

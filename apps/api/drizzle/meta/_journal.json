@@ -134,6 +134,20 @@
       "when": 1790240257676,
       "tag": "0018_series_maps",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790241349096,
+      "tag": "0019_rush_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790241720175,
+      "tag": "0020_map_pool",
+      "breakpoints": true
     }
   ]
 }

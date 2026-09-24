@@ -48,12 +48,19 @@ export async function modeStats(ctx: AppContext): Promise<ModeStatsPayload> {
 }
 
 export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void {
-  app.get("/modes", async () =>
-    MODES.map((mode) => {
+  app.get("/modes", async () => {
+    await ctx.maps.ensureFresh()
+    return MODES.map((mode) => {
       const cfg = getModeConfig(mode)
-      return { mode, teamSize: cfg.teamSize, vetoFormat: cfg.vetoFormat, winCondition: cfg.winCondition, maps: cfg.maps }
-    }),
-  )
+      return { mode, teamSize: cfg.teamSize, vetoFormat: cfg.vetoFormat, winCondition: cfg.winCondition, maps: ctx.maps.entries(mode) }
+    })
+  })
+
+  // Names and previews for every known map, enabled or not
+  app.get("/maps", async (_req, reply) => {
+    reply.header("cache-control", "public, max-age=60")
+    return { maps: await ctx.maps.publicMaps() }
+  })
 
   app.get("/stats/modes", async () => modeStats(ctx))
 
