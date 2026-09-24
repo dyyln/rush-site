@@ -128,11 +128,13 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+/* Name and rank on one line */
 .player {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+  min-width: 0;
 }
 .playerName {
   display: inline-flex;
@@ -164,33 +166,6 @@
 .connectCode {
   flex-basis: 100%;
   overflow-wrap: anywhere;
-}
-.damage {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-.damage > span:last-child {
-  min-width: 4ch;
-}
-.damageTrack {
-  display: block;
-  width: 48px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--color-surface-3);
-  overflow: hidden;
-}
-.damageTrack span {
-  display: block;
-  height: 100%;
-}
-.damageTrack[data-side="own"] span {
-  background: var(--team-own);
-}
-.damageTrack[data-side="enemy"] span {
-  background: var(--team-enemy);
 }
 .lineup {
   list-style: none;
@@ -506,4 +481,24 @@
 .heroScore {
   padding-top: var(--space-3);
   border-top: 1px solid rgb(255 255 255 / 0.16);
+}
+
+/* Scoreboard tables: tight stat columns */
+.teamPanel table th,
+.teamPanel table td {
+  padding-inline: var(--space-2);
+}
+.teamPanel table th:first-child,
+.teamPanel table td:first-child {
+  padding-left: var(--space-4);
+}
+.teamPanel table th:last-child,
+.teamPanel table td:last-child {
+  padding-right: var(--space-4);
+}
+.teamPanel table td {
+  padding-block: var(--space-1);
+}
+.teamPanel .playerName {
+  min-height: 36px;
 }

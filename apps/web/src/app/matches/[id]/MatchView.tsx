@@ -297,7 +297,6 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   const [a, b] = m.teams;
   const rounds = mapNumber === undefined ? m.rounds : m.rounds.filter((r) => (r.mapNumber ?? 1) === mapNumber);
   const kills = mapNumber === undefined ? m.kills : m.kills?.filter((k) => (k.mapNumber ?? 1) === mapNumber);
-  const topDamage = Math.max(0, ...m.teams.flatMap((t) => t.players.map((p) => p.damage)));
   const rush = isRushMode(m.mode);
   const timeline = a && b && rounds.length > 0 && (
     <RoundTimeline
@@ -313,7 +312,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   );
   return (
     <>
-      <PlayerTables m={m} sideOf={sideOf} topDamage={topDamage} />
+      <PlayerTables m={m} sideOf={sideOf} />
       {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they share a card */}
       {rush ? (
         <Card as="div" className={styles.flow}>
@@ -493,7 +492,7 @@ function SeriesMapImage({ mode, map, flip }: { mode: MatchDetail["mode"]; map: M
   );
 }
 
-function PlayerTables({ m, sideOf, topDamage }: { m: MatchDetail; sideOf: (i: number) => TeamSide; topDamage: number }) {
+function PlayerTables({ m, sideOf }: { m: MatchDetail; sideOf: (i: number) => TeamSide }) {
   return (
     <div className={styles.tables}>
       {m.teams.map((t, i) => (
@@ -502,14 +501,14 @@ function PlayerTables({ m, sideOf, topDamage }: { m: MatchDetail; sideOf: (i: nu
             <TeamMarker side={sideOf(i)} />
             {t.displayName ?? t.name}
           </h2>
-          <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), topDamage, m.ratingDeltas)} rows={t.players} rowKey={(p) => p.steamId} />
+          <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), m.ratingDeltas)} rows={t.players} rowKey={(p) => p.steamId} />
         </section>
       ))}
     </div>
   );
 }
 
-const playerColumns = (side: TeamSide, topDamage: number, deltas?: Record<string, number>): Column<MatchPlayer>[] => [
+const playerColumns = (side: TeamSide, deltas?: Record<string, number>): Column<MatchPlayer>[] => [
   {
     key: "player",
     header: "Player",
@@ -523,10 +522,10 @@ const playerColumns = (side: TeamSide, topDamage: number, deltas?: Record<string
       </span>
     ),
   },
-  { key: "k", header: "K", cell: (p) => p.kills, numeric: true },
-  { key: "d", header: "D", cell: (p) => p.deaths, numeric: true },
-  { key: "hs", header: "HS", cell: (p) => p.headshots, numeric: true },
-  { key: "dmg", header: "DMG", cell: (p) => <DamageBar damage={p.damage} top={topDamage} side={side} />, numeric: true },
+  { key: "k", header: "K", cell: (p) => p.kills, numeric: true, width: "40px" },
+  { key: "d", header: "D", cell: (p) => p.deaths, numeric: true, width: "40px" },
+  { key: "hs", header: "HS", cell: (p) => p.headshots, numeric: true, width: "40px" },
+  { key: "dmg", header: "DMG", cell: (p) => Math.round(p.damage), numeric: true, width: "56px" },
   ...(deltas
     ? [
         {
@@ -541,20 +540,8 @@ const playerColumns = (side: TeamSide, topDamage: number, deltas?: Record<string
             );
           },
           numeric: true,
+          width: "56px",
         } satisfies Column<MatchPlayer>,
       ]
     : []),
 ];
-
-// Bar length is relative to the highest damage in the match
-function DamageBar({ damage, top, side }: { damage: number; top: number; side: TeamSide }) {
-  const share = top > 0 ? Math.min(1, damage / top) : 0;
-  return (
-    <span className={styles.damage}>
-      <span className={styles.damageTrack} data-side={side} aria-hidden="true">
-        <span style={{ width: `${(share * 100).toFixed(1)}%` }} />
-      </span>
-      <span>{Math.round(damage)}</span>
-    </span>
-  );
-}
