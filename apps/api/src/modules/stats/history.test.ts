@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, createTestDb, makeUsers } from "../../../test/helpers.js"
-import { matchPlayers, matches } from "../../db/schema.js"
+import { matchMaps, matchPlayers, matches } from "../../db/schema.js"
 import { decodeCursor, encodeCursor } from "./history.js"
 
 describe("paged match history", () => {
@@ -100,6 +100,10 @@ describe("paged match history", () => {
       at: "2026-09-01 12:00:00+00",
       extra: { slug: "brave-amber-falcon", bestOf: 3, maps: ["aim_map", "aim_usp", "awp_india"], mapId: "aim_usp", score: { A: 2, B: 0 } },
     })
+    await h.db.insert(matchMaps).values([
+      { matchId: id, mapNumber: 1, mapId: "aim_map", status: "done", winnerTeam: "A", score: { A: 13, B: 4 } },
+      { matchId: id, mapNumber: 2, mapId: "aim_usp", status: "done", winnerTeam: "A", score: { A: 13, B: 9 } },
+    ])
     const single = await played(a!, b!, { at: "2026-09-01 11:00:00+00", extra: { mapId: "aim_map" } })
     const { matches: rows } = (await page(a!, "limit=5")).json()
     expect(rows[0]).toMatchObject({
@@ -114,6 +118,26 @@ describe("paged match history", () => {
     expect(rows[1]).toMatchObject({ matchId: single, slug: null, bestOf: null, maps: null, scoreFor: 13, scoreAgainst: 7 })
     const theirs = (await page(b!, "limit=5")).json().matches[0]
     expect(theirs).toMatchObject({ scoreFor: 0, scoreAgainst: 2, result: "loss" })
+  })
+
+  it("shows older series games played one match per map as single maps", async () => {
+    const [a, b] = await makeUsers(h.db, 2)
+    const pool = ["aim_map", "aim_usp", "awp_india"]
+    const cup = { bestOf: 3, maps: pool, tournamentId: null, bracketMatchKey: "r1m0" }
+    const g1 = await played(a!, b!, {
+      at: "2026-09-23 12:00:00+00",
+      extra: { ...cup, gameNumber: 1, mapId: "aim_map", score: { A: 13, B: 11 } },
+    })
+    const g2 = await played(a!, b!, {
+      at: "2026-09-23 12:30:00+00",
+      extra: { ...cup, gameNumber: 2, mapId: "aim_usp", score: { A: 13, B: 6 } },
+    })
+    const { matches: rows } = (await page(a!, "limit=5")).json()
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ matchId: g2, mapId: "aim_usp", bestOf: null, maps: null, scoreFor: 13, scoreAgainst: 6 })
+    expect(rows[1]).toMatchObject({ matchId: g1, mapId: "aim_map", bestOf: null, maps: null, scoreFor: 13, scoreAgainst: 11 })
+    const theirs = (await page(b!, "limit=5")).json().matches[1]
+    expect(theirs).toMatchObject({ bestOf: null, scoreFor: 11, scoreAgainst: 13, result: "loss" })
   })
 
   it("rejects bad cursors and gives the profile a first cursor", async () => {

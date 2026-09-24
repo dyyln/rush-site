@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import pino from "pino"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, createTestDb, startDuel, steamId, withServers } from "../../../test/helpers.js"
-import { matchRounds, matches } from "../../db/schema.js"
+import { matchMaps, matchRounds, matches } from "../../db/schema.js"
 import { signBody } from "../../lib/hmac.js"
 import { LocalHub, MAX_MATCH_SUBSCRIPTIONS } from "../ws/hub.js"
 import { attachSocket } from "../ws/routes.js"
@@ -136,6 +136,48 @@ describe("match pages", () => {
       .where(eq(matches.id, matchId))
     const { match } = (await h.app.inject({ method: "GET", url: `/matches/${matchId}` })).json()
     expect(match.tournament).toEqual({ id: t!.id, name: "Daily Aim Cup", bracketMatchId: "r1m0", bestOf: 3, gameNumber: 2 })
+  })
+
+  it("shows an older series game played one match per map as a single map", async () => {
+    const { matchId } = await startDuel(h)
+    const legacy = { bestOf: 3, gameNumber: 2, maps: ["aim_map", "aim_usp", "awp_india"], mapId: "aim_usp" }
+    await h.db
+      .update(matches)
+      .set({ ...legacy, status: "finished", score: { A: 13, B: 6 }, endedAt: new Date() })
+      .where(eq(matches.id, matchId))
+    await h.db.insert(matchRounds).values([
+      { matchId, round: 1, winnerTeam: "A", score: { A: 1, B: 0 }, endedAt: new Date() },
+      { matchId, round: 2, winnerTeam: "B", score: { A: 1, B: 1 }, endedAt: new Date() },
+    ])
+    const { match } = (await h.app.inject({ method: "GET", url: `/matches/${matchId}` })).json()
+    expect(match.bestOf).toBeUndefined()
+    expect(match.maps).toBeUndefined()
+    expect(match.mapId).toBe("aim_usp")
+    expect(match.teams.map((t: { score: number }) => t.score)).toEqual([13, 6])
+    expect(match.rounds).toHaveLength(2)
+    expect(match.rounds[0].mapNumber).toBeUndefined()
+
+    // The same row with map rows is a series on one server
+    await h.db.insert(matchMaps).values([
+      { matchId, mapNumber: 1, mapId: "aim_map", status: "done", winnerTeam: "A", score: { A: 13, B: 4 } },
+      { matchId, mapNumber: 2, mapId: "aim_usp", status: "done", winnerTeam: "A", score: { A: 13, B: 6 } },
+    ])
+    await h.db.update(matches).set({ score: { A: 2, B: 0 } }).where(eq(matches.id, matchId))
+    const series = (await h.app.inject({ method: "GET", url: `/matches/${matchId}` })).json().match
+    expect(series.bestOf).toBe(3)
+    expect(series.maps.map((m: { status: string }) => m.status)).toEqual(["done", "done", "upcoming"])
+    expect(series.rounds[0].mapNumber).toBe(1)
+  })
+
+  it("shows a series that has not started a map yet as a series", async () => {
+    const { matchId } = await startDuel(h)
+    await h.db
+      .update(matches)
+      .set({ bestOf: 3, maps: ["aim_map", "aim_usp", "awp_india"] })
+      .where(eq(matches.id, matchId))
+    const { match } = (await h.app.inject({ method: "GET", url: `/matches/${matchId}` })).json()
+    expect(match.bestOf).toBe(3)
+    expect(match.maps).toHaveLength(3)
   })
 
   it("fans match_update out to subscribers only", async () => {

@@ -1,9 +1,10 @@
 import type { Mode } from "@rushsite/shared"
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { z } from "zod"
 import type { AppContext } from "../../context.js"
-import { matchPlayers, matches, ratingEvents } from "../../db/schema.js"
+import { matchMaps, matchPlayers, matches, ratingEvents } from "../../db/schema.js"
 import { badRequest } from "../../lib/errors.js"
+import { showsAsSeries } from "../match/series.js"
 
 export const HISTORY_STATUSES = ["finished", "abandoned"] as const
 
@@ -13,7 +14,8 @@ export type HistoryRow = {
   slug: string | null
   mode: Mode
   mapId: string
-  // Set on a best of series. Scores are then maps won
+  // Set on a series played on one server. Scores are then maps won.
+  // Older series games were one match per map and show as single maps
   bestOf: number | null
   maps: string[] | null
   playedAt: string
@@ -81,22 +83,29 @@ export async function matchHistory(
         .from(ratingEvents)
         .where(and(eq(ratingEvents.steamId, steamId), inArray(ratingEvents.matchId, ids), isNull(ratingEvents.voidedAt)))
     : []
+  const seriesIds = page.filter((r) => (r.m.bestOf ?? 1) > 1).map((r) => r.m.id)
+  const mapRows = seriesIds.length
+    ? await ctx.db
+        .select({ matchId: matchMaps.matchId, mapNumber: matchMaps.mapNumber, mapId: matchMaps.mapId })
+        .from(matchMaps)
+        .where(inArray(matchMaps.matchId, seriesIds))
+        .orderBy(asc(matchMaps.mapNumber))
+    : []
   const matchesOut = page.map(({ m, p }): HistoryRow => {
     const mine = m.teams[p.team]?.name ?? ""
     const theirs = m.teams[p.team === 0 ? 1 : 0]?.name ?? ""
     const d = deltas.find((x) => x.matchId === m.id)
-    const series = (m.bestOf ?? 1) > 1
+    const rows = mapRows.filter((r) => r.matchId === m.id)
+    const series = showsAsSeries(m, rows.length)
     const scoreFor = m.score?.[mine] ?? 0
     const scoreAgainst = m.score?.[theirs] ?? 0
-    // A series score counts maps won, so the maps played are the first that many
-    const played = Math.max(1, scoreFor + scoreAgainst)
     return {
       matchId: m.id,
       slug: m.slug,
       mode: m.mode as Mode,
       mapId: m.mapId ?? "",
       bestOf: series ? m.bestOf : null,
-      maps: series && m.maps ? m.maps.slice(0, played) : null,
+      maps: series ? rows.map((r) => r.mapId || m.maps?.[r.mapNumber - 1] || "").filter(Boolean) : null,
       playedAt: m.createdAt.toISOString(),
       result: p.abandoned ? "abandoned" : p.won ? "win" : "loss",
       scoreFor,

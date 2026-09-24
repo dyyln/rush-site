@@ -19,6 +19,15 @@ export function isSeries(m: Pick<MatchRow, "bestOf">): boolean {
   return (m.bestOf ?? 1) > 1
 }
 
+const ENDED = new Set(["finished", "abandoned", "cancelled"])
+
+// Whether a page shows the match as a series. Older series played one match per map
+// and have no map rows. An ended match without map rows shows as a single map
+export function showsAsSeries(m: Pick<MatchRow, "bestOf" | "status">, mapRows: number): boolean {
+  if (!isSeries(m)) return false
+  return mapRows > 0 || !ENDED.has(m.status)
+}
+
 export function winsNeeded(bestOf: number): number {
   return Math.floor(bestOf / 2) + 1
 }
@@ -129,11 +138,11 @@ export function toStatsJson(players: PlayerStats[]): SeriesStatsJson {
 export async function seriesDetail(
   db: Db,
   m: MatchRow,
+  rows: MapRow[],
   lines: Map<string, MatchDetailPlayer>,
   storage: DemoStorage | undefined,
   now: number,
 ): Promise<MatchMap[]> {
-  const rows = await loadMapRows(db, m.id)
   const demoRows = await db
     .select()
     .from(demos)
