@@ -19,6 +19,7 @@ import { DemoActions } from "@/components/match/DemoActions";
 import { MatchSummary } from "@/components/match/MatchSummary";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
+import { MatchRushTrack } from "@/components/match/RushRoomTrack";
 import { MatchReportOutcomes } from "@/components/review/MatchReportOutcomes";
 import { ShareButton } from "@/components/match/ShareButton";
 import { RematchButton } from "@/components/challenges/RematchButton";
@@ -275,6 +276,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
           <TeamScore team={b} side={sideOf(1)} />
         </Card>
       )}
+      {m.mode === "rush3v3" && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
       {a && b && rounds.length > 0 && (
         <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={m.mode === "rush3v3"} kills={kills} roster={roster} />
       )}

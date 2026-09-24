@@ -12,6 +12,8 @@ import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendButton } from "@/components/friends/FriendButton";
 import { RatingChart } from "@/components/ui/RatingChart";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
+import { BestMaps } from "@/components/profile/BestMaps";
+import { CupBadges } from "@/components/profile/CupBadges";
 import { FormDots } from "@/components/ui/FormDots";
 import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
@@ -19,9 +21,9 @@ import { Tabs } from "@/components/ui/Tabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { api, ApiError } from "@/lib/api";
-import { formatStat, pct, shortDate, signed, winRate } from "@/lib/format";
+import { formatStat, shortDate, signed, winRate } from "@/lib/format";
 import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
-import type { BadgeKind, FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel } from "@/lib/types";
+import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { TrustChip } from "@/components/trust/TrustChip";
@@ -34,12 +36,6 @@ const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
   new: { label: "New", tone: "neutral" },
   verified: { label: "Verified", tone: "info" },
   trusted: { label: "Trusted", tone: "win" },
-};
-
-const BADGE_LABEL: Record<BadgeKind, string> = {
-  cup_champion: "Champion",
-  cup_runner_up: "Runner up",
-  cup_semifinalist: "Semifinalist",
 };
 
 const matchColumns: Column<MatchSummary>[] = [
@@ -163,26 +159,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
         </section>
         <section aria-labelledby="badges-heading" className="stack">
           <h2 id="badges-heading">Cup badges</h2>
-          {profile.badges.length === 0 ? (
-            <p className="muted">No cup placings yet.</p>
-          ) : (
-            <ul className={styles.badges}>
-              {profile.badges.map((b) => (
-                <li key={b.id} className={cx("glass", styles.badge)} data-kind={b.kind}>
-                  <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" className={styles.badgeIcon}>
-                    <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="currentColor" />
-                  </svg>
-                  <span className={styles.badgeText}>
-                    <span className={styles.badgeTitle}>{BADGE_LABEL[b.kind]}</span>
-                    <Link href={`/tournaments/${b.tournamentId}`}>{b.tournamentName}</Link>
-                    <span className="muted">
-                      {modeLabel(b.mode)}, {shortDate(b.awardedAt)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <CupBadges badges={profile.badges} />
         </section>
       </div>
 
@@ -230,25 +207,7 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
           <RatingChart key={stats.mode} points={stats.history} label={`${MODE_COPY[stats.mode].label} rating history`} />
         </Card>
         <Card title="Best maps">
-          {stats.bestMaps.length === 0 ? (
-            <p className="muted">Not enough matches.</p>
-          ) : (
-            <ol className={styles.maps}>
-              {stats.bestMaps.map((m) => {
-                const wr = winRate(m.wins, m.matches);
-                return (
-                  <li key={m.mapId} className={styles.mapRow}>
-                    <span className="mono">{mapName(stats.mode, m.mapId)}</span>
-                    <span className={styles.bar} aria-hidden="true">
-                      <span style={{ width: pct(wr) }} />
-                    </span>
-                    <span className="mono">{formatStat(wr, "pct", m.matches)}</span>
-                    <span className="muted mono">{m.matches}</span>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+          <BestMaps mode={stats.mode} maps={stats.bestMaps} />
         </Card>
       </div>
     </div>

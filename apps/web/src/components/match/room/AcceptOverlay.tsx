@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { MatchAcceptView, Mode } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
+import { CountdownRing, useRemainingMs } from "@/components/ui/CountdownRing";
 import { cx } from "@/components/ui/cx";
 import { modeLabel } from "@/lib/modes";
 import styles from "./AcceptOverlay.module.css";
@@ -10,46 +11,6 @@ import styles from "./AcceptOverlay.module.css";
 const URGENT_SEC = 5;
 // Seconds left at which screen readers hear the countdown. Every second would drown out everything else
 const ANNOUNCE_AT = [10, URGENT_SEC];
-
-function useRemainingMs(until: number) {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [until]);
-  return now === null ? null : Math.max(0, until - now);
-}
-
-// Drains over the accept window. The fraction follows the milliseconds so the ring moves smoothly,
-// and the CSS transition between ticks is dropped under reduced motion
-function CountdownRing({ remainingMs, totalSec }: { remainingMs: number | null; totalSec: number }) {
-  const r = 44;
-  const c = 2 * Math.PI * r;
-  const sec = remainingMs === null ? null : Math.ceil(remainingMs / 1000);
-  const frac = remainingMs === null ? 1 : Math.max(0, Math.min(1, remainingMs / (totalSec * 1000)));
-  const urgent = sec !== null && sec <= URGENT_SEC;
-  return (
-    <div className={cx(styles.ring, urgent && styles.urgent)} aria-hidden="true">
-      <svg viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r={r} className={styles.track} />
-        <circle
-          cx="50"
-          cy="50"
-          r={r}
-          className={styles.progress}
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - frac)}
-          transform="rotate(-90 50 50)"
-        />
-      </svg>
-      <span className={styles.ringText}>
-        <span className={cx(styles.ringSec, "mono")}>{sec ?? "--"}</span>
-        <span className={styles.ringUnit}>sec</span>
-      </span>
-    </div>
-  );
-}
 
 // The in-game style accept screen for players in the match. A native modal dialog, so the page behind
 // is inert and focus stays inside. It cannot be dismissed, only answered or waited out
@@ -114,7 +75,16 @@ export function AcceptOverlay({
           Match found
         </h2>
 
-        <CountdownRing remainingMs={remainingMs} totalSec={accept.windowSec} />
+        {/* Drains over the accept window, turning to the loss colour for the last URGENT_SEC */}
+        <CountdownRing
+          remainingMs={remainingMs}
+          totalMs={accept.windowSec * 1000}
+          warnMs={URGENT_SEC * 1000}
+          size="var(--accept-ring-size)"
+        >
+          <span className={cx(styles.ringSec, "mono")}>{sec ?? "--"}</span>
+          <span className={styles.ringUnit}>sec</span>
+        </CountdownRing>
         <p className="visually-hidden" role="timer">
           {sec === null ? "" : `${sec} seconds left to accept`}
         </p>

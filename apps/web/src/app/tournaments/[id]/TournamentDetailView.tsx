@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
+import { CountdownRing } from "@/components/ui/CountdownRing";
+import { cx } from "@/components/ui/cx";
 import { StatTile } from "@/components/ui/StatTile";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
@@ -35,6 +37,78 @@ import styles from "./detail.module.css";
 // Team entries show the captain's Steam avatar. Initials are the fallback
 function captainAvatar(e: EntryView): string | null {
   return e.players?.find((p) => p.steamId === e.captainSteamId)?.avatarUrl ?? e.players?.[0]?.avatarUrl ?? null;
+}
+
+// The header ring drains over the last hours before the start. Earlier the start time tile is enough
+const COUNTDOWN_WINDOW_MS = 3 * 3_600_000;
+// A cup still open this long after its start time is stale data, not a countdown
+const COUNTDOWN_STALE_MS = 15 * 60_000;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+// hh:mm:ss from an hour out, mm:ss inside the last hour
+function clock(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
+}
+
+// Minute steps for screen readers. role="timer" is not live, so this is read on demand only
+function spokenLeft(sec: number): string {
+  if (sec <= 0) return "The cup is starting.";
+  if (sec < 60) return "The cup starts in less than a minute.";
+  const mins = Math.ceil(sec / 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const parts = [h > 0 && `${h} ${h === 1 ? "hour" : "hours"}`, m > 0 && `${m} ${m === 1 ? "minute" : "minutes"}`];
+  return `The cup starts in ${parts.filter(Boolean).join(" ")}.`;
+}
+
+function useNowEverySecond(): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+// Large countdown in the header while sign ups are open and the start is close. Renders nothing
+// before mount so the server and client markup agree
+function StartCountdown({ startsAt, onStart }: { startsAt: string; onStart: () => void }) {
+  const now = useNowEverySecond();
+  const start = Date.parse(startsAt);
+  const diff = now === null || Number.isNaN(start) ? null : start - now;
+  // Reload once when the countdown runs out on this page, so the live state takes over
+  const counting = useRef(false);
+  useEffect(() => {
+    if (diff === null) return;
+    if (diff > 0) counting.current = true;
+    else if (counting.current) {
+      counting.current = false;
+      onStart();
+    }
+  }, [diff, onStart]);
+
+  if (diff === null || diff > COUNTDOWN_WINDOW_MS || diff < -COUNTDOWN_STALE_MS) return null;
+  const remainingMs = Math.max(0, diff);
+  const sec = Math.ceil(remainingMs / 1000);
+  const text = clock(sec);
+  return (
+    <div className={styles.countdown}>
+      <CountdownRing remainingMs={remainingMs} totalMs={COUNTDOWN_WINDOW_MS} warnMs={0} tickMs={1000} size="var(--cup-ring-size)">
+        <span className={styles.ringLabel}>{sec > 0 ? "Starts in" : "Starting"}</span>
+        <span className={cx("mono", styles.ringTime, text.length > 5 && styles.ringTimeLong)}>{text}</span>
+      </CountdownRing>
+      <p className="visually-hidden" role="timer">
+        {spokenLeft(sec)}
+      </p>
+    </div>
+  );
 }
 
 // Signed out viewers have no socket, so the bracket is polled by version instead
@@ -212,47 +286,51 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
             </a>
           )}
         </div>
-        {t.status === "open" &&
-          (user ? (
-            <div className={styles.cta}>
-              {teamMode && eligible && !entered && !full && (
-                <Input
-                  label="Team name (optional)"
-                  value={teamName}
-                  maxLength={TEAM_NAME_MAX}
-                  placeholder="3 to 24 characters"
-                  error={teamNameError}
-                  onChange={(e) => {
-                    setTeamName(e.target.value);
-                    setTeamNameError(undefined);
-                  }}
-                />
-              )}
-              <Button
-                size="lg"
-                variant={entered ? "danger" : "primary"}
-                onClick={entered ? () => setConfirmWithdraw(true) : toggleEntry}
-                loading={busy && !confirmWithdraw}
-                disabled={!eligible || (!entered && full)}
-                aria-describedby={!eligible ? "enter-why" : undefined}
-              >
-                {entered ? "Withdraw" : !eligible ? `Needs ${TRUST_NAMES[t.minTrust]}` : full ? "Full" : "Enter cup"}
-              </Button>
-              {!eligible && (
-                <p className={styles.note} id="enter-why">
-                  You need a {TRUST_NAMES[t.minTrust]} account to enter.{" "}
-                  {user.trust ? `You are ${trustProgressLine(user.trust)}. ` : null}
-                  <Link href="/play">Play ladder matches to get there</Link>
-                </p>
-              )}
-              {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
-            </div>
-          ) : (
-            <div className={styles.cta}>
-              <SignInLink size="lg">Sign in to enter</SignInLink>
-              <VerifiedNote minTrust={t.minTrust} />
-            </div>
-          ))}
+        {t.status === "open" && (
+          <div className={styles.aside}>
+            <StartCountdown startsAt={t.startsAt} onStart={reload} />
+            {user ? (
+              <div className={styles.cta}>
+                {teamMode && eligible && !entered && !full && (
+                  <Input
+                    label="Team name (optional)"
+                    value={teamName}
+                    maxLength={TEAM_NAME_MAX}
+                    placeholder="3 to 24 characters"
+                    error={teamNameError}
+                    onChange={(e) => {
+                      setTeamName(e.target.value);
+                      setTeamNameError(undefined);
+                    }}
+                  />
+                )}
+                <Button
+                  size="lg"
+                  variant={entered ? "danger" : "primary"}
+                  onClick={entered ? () => setConfirmWithdraw(true) : toggleEntry}
+                  loading={busy && !confirmWithdraw}
+                  disabled={!eligible || (!entered && full)}
+                  aria-describedby={!eligible ? "enter-why" : undefined}
+                >
+                  {entered ? "Withdraw" : !eligible ? `Needs ${TRUST_NAMES[t.minTrust]}` : full ? "Full" : "Enter cup"}
+                </Button>
+                {!eligible && (
+                  <p className={styles.note} id="enter-why">
+                    You need a {TRUST_NAMES[t.minTrust]} account to enter.{" "}
+                    {user.trust ? `You are ${trustProgressLine(user.trust)}. ` : null}
+                    <Link href="/play">Play ladder matches to get there</Link>
+                  </p>
+                )}
+                {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
+              </div>
+            ) : (
+              <div className={styles.cta}>
+                <SignInLink size="lg">Sign in to enter</SignInLink>
+                <VerifiedNote minTrust={t.minTrust} />
+              </div>
+            )}
+          </div>
+        )}
       </header>
       <WithdrawDialog
         open={confirmWithdraw}

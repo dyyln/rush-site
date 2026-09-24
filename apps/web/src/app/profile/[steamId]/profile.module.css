@@ -81,88 +81,11 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-.maps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.mapRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 44px 28px;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
-}
-.mapRow > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--color-surface-3);
-  overflow: hidden;
-}
-.bar span {
-  display: block;
-  height: 100%;
-  background: var(--color-accent);
-}
 .up {
   color: var(--color-win);
 }
 .down {
   color: var(--color-loss);
-}
-.badges {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.badge {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
-  background: var(--color-surface-1);
-  font-size: var(--text-sm);
-}
-.badgeIcon {
-  flex: none;
-  color: var(--tier-silver);
-}
-.badge[data-kind="cup_champion"] .badgeIcon {
-  color: var(--color-credits);
-}
-.badge[data-kind="cup_runner_up"] .badgeIcon {
-  color: var(--tier-silver);
-}
-.badge[data-kind="cup_semifinalist"] .badgeIcon {
-  color: var(--tier-bronze);
-}
-.badgeText {
-  display: flex;
-  flex-direction: column;
-}
-.badgeText a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target-min);
-}
-.badgeTitle {
-  font-family: var(--font-display);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .scoreLink {
   display: inline-flex;

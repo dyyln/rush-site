@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import type { Mode } from "@rushsite/shared";
 
-// The scene behind the page. tokens.css maps html[data-backdrop] to an image
+// The scene behind the page. tokens.css maps html[data-backdrop] to an image and
+// components/layout/Backdrop crossfades to it when the attribute changes
 export type Backdrop = "rush" | "aim";
 
 // Rush wins when a selection mixes both, since it is the headline mode

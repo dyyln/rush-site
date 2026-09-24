@@ -2,8 +2,17 @@
   display: block;
   flex: none;
   max-width: 100%;
-  background: var(--color-surface-3);
-  animation: pulse 1.4s var(--ease) infinite;
+  /* Translucent wash so the glass underneath shows through, with a sheen sweeping across */
+  background-color: var(--skeleton-wash);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--skeleton-sheen) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: sheen 1.6s linear infinite;
 }
 .text {
   height: 0.9em;
@@ -27,17 +36,18 @@
   gap: var(--space-2);
   width: 100%;
 }
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+@keyframes sheen {
+  from {
+    background-position: 150% 0;
   }
-  50% {
-    opacity: 0.45;
+  to {
+    background-position: -50% 0;
   }
 }
+/* No sweep, just the still wash */
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+    background-image: none;
   }
 }

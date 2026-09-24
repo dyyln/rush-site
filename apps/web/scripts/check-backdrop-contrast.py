@@ -2,7 +2,7 @@
 
 Model (mirrors globals.css):
   scene   = backdrop image, scaled to cover a 1920x1080 viewport, Gaussian blur of
-            --backdrop-blur, then --backdrop-tint composited on top (body::before/after).
+            --backdrop-blur, then --backdrop-tint composited on top (the .backdrop-* layers from components/layout/Backdrop).
   glass   = scene with --glass-blur applied (blur px and saturate()), then a surface
             colour (--color-surface-1, --color-surface-2, --glass-strong) composited on top.
 For every text colour we compute the WCAG contrast ratio against every pixel and report

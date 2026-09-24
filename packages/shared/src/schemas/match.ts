@@ -56,11 +56,16 @@ export const MatchDetailTeamSchema = z.object({
   displayName: z.string().optional(),
   score: z.number().int().nonnegative(),
   players: z.array(MatchDetailPlayerSchema),
+  // Side the team plays, as in match.json. Left out means teams[0] is CT and teams[1] is T. Rush never swaps
+  side: z.enum(["ct", "t"]).optional(),
 })
 export type MatchDetailTeam = z.infer<typeof MatchDetailTeamSchema>
 
 export const MatchMapStatusSchema = z.enum(["upcoming", "live", "done"])
 export type MatchMapStatus = z.infer<typeof MatchMapStatusSchema>
+
+// Rush room ids for slots 0 to 6: T castle, 2 mid, start, 2 mid, CT castle. Same ids as RUSH_ROOMS
+export const RushRoomsSchema = z.array(z.number().int()).length(7)
 
 // One map of a match. A Bo1 has one entry, a series has bestOf entries
 export const MatchMapSchema = z.object({
@@ -77,6 +82,8 @@ export const MatchMapSchema = z.object({
   playedIn: z.string().optional(),
   // Stat lines for this map only
   players: z.array(MatchDetailPlayerSchema).optional(),
+  // Rush only. Room ids for the 7 slots of this map, T castle first. See MatchDetail.rushRooms
+  rushRooms: RushRoomsSchema.optional(),
 })
 export type MatchMap = z.infer<typeof MatchMapSchema>
 
@@ -112,7 +119,10 @@ export const MatchDetailSchema = z.object({
   startedAt: IsoDateSchema.nullable(),
   endedAt: IsoDateSchema.nullable(),
   teams: z.array(MatchDetailTeamSchema),
+  // round.arena carries the room each round was played in
   rounds: z.array(MatchRoundSchema),
+  // Rush only. The 7 rooms of a single map match, from match_started. Left out until the server reports them
+  rushRooms: RushRoomsSchema.optional(),
   // Challenges and rematches. No rating change
   unrated: z.boolean().optional(),
   tournament: z
