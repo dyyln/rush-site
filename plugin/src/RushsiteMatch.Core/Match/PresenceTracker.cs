@@ -35,6 +35,17 @@ public sealed class PresenceTracker
         return true;
     }
 
+    // Series map change. Everyone counts as gone from now and must connect again.
+    // Players who were in before keep their disconnect grace, not the connect grace.
+    // Returns the players who were connected.
+    public IReadOnlyList<string> ResetForMapChange(DateTimeOffset now)
+    {
+        var was = _players.Where(_connected.Contains).ToList();
+        _connected.Clear();
+        foreach (var p in _players) _missingSince[p] = now;
+        return was;
+    }
+
     // Players never seen who are past the connect grace.
     public IReadOnlyList<string> NoShows(DateTimeOffset now, TimeSpan connectGrace) =>
         _players.Where(p => !_everConnected.Contains(p) && now - _missingSince[p] >= connectGrace).ToList();

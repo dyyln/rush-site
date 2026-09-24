@@ -16,20 +16,45 @@ public sealed record PlayerConnected(string SteamId) : MatchEvent("player_connec
 
 public sealed record PlayerDisconnected(string SteamId) : MatchEvent("player_disconnected");
 
-public sealed record MatchStarted() : MatchEvent("match_started");
+// Sent at the live start of each map. MapNumber is set only in a series.
+public sealed record MatchStarted() : MatchEvent("match_started")
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
+}
 
 public sealed record RoundEnd(int Round, string WinnerTeam, IReadOnlyDictionary<string, int> Score) : MatchEvent("round_end")
 {
     // Rush only. Room id from rush_001.js such as "101" or "convoy". Null when unknown.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Arena { get; init; }
+
+    // Series only. Rounds restart at 1 on each map.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
 }
 
 public sealed record MatchEnd(
     string WinnerTeam,
     IReadOnlyDictionary<string, int> Score,
     IReadOnlyList<PlayerStats> Players,
-    bool DemoUploaded) : MatchEvent("match_end");
+    bool DemoUploaded) : MatchEvent("match_end")
+{
+    // Series only. Score is then maps won per team and players are totals across all maps.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MapSummary>? Maps { get; init; }
+}
+
+public sealed record MapSummary(int MapNumber, string MapId, string WinnerTeam, IReadOnlyDictionary<string, int> Score);
+
+// Series only. Sent for every map, the last one included, before match_end.
+public sealed record MapEnd(
+    int MapNumber,
+    string MapId,
+    string WinnerTeam,
+    IReadOnlyDictionary<string, int> Score,
+    IReadOnlyList<PlayerStats> Players,
+    bool DemoUploaded) : MatchEvent("map_end");
 
 // One frag. Round is the round it happened in, counting from 1. Tick is the server tick.
 public sealed record Kill(
@@ -43,6 +68,9 @@ public sealed record Kill(
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Assister { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
 }
 
 public sealed record MatchAbandoned(string Reason, IReadOnlyList<string> MissingSteamIds) : MatchEvent("match_abandoned");
@@ -55,6 +83,9 @@ public sealed record DemoUploaded(bool Ok) : MatchEvent("demo_uploaded")
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Error { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
 }
 
 public sealed record PlayerStats(string SteamId, int Kills, int Deaths, int Headshots, int Damage);

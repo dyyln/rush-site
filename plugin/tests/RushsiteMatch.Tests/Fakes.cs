@@ -31,6 +31,10 @@ internal sealed class FakeGame : IGameServer
     public void ForceJoinTeam(string steamId, Side side) => ForcedJoins.Add((steamId, side));
     public void KickPlayer(string steamId, string reason) => SteamKicks.Add((steamId, reason));
     public IReadOnlyList<ConnectedPlayer> ConnectedPlayers() => Connected.ToList();
+
+    public string? CurrentMapName { get; set; }
+    public readonly List<(string SteamId, PlayerLoadout Loadout)> Loadouts = new();
+    public void ApplyLoadout(string steamId, PlayerLoadout loadout) => Loadouts.Add((steamId, loadout));
 }
 
 internal sealed class MemoryStateStore : RushsiteMatch.Core.State.IMatchStateStore

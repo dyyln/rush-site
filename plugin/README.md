@@ -10,9 +10,11 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 |---|---|---|
 | Whitelist kick, `sv_password` check | yes | yes |
 | `bot_quota 0` and `bot_kick`, re-checked every second | yes | yes |
-| Warmup hold, `!ready` and `!unready` | yes | warmup held until all six are in and on their side, no `!ready` |
+| Warmup hold and start | held until everyone is in and on their side, then a countdown starts the match | held until all six are in and on their side, then Valve's warmup runs out |
+| Map loadout, no buying, spawn immunity | yes | no |
 | Side validation on `jointeam` | yes, first team on a side claims it | yes, fixed from `match.json`. Wrong joins are redirected, repeated ones kicked |
-| Sets `mp_maxrounds`, clinch, overtime and halftime | yes | no. Never touches any `mp_` round convar |
+| Sets `mp_maxrounds`, clinch, overtime and halftime | yes, overtime on | no. Never touches any `mp_` round convar |
+| Series (Bo3) on one server | yes | yes |
 | Pause on disconnect | yes | no |
 | Late Steam authorization counted | yes | yes |
 | State restored after a plugin hot reload | yes | yes |
@@ -27,10 +29,26 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - A teammate already on a side decides the side.
   - Otherwise an opponent already on a side decides it.
   - Otherwise `teams[0]` goes CT and `teams[1]` goes T, matching `mp_teamname_1` and `mp_teamname_2`.
-- `!ready` works only when the player is on the right side. Changing side clears ready.
-- The match starts when everyone is connected and ready and the teams sit on opposite sides. It also starts `rushsite_ready_timeout` seconds after everyone connects, as long as the sides are valid.
+- There is no ready-up. Once every match player is connected and the teams sit on opposite sides, a countdown of `rushsite_start_countdown` seconds starts. If a player leaves or changes side during it, the countdown stops and the plugin waits again. The connect and disconnect graces still abandon the match as before.
+- `!ready` only replies that the match starts on its own.
 - The mode cfg is exec'd again at match start because Valve's `gamemode_competitive.cfg` runs on map load after the agent's command line `+exec`. Without it aim plays with $800, buy zones and C4. It runs before `mp_warmup_pausetimer 0` (the cfg sets it to 1) and before `mp_warmup_end`, whose restart applies `mp_startmoney 16000`. Rush never runs it.
-- On start the plugin runs these commands in order: `exec rushsite/matches/<matchId>/mode.cfg` (written by both drivers), `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 0`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`. With 31 max rounds and clinch on, first to 13 always finishes without overtime.
+- On start the plugin runs these commands in order: `exec rushsite/matches/<matchId>/mode.cfg` (written by both drivers), the loadout convars below, `mp_respawn_immunitytime`, `mp_maxrounds 2N-1`, `mp_match_can_clinch 1`, `mp_overtime_enable 1`, `mp_overtime_maxrounds`, `mp_overtime_startmoney`, `mp_halftime 0|1`, `mp_warmup_pausetimer 0`, `tv_record`, `mp_warmup_end`.
+- First to 13 is 25 max rounds with clinch. A draw round (time runs out with no winner) still counts toward the 25. If regulation ends level, overtime runs in periods of `rushsite_overtime_maxrounds` rounds. A period is won by taking half of it plus one, and a tied period starts another. So an aim map always has a winner. Set `rushsite_overtime_maxrounds 0` to turn overtime off, and the map can then end `draw`.
+
+#### Loadout
+
+- Each aim map has a fixed loadout of primary and secondary per side, plus armor. It comes from the map's `loadout` in `match.json` when set, otherwise from the table in `src/RushsiteMatch.Core/Match/Loadout.cs`, looked up by map id, then map name, then the map the server reports. An unknown map gets rifles.
+
+| Map | CT | T | Armor |
+|---|---|---|---|
+| aim_map, aim_redline, aim_ag_texture2 | M4A4 + USP-S | AK-47 + Glock | kevlar and helmet |
+| aim_usp | USP-S | USP-S | kevlar and helmet |
+| aim_deagle7k (plays aim_deagle) | Deagle | Deagle | kevlar and helmet |
+| awp_india | AWP | AWP | kevlar and helmet |
+
+- The plugin sets `mp_ct_default_primary`, `mp_t_default_primary`, `mp_ct_default_secondary`, `mp_t_default_secondary`, empty default grenades, `mp_free_armor`, `mp_buytime 0`, `mp_buy_anywhere 0` and `mp_weapons_allow_map_placed 0`. It sets them in warmup and again after mode.cfg at match start, because mode.cfg turns buying back on.
+- 0.2 s after each spawn, the plugin removes every weapon the loadout does not list, except the knife. That covers what the map hands out. Then it gives any missing weapon and `item_assaultsuit`. Owned weapons are matched by item definition index, because the USP-S reports itself as `weapon_hkp2000`. Turn this off with `rushsite_aim_loadout 0`.
+- `mp_respawn_immunitytime` is set from `rushsite_aim_spawn_immunity`. Whether CS2 honours it at round start in competitive, and not only on respawn, is unverified.
 - The score is kept per config team, so a halftime swap is handled.
 
 ### Rush
@@ -38,6 +56,8 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 - Valve's `rush_001.js` owns round time, max rounds and the match end. The plugin never sets an `mp_` round convar.
 - Teams are fixed from `match.json`. See "Rush teams" below.
 - Warmup is held with `mp_warmup_pausetimer 1` until every player is connected and on their side. Then the plugin sets it to 0 and Valve's warmup timer runs out as normal. Turn this off with `rushsite_rush_hold_warmup 0`.
+- No loadout, spawn immunity or overtime. Rush is Valve's rules as shipped.
+- A Rush map cannot normally end tied. Every round has a tower owner who wins it, so 15 rounds always give someone 8. A tie needs a round that `rush_001.js` ends with the `DRAW` reason, which the documented rules never do. If it happens, the plugin reports `winnerTeam: "draw"` in `match_end`, or in `map_end` for a series. No tiebreak is invented.
 - The match counts as live on the first of these:
   - `round_announce_match_start`
   - `begin_new_match`
@@ -52,6 +72,19 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - It holds the rush_001 room id, for example `"101"` or `"convoy"`.
   - It is found at `round_freeze_end` by matching living T pawns, or `tspawn*` entities, to the nearest `t1room.<id>` target.
   - This field is not in CONTRACTS.md yet.
+
+## Series (Bo3)
+
+When `match.json` has a `series`, the whole series is played on this server:
+
+- The server launches on map `series.startMapNumber`, normally 1. `series.wins` holds maps already won before it, which is non-zero only when a series resumes after a crash.
+- When a map ends, the plugin sends `map_end` and keeps everyone on the server. That includes the last map. It stops the demo after `tv_delay` + `rushsite_demo_stop_extra`, and waits at least `rushsite_series_map_break` seconds. In Rush that is about 110 s because of `tv_delay 105`. Then it loads the next map with `host_workshop_map <workshopId>` or `changelevel <mapName>`.
+- On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Aim counts down again once everyone is in. Rush holds warmup again. Sides are not swapped between maps.
+- Players reload with the map. The plugin sends `player_disconnected` for each of them when it changes the map. It sends `player_connected` again as each one is fully in on the new map.
+- Once a team has a majority of maps, or the last map is played, the plugin sends `match_end` with the series result and then kicks everyone. A drawn Rush map credits nobody. If the maps run out level, `match_end` is `draw`.
+- `match_abandoned` ends the whole series. That can be a no-show, a disconnect past the grace, or a next map that has not loaded within 5 minutes (`map_load_failed`).
+- Each map records `rushsite_<matchId>_m<mapNumber>.dem` and uploads it to `series.demoUploads[mapNumber-1]`. If that entry is missing, the start map falls back to the top level `demoUpload`.
+- Without `series`, a match behaves exactly as before. No `mapNumber` is sent and no `map_end`.
 
 ## Rush teams
 
@@ -90,7 +123,7 @@ When CounterStrikeSharp hot-reloads the plugin and `match_state.json` has the sa
 - No second `server_ready` or `match_started`. Warmup is not restarted.
 - Round numbers, scores and stats continue.
 - A match that was already decided ends on the score timer. A match that had ended stops and uploads its demo.
-- In aim warmup, ready state is lost and players type `!ready` again.
+- In a series the map number, map wins, finished map results and series player totals are restored. A reload between maps goes on to the next map.
 
 On a normal server start the file is ignored and overwritten, because CS2 itself restarted and the old state no longer matches the game. Webhook events still queued in memory at the moment of the reload are lost.
 
@@ -160,7 +193,7 @@ Switch once a CounterStrikeSharp release ships the CS2 1.41.8.2 fixes from PR #1
 
 Layout:
 
-- `src/RushsiteMatch.Core`: all logic. It has no CounterStrikeSharp dependency. It covers config, webhooks, stats, ready-up, score tracking, the controller and demo upload.
+- `src/RushsiteMatch.Core`: all logic. It has no CounterStrikeSharp dependency. It covers config, webhooks, stats, the start countdown, loadouts, series, score tracking, the controller and demo upload.
 - `src/RushsiteMatch`: the CounterStrikeSharp adapter. It covers `RushsiteMatchPlugin` and `CssGameServer`, which implements `IGameServer`.
 - `tests/RushsiteMatch.Tests`: xunit tests against Core, using fake game, clock, sink and uploader.
 
@@ -193,6 +226,9 @@ Relative paths resolve against `game/csgo`. If `RUSHSITE_MATCH_ID` is set and di
 - The ids must be SteamID64.
 - `winCondition` must fit the mode.
 - A team `side`, when set, must be `ct` or `t`, and the two teams must differ.
+- `map` is optional. It is the launch map, and each `series.maps` entry has the same shape: `{ id, displayName?, workshopId?, mapName?, loadout? }`. Each needs a `workshopId` of digits or a `mapName` of letters, digits and `_`.
+- `loadout` is optional: `{ primary?: { ct?, t? }, secondary?: { ct?, t? }, armor?: "none" | "kevlar" | "kevlar_helmet" }`. Weapons are `weapon_` engine names. A missing side leaves that slot empty, and armor defaults to kevlar and helmet.
+- `series` is optional: `{ bestOf, maps, startMapNumber, wins, demoUploads }`. `bestOf` is odd, `maps` and `demoUploads` have `bestOf` entries, `startMapNumber` is in range, and `wins` uses team names and does not already decide the series.
 
 The plugin retries the load every second until it succeeds, and `rushsite_reload` retries it on demand.
 
@@ -211,7 +247,12 @@ Launch the server with:
 | `rushsite_match_config` | empty | Path to match.json. Used when `RUSHSITE_MATCH_JSON` is not set |
 | `rushsite_connect_grace` | 300 | Seconds for every player to connect once. Then match_abandoned `no_show` |
 | `rushsite_disconnect_grace` | 180 | Seconds a player may stay away after leaving. Then match_abandoned `disconnected` |
-| `rushsite_ready_timeout` | 180 | Aim only. Seconds after everyone connects before the match starts without all ready |
+| `rushsite_start_countdown` | 10 | Aim only. Countdown once every player is in and on their side |
+| `rushsite_aim_loadout` | 1 | Aim only. Hand out the map loadout, stop buying and strip other weapons on spawn |
+| `rushsite_aim_spawn_immunity` | 2 | Aim only. Seconds for `mp_respawn_immunitytime` |
+| `rushsite_overtime_maxrounds` | 6 | Aim only. Rounds per overtime period for a tied map. 0 turns overtime off |
+| `rushsite_overtime_startmoney` | 16000 | Aim only. `mp_overtime_startmoney` |
+| `rushsite_series_map_break` | 30 | Series only. Minimum seconds between a map ending and the next loading |
 | `rushsite_aim_halftime` | 0 | Aim only. Swap sides at halftime |
 | `rushsite_pause_on_disconnect` | 1 | Aim only. `mp_pause_match` when a player drops, and unpause when all are back |
 | `rushsite_match_end_wait` | 10 | Seconds to wait for `cs_win_panel_match` after the score decides the match |
@@ -226,7 +267,7 @@ The plugin sets these fake convars when it loads. To change them, use rcon or a 
 
 ## Commands
 
-- `!ready` and `!unready` (`css_ready`, `css_unready`): aim modes only.
+- `!ready` (`css_ready`): replies that the match starts on its own. There is no ready-up.
 - Server console only:
   - `rushsite_status`: print the match status.
   - `rushsite_force_start`: start an aim match now.
@@ -247,15 +288,16 @@ Delivery:
 |---|---|
 | `server_ready` | match.json loaded and the server is set up |
 | `player_connected` | a whitelisted player finishes connecting |
-| `player_disconnected` | a whitelisted player leaves before the match ends |
-| `match_started` | aim: ready-up done. Rush: the match goes live |
-| `round_end` | every live round. `winnerTeam` is a team name, or `draw`. Rush adds `arena` |
+| `player_disconnected` | a whitelisted player leaves before the match ends, and in a series for everyone when the next map loads |
+| `match_started` | aim: the start countdown ran out. Rush: the match goes live. Sent on every map of a series with `mapNumber` |
+| `round_end` | every live round. `winnerTeam` is a team name, or `draw`. Rush adds `arena`. A series adds `mapNumber` and rounds restart at 1 on each map |
 | `kill` | every frag between two match players in a live round, sent as it happens. See below |
-| `match_end` | as soon as the match ends. `demoUploaded` is always `false` here. The upload is reported by `demo_uploaded` |
-| `match_abandoned` | `reason` is `no_show` or `disconnected`. `missingSteamIds` lists everyone not connected |
-| `demo_uploaded` | `{ ok, bytes?, error? }`, once the demo upload after `match_end` or `match_abandoned` finishes. Not sent if recording never started |
+| `map_end` | series only, after every map, the last one included. `{ mapNumber, mapId, winnerTeam, score, players, demoUploaded }`. `score` is rounds, `players` are this map's stats, `demoUploaded` is `false` |
+| `match_end` | as soon as the match ends. `demoUploaded` is always `false` here. The upload is reported by `demo_uploaded`. In a series it is sent once, after the last `map_end`, with the series winner, `score` as maps won per team, `players` as totals across maps, and `maps: [{ mapNumber, mapId, winnerTeam, score }]` |
+| `match_abandoned` | `reason` is `no_show`, `disconnected` or `map_load_failed`. `missingSteamIds` lists everyone not connected. Ends a whole series |
+| `demo_uploaded` | `{ ok, bytes?, error?, mapNumber? }`, once a demo upload finishes. That is after `match_end`, `map_end` or `match_abandoned`. Not sent if recording never started |
 
-`kill` is `{ round, tick, attacker, victim, weapon, headshot, wallbang, assister? }`:
+`kill` is `{ round, tick, attacker, victim, weapon, headshot, wallbang, assister?, mapNumber? }`:
 
 - `round` counts from 1. A kill after `round_end` and before the next `round_start` or `round_freeze_end` belongs to the round that just ended, so it arrives after that round's `round_end`.
 - `tick` is `Server.TickCount`. `weapon` is the `player_death` weapon name, such as `ak47`, or `unknown`.
@@ -269,7 +311,7 @@ Stats cover live rounds only:
 
 ## Demo
 
-- The plugin runs `tv_record "rushsite_<matchId>"`, which writes `game/csgo/rushsite_<matchId>.dem`.
+- The plugin runs `tv_record "rushsite_<matchId>"`, which writes `game/csgo/rushsite_<matchId>.dem`. In a series each map writes `rushsite_<matchId>_m<mapNumber>.dem`.
 - `tv_record` writes the delayed GOTV stream, so `tv_stoprecord` waits for `tv_delay` + `rushsite_demo_stop_extra` seconds.
 - The plugin waits until the file size stops changing, then PUTs it to `demoUpload.presignedPutUrl` with `Content-Type: application/octet-stream`. It makes 3 attempts.
 - `match_end` goes out at once. Recording continues for `tv_delay` + `rushsite_demo_stop_extra` seconds, about 110 s in Rush because `gamemode_rush.cfg` sets `tv_delay 105`. The plugin does not change `tv_delay`.
@@ -283,6 +325,7 @@ Stats cover live rounds only:
 | `player_connect_full` | presence and whitelist backup | standard |
 | `player_disconnect` | presence and abandon timer | standard |
 | `player_team` | side tracking | standard |
+| `player_spawn` | aim loadout | not used |
 | `round_freeze_end` | Rush live detection and arena detection | expected to fire. Unverified |
 | `round_end` | score, round_end webhook | expected to fire through `map_params` `FireWinCondition`. The `reason` values in Rush are unverified |
 | `round_start` | opens the next round for `kill` numbering | standard |

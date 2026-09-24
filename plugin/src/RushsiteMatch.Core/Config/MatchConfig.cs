@@ -14,6 +14,12 @@ public sealed class MatchConfig
     public DemoUploadConfig? DemoUpload { get; init; }
     public string WinCondition { get; init; } = "";
 
+    // Optional. The map the server was launched on. Used to pick the aim loadout.
+    public MapConfig? Map { get; init; }
+
+    // Optional. Present only for a series such as a Bo3. Absent means one map.
+    public SeriesConfig? Series { get; init; }
+
     [JsonIgnore]
     public WinCondition ParsedWinCondition { get; internal set; } = null!;
 
@@ -21,6 +27,25 @@ public sealed class MatchConfig
         Teams.FirstOrDefault(t => t.SteamIds.Contains(steamId))?.Name;
 
     public bool IsAllowed(string steamId) => AllowedSteamIds.Contains(steamId);
+
+    public bool IsSeries => Series is not null;
+
+    // Map entry for a 1-based map number. Falls back to the top level map.
+    public MapConfig? MapAt(int mapNumber)
+    {
+        if (Series is not null && mapNumber >= 1 && mapNumber <= Series.Maps.Count) return Series.Maps[mapNumber - 1];
+        return Map;
+    }
+
+    // Demo upload target for a 1-based map number.
+    // The top level demoUpload describes the map the server was launched on.
+    public DemoUploadConfig? DemoUploadFor(int mapNumber)
+    {
+        if (Series is null) return DemoUpload;
+        var idx = mapNumber - 1;
+        if (idx >= 0 && idx < Series.DemoUploads.Count && Series.DemoUploads[idx] is { } d) return d;
+        return mapNumber == Series.StartMapNumber ? DemoUpload : null;
+    }
 
     // Side each team plays. teams[0] is CT and teams[1] is T unless a team sets side.
     // Fixed for the whole match. Never derived from where players stand.
@@ -60,6 +85,52 @@ public sealed class DemoUploadConfig
     public string Bucket { get; init; } = "";
     public string Key { get; init; } = "";
     public string PresignedPutUrl { get; init; } = "";
+}
+
+public sealed class MapConfig
+{
+    public string Id { get; init; } = "";
+    public string? DisplayName { get; init; }
+    public string? WorkshopId { get; init; }
+    public string? MapName { get; init; }
+    // Optional. Overrides the plugin's default aim loadout for this map.
+    public LoadoutConfig? Loadout { get; init; }
+
+    // Console command that loads this map on a running server.
+    public string? LoadCommand() =>
+        !string.IsNullOrEmpty(WorkshopId) ? $"host_workshop_map {WorkshopId}"
+        : !string.IsNullOrEmpty(MapName) ? $"changelevel {MapName}"
+        : null;
+}
+
+public sealed class SeriesConfig
+{
+    public int BestOf { get; init; }
+    // Full ordered map list, one entry per map of the series.
+    public List<MapConfig> Maps { get; init; } = new();
+    // 1-based. Above 1 only when the series resumes after a crash.
+    public int StartMapNumber { get; init; } = 1;
+    // Maps each team already won before StartMapNumber.
+    public Dictionary<string, int> Wins { get; init; } = new();
+    // One per map. Index is mapNumber - 1.
+    public List<DemoUploadConfig?> DemoUploads { get; init; } = new();
+
+    public int WinsNeeded => BestOf / 2 + 1;
+}
+
+// Weapons use engine names such as weapon_ak47. A missing side value means nothing in that slot.
+public sealed class LoadoutConfig
+{
+    public SideWeaponsConfig? Primary { get; init; }
+    public SideWeaponsConfig? Secondary { get; init; }
+    // "none", "kevlar" or "kevlar_helmet". Defaults to kevlar_helmet.
+    public string? Armor { get; init; }
+}
+
+public sealed class SideWeaponsConfig
+{
+    public string? Ct { get; init; }
+    public string? T { get; init; }
 }
 
 public static class Modes

@@ -153,6 +153,60 @@ public sealed class CssGameServer : IGameServer
         }
     }
 
+    public string? CurrentMapName
+    {
+        get
+        {
+            try
+            {
+                return Server.MapName;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    // Removes every weapon the loadout does not list, keeping the knife, then gives what is missing.
+    // Owned weapons are matched by item definition index because some report another designer name.
+    public void ApplyLoadout(string steamId, PlayerLoadout loadout)
+    {
+        var p = FindPlayer(steamId);
+        if (p is null || !p.PawnIsAlive) return;
+        try
+        {
+            var pawn = p.PlayerPawn.Value;
+            if (pawn is null || !pawn.IsValid) return;
+            var have = new HashSet<string>();
+            var remove = new List<CBasePlayerWeapon>();
+            foreach (var handle in pawn.WeaponServices?.MyWeapons ?? Enumerable.Empty<CHandle<CBasePlayerWeapon>>())
+            {
+                var w = handle.Value;
+                if (w is null || !w.IsValid) continue;
+                var name = w.DesignerName;
+                if (WeaponItems.IsKnife(name)) continue;
+                int def = w.AttributeManager.Item.ItemDefinitionIndex;
+                var wanted = loadout.Weapons.FirstOrDefault(x => !have.Contains(x) && WeaponItems.Matches(x, name, def));
+                if (wanted is not null) have.Add(wanted);
+                else remove.Add(w);
+            }
+            if (remove.Count > 0)
+            {
+                // Switch to the knife first so no removed weapon is in hand.
+                p.ExecuteClientCommand("slot3");
+                foreach (var w in remove) w.Remove();
+            }
+            foreach (var w in loadout.Weapons.Where(x => !have.Contains(x))) p.GiveNamedItem(w);
+            if (loadout.Armor == ArmorKind.KevlarHelmet) p.GiveNamedItem("item_assaultsuit");
+            else if (loadout.Armor == ArmorKind.Kevlar) p.GiveNamedItem("item_kevlar");
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning("loadout for {SteamId} failed: {Message}", steamId, e.Message);
+        }
+    }
+
     public static bool IsWarmup()
     {
         try

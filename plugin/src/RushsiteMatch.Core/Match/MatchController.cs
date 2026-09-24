@@ -9,6 +9,8 @@ public enum MatchPhase
 {
     Warmup,
     Live,
+    // Series only. A map ended and the next one is about to load.
+    BetweenMaps,
     Ended,
     Abandoned,
 }
@@ -17,8 +19,9 @@ public enum MatchPhase
 //
 // Two flows share this class and the split is decided once by the win condition.
 //
-// Aim modes (first_to_N). The plugin manages the match. It holds warmup, runs !ready and !unready,
-// validates sides, sets mp_maxrounds and related convars, starts the match, pauses on disconnect.
+// Aim modes (first_to_N). The plugin manages the match. It holds warmup, validates sides, starts a
+// countdown once everyone is in and on their side, sets mp_maxrounds and overtime, hands out the map
+// loadout, starts the match and pauses on disconnect.
 //
 // Rush (valve_rush). Valve's rush_001.js runs round rules and the match end.
 // The plugin never touches mp_ round convars or pauses. It does hold each config team on its
@@ -27,6 +30,10 @@ public enum MatchPhase
 //
 // Both flows enforce the whitelist and password, record and upload the demo, track rounds and stats,
 // and emit round_end, match_end and match_abandoned.
+//
+// A series (config series, such as a Bo3) plays every map on this server. Each map ends with map_end,
+// then the next map loads with the same whitelist, password and teams. match_end goes out once,
+// when the series is decided or the last map ends.
 public sealed class MatchController
 {
     public const string ChatPrefix = "[rushsite]";
@@ -40,12 +47,16 @@ public sealed class MatchController
     private readonly IMatchStateStore? _store;
 
     private readonly PresenceTracker _presence;
-    private readonly SideMap _sides;
     private readonly StatsAggregator _stats;
-    private readonly ReadyTracker? _ready;
-    private readonly FirstToScoreTracker? _firstTo;
-    private readonly RushScoreTracker? _rush;
+    private readonly StartCountdown? _countdown;
+    private readonly SeriesTracker? _series;
     private readonly Dictionary<string, int> _teamScore;
+
+    // Per map. Rebuilt when a series moves to the next map.
+    private SideMap _sides;
+    private FirstToScoreTracker? _firstTo;
+    private RushScoreTracker? _rush;
+    private Loadout? _loadout;
 
     private int _round;
     // True from round_end until the next round starts. Kills in that gap belong to the round that just ended.
@@ -54,12 +65,17 @@ public sealed class MatchController
     private bool _started;
     private bool _recording;
     private bool _pausedForDisconnect;
-    private DateTimeOffset? _allConnectedSince;
     private DateTimeOffset? _endDeadline;
     private DateTimeOffset? _stopDemoAt;
-    private DateTimeOffset _lastReminder;
     private DateTimeOffset _lastLineupReminder = DateTimeOffset.MinValue;
     private bool _warmupHeld;
+    private int _lastCountdownSaid;
+    // Series. When the next map may load, and when its load was asked for.
+    private DateTimeOffset? _nextMapAt;
+    private DateTimeOffset? _mapLoadingSince;
+    // Demo being recorded. Fixed at tv_record so a later map change cannot redirect the upload.
+    private string _recordingName = "";
+    private int _recordingMap = 1;
 
     // Fully connected players Steam has not authorized yet, by user id, with the id they claim.
     private readonly Dictionary<int, string?> _awaitingAuth = new();
@@ -86,28 +102,48 @@ public sealed class MatchController
         _store = store;
 
         _presence = new PresenceTracker(cfg.AllowedSteamIds, clock.UtcNow);
-        _sides = new SideMap(cfg, fixedFromConfig: !cfg.ParsedWinCondition.PluginManagesMatch);
+        _sides = NewSideMap();
         _stats = new StatsAggregator(cfg.AllowedSteamIds, cfg.TeamOf);
         _teamScore = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
 
         if (ManagesMatch)
         {
-            _ready = new ReadyTracker(cfg.AllowedSteamIds);
-            _firstTo = new FirstToScoreTracker(cfg.ParsedWinCondition.RoundsToWin, cfg.Teams.Select(t => t.Name));
+            _countdown = new StartCountdown(settings.StartCountdown);
+            _firstTo = NewFirstTo();
         }
         else
         {
             _rush = new RushScoreTracker();
         }
+
+        if (cfg.Series is { } s)
+            _series = new SeriesTracker(s.BestOf, cfg.Teams.Select(t => t.Name), cfg.AllowedSteamIds, s.StartMapNumber, s.Wins);
     }
+
+    private SideMap NewSideMap() => new(_cfg, fixedFromConfig: !_cfg.ParsedWinCondition.PluginManagesMatch);
+
+    private FirstToScoreTracker NewFirstTo() =>
+        new(_cfg.ParsedWinCondition.RoundsToWin, _cfg.Teams.Select(t => t.Name), _settings.OvertimeMaxRounds);
 
     public MatchPhase Phase { get; private set; } = MatchPhase.Warmup;
     public bool ManagesMatch => _cfg.ParsedWinCondition.PluginManagesMatch;
     public bool IsRush => !ManagesMatch;
     public int Round => _round;
     public IReadOnlyDictionary<string, int> Score => _teamScore;
-    public string DemoName => "rushsite_" + SafeName(_cfg.MatchId);
+    public bool IsSeries => _series is not null;
+    // 1-based. Always 1 outside a series.
+    public int MapNumber => _series?.MapNumber ?? 1;
+    public IReadOnlyDictionary<string, int>? SeriesWins => _series?.Wins;
+    private int? EventMapNumber => _series is null ? null : MapNumber;
+    public MapConfig? CurrentMap => _cfg.MapAt(MapNumber);
+    public string CurrentMapId => CurrentMap?.Id ?? _game.CurrentMapName ?? "unknown";
+    public bool CountdownRunning => _countdown?.Running == true;
+
+    public string DemoName => "rushsite_" + SafeName(_cfg.MatchId) + (_series is null ? "" : "_m" + MapNumber);
     public string DemoPath => Path.Combine(_game.CsgoDirectory, DemoName + ".dem");
+
+    // Aim only. The loadout of the current map.
+    public Loadout? CurrentLoadout => ManagesMatch ? _loadout ??= AimLoadouts.Resolve(CurrentMap, _game.CurrentMapName) : null;
     public Task? UploadTask { get; private set; }
     public bool DemoPending => _recording || UploadTask is { IsCompleted: false };
 
@@ -117,20 +153,38 @@ public sealed class MatchController
         if (_started) return;
         _started = true;
         ApplyServerSetup();
+        BeginMapWarmup();
+        _game.Log($"match {_cfg.MatchId} mode {_cfg.Mode} win condition {_cfg.WinCondition}. " +
+                  (ManagesMatch ? "Plugin manages warmup and rounds." : "Valve's Rush rules. Plugin holds teams on their configured sides.") +
+                  (_series is null ? "" : $" Series Bo{_series.BestOf} starting on map {MapNumber} {CurrentMapId}."));
+        _sink.Enqueue(new ServerReady());
+        SaveState();
+    }
+
+    private void BeginMapWarmup()
+    {
         if (ManagesMatch)
         {
             _game.ExecuteCommand("mp_warmup_start");
             _game.ExecuteCommand("mp_warmup_pausetimer 1");
+            ApplyAimSetup();
         }
         else
         {
             HoldRushWarmup();
         }
-        _game.Log($"match {_cfg.MatchId} mode {_cfg.Mode} win condition {_cfg.WinCondition}. " +
-                  (ManagesMatch ? "Plugin manages warmup and rounds." : "Valve's Rush rules. Plugin holds teams on their configured sides."));
-        _sink.Enqueue(new ServerReady());
-        SaveState();
     }
+
+    // Aim only. Loadout convars and spawn immunity. Runs again after mode.cfg because it turns buying back on.
+    private void ApplyAimSetup()
+    {
+        if (!ManagesMatch) return;
+        if (_settings.AimLoadout)
+            foreach (var c in CurrentLoadout!.ConVarCommands()) _game.ExecuteCommand(c);
+        _game.ExecuteCommand(Loadout.SpawnImmunityCommand(_settings.AimSpawnImmunity));
+    }
+
+    private string ModeCfgExec => $"exec rushsite/matches/{_cfg.MatchId}/mode.cfg";
 
     // Called instead of Start after a plugin reload when the saved state belongs to this match.
     // server_ready is not sent again and warmup is not restarted.
@@ -143,7 +197,8 @@ public sealed class MatchController
         _round = Math.Max(0, st.Round);
         foreach (var t in _teamScore.Keys.ToList())
             _teamScore[t] = st.Score.TryGetValue(t, out var v) ? v : 0;
-        _firstTo?.Restore(_teamScore);
+        _series?.Restore(st.MapNumber ?? MapNumber, st.SeriesWins, st.MapResults, st.SeriesPlayers, st.SeriesOver ?? false);
+        _firstTo?.Restore(_teamScore, _round, st.OvertimeBase, st.OvertimePeriodStart ?? 0);
         if (_rush is not null)
         {
             Side? decided = st.RushDecided switch { "T" => Side.T, "CT" => Side.CT, _ => null };
@@ -152,6 +207,7 @@ public sealed class MatchController
         }
         _stats.Restore(st.Players);
         _recording = st.Recording;
+        if (_recording) MarkRecording();
         _currentArena = st.Arena;
 
         switch (Phase)
@@ -161,21 +217,24 @@ public sealed class MatchController
                 else HoldRushWarmup();
                 break;
             case MatchPhase.Live:
-                _ready?.Close();
-                var decidedNow = _firstTo?.DecidedWinner is not null || _rush?.DecidedWinner is not null;
-                if (decidedNow || _round >= _cfg.ParsedWinCondition.MaxRounds)
-                    _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
+                _countdown?.Close();
+                if (MapDecided) _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
+                break;
+            case MatchPhase.BetweenMaps:
+                _countdown?.Close();
+                ScheduleDemoStop();
+                _nextMapAt = _clock.UtcNow;
                 break;
             case MatchPhase.Ended:
             case MatchPhase.Abandoned:
-                _ready?.Close();
+                _countdown?.Close();
                 ScheduleDemoStop();
                 break;
         }
         _game.Log($"restored match {_cfg.MatchId} after a plugin reload. phase {Phase} round {_round} " +
                   $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
         if (Phase == MatchPhase.Warmup && ManagesMatch)
-            _game.PrintToAll($"{ChatPrefix} The match plugin reloaded. Type !ready again.");
+            _game.PrintToAll($"{ChatPrefix} The match plugin reloaded. The match starts once everyone is in and on their side.");
         SaveState();
     }
 
@@ -188,7 +247,21 @@ public sealed class MatchController
 
     public void OnMapStart()
     {
-        if (_started) ApplyServerSetup();
+        if (!_started) return;
+        ApplyServerSetup();
+        if (_mapLoadingSince is null)
+        {
+            if (ManagesMatch && Phase == MatchPhase.Warmup) ApplyAimSetup();
+            return;
+        }
+        // The next map of the series is up. Players reconnect and are counted again as they arrive.
+        _mapLoadingSince = null;
+        _presence.ResetForMapChange(_clock.UtcNow);
+        Phase = MatchPhase.Warmup;
+        _game.ExecuteCommand(ModeCfgExec);
+        BeginMapWarmup();
+        _game.Log($"map {MapNumber} of the series is up ({CurrentMapId}). Waiting for players.");
+        SaveState();
     }
 
     private void ApplyServerSetup()
@@ -269,12 +342,13 @@ public sealed class MatchController
     public void OnPlayerConnected(string steamId, int userId)
     {
         if (!CheckWhitelist(steamId, userId)) return;
+        // Players are counted again on the new map once it is up.
+        if (_mapLoadingSince is not null) return;
         if (!_presence.Connect(steamId)) return;
         _sink.Enqueue(new PlayerConnected(steamId));
 
         if (_presence.AllConnected)
         {
-            _allConnectedSince = _clock.UtcNow;
             // Rush records from the moment everyone is in so nothing Valve's script does is missed.
             if (IsRush && Phase == MatchPhase.Warmup) StartRecording();
             if (_pausedForDisconnect && Phase == MatchPhase.Live)
@@ -289,7 +363,8 @@ public sealed class MatchController
         {
             var required = _sides.RequiredSide(steamId);
             if (required is not null && _settings.TryChangeTeam) _game.TryMovePlayer(steamId, required.Value);
-            _game.PrintToPlayer(steamId, $"{ChatPrefix} Join your team's side then type !ready.");
+            _game.PrintToPlayer(steamId, $"{ChatPrefix} Join your team's side. The match starts once everyone is in and on their side.");
+            UpdateAimCountdown(_clock.UtcNow);
         }
         if (IsRush && Phase == MatchPhase.Warmup)
             _game.PrintToPlayer(steamId, $"{ChatPrefix} Your team plays {SideName(RequiredRushSide(steamId))}.");
@@ -301,9 +376,8 @@ public sealed class MatchController
         foreach (var k in _awaitingAuth.Where(kv => kv.Value == steamId).Select(kv => kv.Key).ToList()) _awaitingAuth.Remove(k);
         _sides.RemovePlayer(steamId);
         if (!_presence.Disconnect(steamId, _clock.UtcNow)) return;
-        _allConnectedSince = null;
-        _ready?.Drop(steamId);
-        if (Phase is MatchPhase.Warmup or MatchPhase.Live) _sink.Enqueue(new PlayerDisconnected(steamId));
+        if (Phase is MatchPhase.Warmup or MatchPhase.Live or MatchPhase.BetweenMaps) _sink.Enqueue(new PlayerDisconnected(steamId));
+        UpdateAimCountdown(_clock.UtcNow);
 
         if (ManagesMatch && Phase == MatchPhase.Live && _settings.PauseOnDisconnect && !_pausedForDisconnect)
         {
@@ -316,13 +390,8 @@ public sealed class MatchController
     public void OnPlayerTeam(string steamId, Side side)
     {
         if (!_cfg.IsAllowed(steamId)) return;
-        var before = _sides.SideOfPlayer(steamId);
         _sides.SetPlayerSide(steamId, side);
-        if (_ready is not null && Phase == MatchPhase.Warmup && before != side && _ready.Ready.Contains(steamId))
-        {
-            _ready.Drop(steamId);
-            _game.PrintToPlayer(steamId, $"{ChatPrefix} You changed side so you are no longer ready.");
-        }
+        UpdateAimCountdown(_clock.UtcNow);
         // The game can place a player without a jointeam, for example auto assign. Send them to their side.
         if (IsRush && EnforcesRushTeams && side.IsPlaying() && !_sides.IsOnRequiredSide(steamId))
             RedirectToRequiredSide(steamId, "placed on the wrong side");
@@ -357,7 +426,8 @@ public sealed class MatchController
     {
         if (!_cfg.IsAllowed(steamId)) return true;
         if (IsRush) return OnRushJoinTeam(steamId, requested);
-        if (Phase != MatchPhase.Warmup)
+        if (Phase != MatchPhase.Warmup && Phase != MatchPhase.Live) return true;
+        if (Phase == MatchPhase.Live)
         {
             // Mid match a player may only return to the side the team is playing.
             var teamSide = _sides.SideOfTeam(_cfg.TeamOf(steamId)!);
@@ -425,52 +495,47 @@ public sealed class MatchController
     public IReadOnlyList<string> WrongSidePlayers() =>
         _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)).ToList();
 
-    public string OnReady(string steamId)
+    // Ready-up is gone. The command only explains what happens now.
+    public string ReadyHint() => IsRush
+        ? $"{ChatPrefix} Ready-up is not used in Rush. Valve's warmup starts the match once everyone is on their side."
+        : $"{ChatPrefix} No ready-up needed. The match starts on its own once everyone is in and on their side.";
+
+    // Aim. Runs the start countdown from the current lineup.
+    private void UpdateAimCountdown(DateTimeOffset now)
     {
-        if (_ready is null) return $"{ChatPrefix} Ready-up is not used in Rush. Valve's warmup starts the match.";
-        var side = _sides.SideOfPlayer(steamId);
-        var required = _sides.RequiredSide(steamId);
-        var valid = side.IsPlaying() && (required is null || required == side);
-        var result = _ready.SetReady(steamId, valid);
-        var msg = result switch
+        if (_countdown is null || Phase != MatchPhase.Warmup || _mapLoadingSince is not null) return;
+        var complete = _presence.AllConnected && _sides.TeamsAreValid(_cfg.AllowedSteamIds);
+        switch (_countdown.Update(complete, now))
         {
-            ReadyResult.Ok => $"{ChatPrefix} You are ready.",
-            ReadyResult.AlreadyReady => $"{ChatPrefix} You are already ready.",
-            ReadyResult.WrongSide => $"{ChatPrefix} Join your team's side before readying up.",
-            ReadyResult.NotInWarmup => $"{ChatPrefix} The match has already started.",
-            _ => $"{ChatPrefix} You are not a player in this match.",
-        };
-        if (result == ReadyResult.Ok)
-        {
-            _game.PrintToAll($"{ChatPrefix} {_ready.Ready.Count}/{_cfg.AllowedSteamIds.Count} ready.");
-            TryStartWhenReady();
+            case CountdownChange.Started:
+                _lastCountdownSaid = _countdown.SecondsLeft(now);
+                _game.Log("all players are in and on their side. Start countdown running.");
+                _game.PrintToAll($"{ChatPrefix} All players are in. {WhatStarts} starts in {_lastCountdownSaid} seconds.");
+                break;
+            case CountdownChange.Cancelled:
+                _game.Log("start countdown cancelled. A player left or changed side.");
+                _game.PrintToAll($"{ChatPrefix} A player left or changed side. Countdown stopped. Waiting for everyone.");
+                break;
+            case CountdownChange.Fired:
+                StartAimMatch("all players in and on their side");
+                break;
+            default:
+                var left = _countdown.SecondsLeft(now);
+                if (_countdown.Running && left > 0 && left <= 5 && left < _lastCountdownSaid)
+                {
+                    _lastCountdownSaid = left;
+                    _game.PrintToAll($"{ChatPrefix} {WhatStarts} starts in {left}.");
+                }
+                break;
         }
-        return msg;
     }
 
-    public string OnUnready(string steamId)
-    {
-        if (_ready is null) return $"{ChatPrefix} Ready-up is not used in Rush.";
-        return _ready.SetUnready(steamId) switch
-        {
-            ReadyResult.Ok => $"{ChatPrefix} You are no longer ready.",
-            ReadyResult.NotReady => $"{ChatPrefix} You were not ready.",
-            ReadyResult.NotInWarmup => $"{ChatPrefix} The match has already started.",
-            _ => $"{ChatPrefix} You are not a player in this match.",
-        };
-    }
-
-    private void TryStartWhenReady()
-    {
-        if (_ready is null || Phase != MatchPhase.Warmup) return;
-        if (_presence.AllConnected && _ready.AllReady && _sides.TeamsAreValid(_cfg.AllowedSteamIds))
-            StartAimMatch("all players ready");
-    }
+    private string WhatStarts => _series is null ? "The match" : $"Map {MapNumber}";
 
     // Admin override from the server console. Aim modes only.
     public bool ForceStart()
     {
-        if (!ManagesMatch || Phase != MatchPhase.Warmup) return false;
+        if (!ManagesMatch || Phase != MatchPhase.Warmup || _mapLoadingSince is not null) return false;
         StartAimMatch("forced from console");
         return true;
     }
@@ -478,19 +543,29 @@ public sealed class MatchController
     private void StartAimMatch(string why)
     {
         var wc = _cfg.ParsedWinCondition;
-        _ready!.Close();
-        _game.Log($"starting match. {why}.");
+        _countdown!.Close();
+        _game.Log($"starting {(_series is null ? "match" : "map " + MapNumber)}. {why}.");
         // Runs first. The cfg sets pausetimer 1 and its startmoney only applies on the warmup end restart.
-        _game.ExecuteCommand($"exec rushsite/matches/{_cfg.MatchId}/mode.cfg");
+        _game.ExecuteCommand(ModeCfgExec);
+        ApplyAimSetup();
         _game.ExecuteCommand($"mp_maxrounds {wc.MaxRounds}");
         _game.ExecuteCommand("mp_match_can_clinch 1");
-        _game.ExecuteCommand("mp_overtime_enable 0");
+        if (_settings.OvertimeMaxRounds > 0)
+        {
+            _game.ExecuteCommand("mp_overtime_enable 1");
+            _game.ExecuteCommand($"mp_overtime_maxrounds {_settings.OvertimeMaxRounds}");
+            _game.ExecuteCommand($"mp_overtime_startmoney {_settings.OvertimeStartMoney}");
+        }
+        else
+        {
+            _game.ExecuteCommand("mp_overtime_enable 0");
+        }
         _game.ExecuteCommand($"mp_halftime {(_settings.AimHalftime ? 1 : 0)}");
         _game.ExecuteCommand("mp_warmup_pausetimer 0");
         StartRecording();
         _game.ExecuteCommand("mp_warmup_end");
         GoLive();
-        _game.PrintToAll($"{ChatPrefix} Match is live. First to {wc.RoundsToWin}.");
+        _game.PrintToAll($"{ChatPrefix} {(_series is null ? "Match" : $"Map {MapNumber}")} is live. First to {wc.RoundsToWin}.");
     }
 
     // Rush only. Called on round_announce_match_start, begin_new_match or the first
@@ -513,7 +588,7 @@ public sealed class MatchController
         _stats.Reset();
         _round = 0;
         _betweenRounds = false;
-        _sink.Enqueue(new MatchStarted());
+        _sink.Enqueue(new MatchStarted { MapNumber = EventMapNumber });
         SaveState();
     }
 
@@ -524,6 +599,13 @@ public sealed class MatchController
             _game.Log("tv_enable is not 1. tv_record will fail. Start the server with +tv_enable 1.");
         _game.ExecuteCommand($"tv_record \"{DemoName}\"");
         _recording = true;
+        MarkRecording();
+    }
+
+    private void MarkRecording()
+    {
+        _recordingName = DemoName;
+        _recordingMap = MapNumber;
     }
 
     public void OnRoundStart()
@@ -573,10 +655,10 @@ public sealed class MatchController
         _sink.Enqueue(new RoundEnd(_round, label, new Dictionary<string, int>(_teamScore))
         {
             Arena = IsRush ? _currentArena : null,
+            MapNumber = EventMapNumber,
         });
 
-        var maxed = _round >= _cfg.ParsedWinCondition.MaxRounds;
-        if ((decided is not null || maxed) && _endDeadline is null)
+        if ((decided is not null || MapDecided) && _endDeadline is null)
         {
             // Give cs_win_panel_match a chance to arrive first. It is the preferred end signal.
             _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
@@ -584,10 +666,24 @@ public sealed class MatchController
         SaveState();
     }
 
+    // Aim follows the first-to tracker, overtime included. Rush stops at its round cap.
+    private bool MapDecided => _firstTo is not null
+        ? _firstTo.IsOver
+        : _rush!.DecidedWinner is not null || _round >= _cfg.ParsedWinCondition.MaxRounds;
+
     public void OnWinPanelMatch()
     {
         if (Phase != MatchPhase.Live) return;
-        FinishMatch("cs_win_panel_match");
+        FinishMap("cs_win_panel_match");
+    }
+
+    // Aim only. Called a moment after a match player spawns.
+    public void OnPlayerSpawn(string steamId, Side side)
+    {
+        if (!ManagesMatch || !_settings.AimLoadout) return;
+        if (Phase is not (MatchPhase.Warmup or MatchPhase.Live) || _mapLoadingSince is not null) return;
+        if (!_cfg.IsAllowed(steamId) || !side.IsPlaying()) return;
+        _game.ApplyLoadout(steamId, CurrentLoadout!.For(side));
     }
 
     public void OnPlayerDeath(DeathInfo d)
@@ -612,6 +708,7 @@ public sealed class MatchController
         _sink.Enqueue(new Kill(round, Math.Max(0, d.Tick), attacker, victim, weapon, d.Headshot, d.Penetrated > 0)
         {
             Assister = assister,
+            MapNumber = EventMapNumber,
         });
     }
 
@@ -624,36 +721,42 @@ public sealed class MatchController
     public void Tick()
     {
         var now = _clock.UtcNow;
+        if (_stopDemoAt is not null && now >= _stopDemoAt) StopDemoAndUpload();
         EnforceNoBots();
         switch (Phase)
         {
             case MatchPhase.Warmup:
             case MatchPhase.Live:
+            case MatchPhase.BetweenMaps:
+                if (_mapLoadingSince is not null)
+                {
+                    if (now - _mapLoadingSince >= _settings.MapLoadTimeout)
+                        Abandon("map_load_failed", Array.Empty<string>(), "The next map did not load.");
+                    break;
+                }
                 SyncConnectedPlayers();
                 if (CheckAbandon(now)) return;
                 if (Phase == MatchPhase.Warmup && IsRush) TickRushWarmup(now);
-                if (Phase == MatchPhase.Warmup) TickWarmup(now);
+                if (Phase == MatchPhase.Warmup && ManagesMatch) TickAimWarmup(now);
                 if (Phase == MatchPhase.Live && _endDeadline is not null && now >= _endDeadline)
-                    FinishMatch("score tracking");
+                    FinishMap("score tracking");
+                if (Phase == MatchPhase.BetweenMaps && _nextMapAt is not null && now >= _nextMapAt && _stopDemoAt is null)
+                    LoadNextMap(now);
                 break;
         }
-        if (_stopDemoAt is not null && now >= _stopDemoAt) StopDemoAndUpload();
     }
 
-    private void TickWarmup(DateTimeOffset now)
+    private void TickAimWarmup(DateTimeOffset now)
     {
-        if (_ready is null) return;
-        TryStartWhenReady();
-        if (Phase != MatchPhase.Warmup || _allConnectedSince is null) return;
-        if (now - _allConnectedSince < _settings.ReadyTimeout) return;
-        if (_sides.TeamsAreValid(_cfg.AllowedSteamIds))
+        RefreshAllSides();
+        UpdateAimCountdown(now);
+        if (Phase != MatchPhase.Warmup || _countdown!.Running) return;
+        if (now - _lastLineupReminder < TimeSpan.FromSeconds(15)) return;
+        _lastLineupReminder = now;
+        foreach (var id in _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)))
         {
-            StartAimMatch("ready timeout");
-        }
-        else if (now - _lastReminder >= TimeSpan.FromSeconds(15))
-        {
-            _lastReminder = now;
-            _game.PrintToAll($"{ChatPrefix} Ready timeout passed. The match starts as soon as each team is on its own side.");
+            var side = _sides.RequiredSide(id);
+            _game.PrintToPlayer(id, $"{ChatPrefix} Join {(side is Side s ? SideName(s) : "your team's side")} to start the match.");
         }
     }
 
@@ -721,32 +824,134 @@ public sealed class MatchController
 
         var reason = noShows.Count > 0 ? "no_show" : "disconnected";
         var missing = _presence.Missing.Where(id => !onServer.Contains(id)).ToList();
+        Abandon(reason, missing, "A player did not connect or return in time.");
+        return true;
+    }
+
+    // Ends the match, and in a series every map still to play.
+    private void Abandon(string reason, IReadOnlyList<string> missing, string why)
+    {
         _game.Log($"abandoning match. {reason}: {string.Join(",", missing)}");
-        _game.PrintToAll($"{ChatPrefix} Match abandoned. A player did not connect or return in time.");
+        _game.PrintToAll($"{ChatPrefix} Match abandoned. {why}");
         Phase = MatchPhase.Abandoned;
+        _mapLoadingSince = null;
+        _nextMapAt = null;
         if (ManagesMatch) _game.ExecuteCommand("mp_pause_match");
         _sink.Enqueue(new MatchAbandoned(reason, missing));
         SaveState();
 
         // Keep the partial demo for review. demo_uploaded reports it.
         ScheduleDemoStop();
-        return true;
     }
 
-    private void FinishMatch(string source)
+    // A draw is only possible when overtime is off in aim, or in Rush when a round ends as a draw.
+    private void FinishMap(string source)
     {
         RefreshSides();
         var winner = _firstTo?.DecidedWinner
                      ?? (_rush?.DecidedWinner is Side s ? _sides.TeamOnSide(s) : null)
                      ?? LeadingTeam()
                      ?? MatchEventJson.Draw;
-        _game.Log($"match over via {source}. Winner {winner}. Score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
+        var score = new Dictionary<string, int>(_teamScore);
+        var players = _stats.Snapshot();
+        _game.Log($"{(_series is null ? "match" : "map " + MapNumber)} over via {source}. Winner {winner}. " +
+                  $"Score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
+        _endDeadline = null;
+
+        if (_series is null)
+        {
+            // Results go out now. The demo follows in its own demo_uploaded event.
+            EndMatch(new MatchEnd(winner, score, players, false));
+            return;
+        }
+
+        var over = _series.RecordMap(CurrentMapId, winner, score, players);
+        _sink.Enqueue(new MapEnd(MapNumber, CurrentMapId, winner, score, players, false));
+        if (over)
+        {
+            EndMatch(new MatchEnd(_series.FinalWinner, new Dictionary<string, int>(_series.Wins), _series.Totals(), false)
+            {
+                Maps = _series.Results.Select(r => new MapSummary(r.MapNumber, r.MapId, r.WinnerTeam, r.Score)).ToList(),
+            });
+            return;
+        }
+
+        Phase = MatchPhase.BetweenMaps;
+        ScheduleDemoStop();
+        var next = _cfg.MapAt(MapNumber + 1);
+        _nextMapAt = Max(_clock.UtcNow + _settings.SeriesMapBreak, _stopDemoAt ?? _clock.UtcNow);
+        var wait = (int)Math.Ceiling((_nextMapAt.Value - _clock.UtcNow).TotalSeconds);
+        _game.PrintToAll($"{ChatPrefix} Map {MapNumber} to {winner}. Series {SeriesScoreText()}. " +
+                         $"Next map {next?.DisplayName ?? next?.Id} in {wait} seconds.");
+        SaveState();
+    }
+
+    private void EndMatch(MatchEnd end)
+    {
+        _game.Log($"match over. Winner {end.WinnerTeam}.");
         Phase = MatchPhase.Ended;
-        // Results go out now. The demo follows in its own demo_uploaded event.
-        _sink.Enqueue(new MatchEnd(winner, new Dictionary<string, int>(_teamScore), _stats.Snapshot(), false));
+        _sink.Enqueue(end);
         ScheduleDemoStop();
         SaveState();
         if (_settings.KickOnMatchEnd) KickEveryone("Match over. Thanks for playing.");
+    }
+
+    private string SeriesScoreText() =>
+        _series is null ? "" : string.Join("-", _cfg.Teams.Select(t => _series.Wins[t.Name]));
+
+    private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
+
+    // Series. Loads the next map with the same whitelist, password and teams.
+    private void LoadNextMap(DateTimeOffset now)
+    {
+        _nextMapAt = null;
+        if (_series is null || !_series.Advance())
+        {
+            Abandon("map_load_failed", Array.Empty<string>(), "There is no next map.");
+            return;
+        }
+        var cmd = CurrentMap?.LoadCommand();
+        ResetForNextMap();
+        // Everyone reloads with the map. The API sees them leave and connect again.
+        foreach (var id in _presence.ResetForMapChange(now)) _sink.Enqueue(new PlayerDisconnected(id));
+        if (cmd is null)
+        {
+            Abandon("map_load_failed", Array.Empty<string>(), "The next map has no map name.");
+            return;
+        }
+        _mapLoadingSince = now;
+        _game.Log($"loading map {MapNumber} of {_series.BestOf} ({CurrentMapId}) with {cmd}.");
+        SaveState();
+        _game.ExecuteCommand(cmd);
+    }
+
+    private void ResetForNextMap()
+    {
+        _round = 0;
+        _betweenRounds = false;
+        _currentArena = null;
+        _endDeadline = null;
+        _pausedForDisconnect = false;
+        _warmupHeld = false;
+        _lastCountdownSaid = 0;
+        _lastLineupReminder = DateTimeOffset.MinValue;
+        foreach (var t in _teamScore.Keys.ToList()) _teamScore[t] = 0;
+        _sides = NewSideMap();
+        _stats.Reset();
+        _loadout = null;
+        if (ManagesMatch)
+        {
+            _firstTo = NewFirstTo();
+            _countdown!.Reset();
+        }
+        else
+        {
+            _rush = new RushScoreTracker();
+        }
+        _awaitingAuth.Clear();
+        _loggedOnServer.Clear();
+        _joinRefusals.Clear();
+        _forcedMoves.Clear();
     }
 
     // Nobody needs to stay for the demo wait. Kicking keeps the server idle until it is torn down.
@@ -771,22 +976,22 @@ public sealed class MatchController
         _game.ExecuteCommand("tv_stoprecord");
         _recording = false;
         SaveState();
-        UploadTask = UploadAndReportAsync();
+        var path = Path.Combine(_game.CsgoDirectory, _recordingName + ".dem");
+        UploadTask = UploadAndReportAsync(path, _cfg.DemoUploadFor(_recordingMap)?.PresignedPutUrl, _recordingMap);
     }
 
-    private async Task UploadAndReportAsync()
+    private async Task UploadAndReportAsync(string path, string? url, int mapNumber)
     {
         DemoUploadResult result;
-        var url = _cfg.DemoUpload?.PresignedPutUrl;
         if (string.IsNullOrEmpty(url))
         {
-            result = DemoUploadResult.Failed("no presignedPutUrl in match.json");
+            result = DemoUploadResult.Failed(_series is null ? "no presignedPutUrl in match.json" : $"no presignedPutUrl for map {mapNumber} in match.json");
         }
         else
         {
             try
             {
-                result = await _uploader.UploadAsync(DemoPath, url, CancellationToken.None).ConfigureAwait(false);
+                result = await _uploader.UploadAsync(path, url, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception e)
             {
@@ -794,7 +999,7 @@ public sealed class MatchController
             }
         }
         if (!result.Ok) _game.Log($"demo upload failed: {result.Error}");
-        _sink.Enqueue(new DemoUploaded(result.Ok) { Bytes = result.Bytes, Error = result.Error });
+        _sink.Enqueue(new DemoUploaded(result.Ok) { Bytes = result.Bytes, Error = result.Error, MapNumber = _series is null ? null : mapNumber });
     }
 
     private void RefreshSides()
@@ -824,6 +1029,13 @@ public sealed class MatchController
         RushRoundsPlayed = _rush?.RoundsPlayed,
         RushDecided = _rush?.DecidedWinner?.ToString(),
         Players = _stats.Snapshot().ToList(),
+        OvertimeBase = _firstTo?.OvertimeBase,
+        OvertimePeriodStart = _firstTo?.InOvertime == true ? _firstTo.OvertimePeriodStart : null,
+        MapNumber = _series?.MapNumber,
+        SeriesWins = _series is null ? null : new Dictionary<string, int>(_series.Wins),
+        MapResults = _series?.Results.ToList(),
+        SeriesPlayers = _series?.Totals().ToList(),
+        SeriesOver = _series?.IsOver,
         SavedAt = _clock.UtcNow,
     };
 
@@ -841,10 +1053,11 @@ public sealed class MatchController
 
     public string Status()
     {
-        var ready = _ready is null ? "n/a" : $"{_ready.Ready.Count}/{_cfg.AllowedSteamIds.Count}";
-        return $"match {_cfg.MatchId} mode {_cfg.Mode} phase {Phase} round {_round} " +
+        var countdown = _countdown is null ? "n/a" : _countdown.Running ? $"{_countdown.SecondsLeft(_clock.UtcNow)}s" : _countdown.Fired ? "done" : "waiting";
+        var series = _series is null ? "" : $"map {MapNumber}/{_series.BestOf} {CurrentMapId} series {SeriesScoreText()} ";
+        return $"match {_cfg.MatchId} mode {_cfg.Mode} phase {Phase} {series}round {_round} " +
                $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))} " +
-               $"connected {_cfg.AllowedSteamIds.Count - _presence.Missing.Count}/{_cfg.AllowedSteamIds.Count} ready {ready} " +
+               $"connected {_cfg.AllowedSteamIds.Count - _presence.Missing.Count}/{_cfg.AllowedSteamIds.Count} countdown {countdown} " +
                $"recording {_recording}" + (IsRush ? $" arena {_currentArena ?? "?"} front {_rush!.FrontSlot} " +
                $"lineup {_cfg.AllowedSteamIds.Count - RushNotReady().Count}/{_cfg.AllowedSteamIds.Count} " +
                $"wrong side [{string.Join(",", WrongSidePlayers())}] warmup held {_warmupHeld}" : "");

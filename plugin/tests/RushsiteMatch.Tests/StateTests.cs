@@ -130,7 +130,8 @@ public class StateTests
         m.Restore(saved);
         Join(m, A1, Side.CT);
         Join(m, B1, Side.T);
-        Assert.Contains("already started", m.OnReady(A1));
+        m.Tick();
+        Assert.Equal(MatchPhase.Live, m.Phase);
         for (var i = 0; i < 5; i++) m.OnRoundEnd(Side.CT, false, false);
         Assert.Null(_sink.Events.OfType<MatchEnd>().FirstOrDefault());
         m.OnRoundEnd(Side.CT, false, false);

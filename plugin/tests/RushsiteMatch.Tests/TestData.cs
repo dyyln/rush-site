@@ -32,6 +32,33 @@ internal static class TestData
         """;
     }
 
+    public const string SeriesJson = """
+      "series": {
+        "bestOf": 3,
+        "maps": [
+          { "id": "aim_map", "displayName": "Aim Map", "workshopId": "3084291314" },
+          { "id": "aim_usp", "displayName": "USP", "workshopId": "3299812021" },
+          { "id": "awp_india", "displayName": "AWP India", "mapName": "awp_india" }
+        ],
+        "startMapNumber": 1,
+        "wins": { "alpha": 0, "bravo": 0 },
+        "demoUploads": [
+          { "bucket": "demos", "key": "m/1.dem", "presignedPutUrl": "https://s3.example/m1" },
+          { "bucket": "demos", "key": "m/2.dem", "presignedPutUrl": "https://s3.example/m2" },
+          { "bucket": "demos", "key": "m/3.dem", "presignedPutUrl": "https://s3.example/m3" }
+        ]
+      },
+    """;
+
+    public static string WithSeries(string json, string series = SeriesJson) =>
+        json.Replace("\"winCondition\"", series + "\"winCondition\"");
+
+    public static MatchConfig AimBo3() => MatchConfigLoader.Parse(WithSeries(Json("aim1v1", "first_to_13", 1)));
+
+    public static MatchConfig RushBo3() => MatchConfigLoader.Parse(WithSeries(Json(), """
+      "series": { "bestOf": 3, "maps": [ { "id": "rush_001", "mapName": "rush_001" }, { "id": "rush_001", "mapName": "rush_001" }, { "id": "rush_001", "mapName": "rush_001" } ] },
+    """));
+
     public static MatchConfig Rush() => MatchConfigLoader.Parse(Json());
     public static MatchConfig Aim1v1() => MatchConfigLoader.Parse(Json("aim1v1", "first_to_13", 1));
     public static MatchConfig Aim2v2() => MatchConfigLoader.Parse(Json("aim2v2", "first_to_13", 2));

@@ -93,7 +93,49 @@ public static class MatchConfigLoader
                 errors.Add($"winCondition '{cfg.WinCondition}' does not fit mode '{cfg.Mode}'");
         }
 
+        if (cfg.Map is not null) ValidateMap(cfg.Map, "map", errors);
+        if (cfg.Series is not null) ValidateSeries(cfg, cfg.Series, errors);
+
         if (errors.Count > 0) throw new MatchConfigException("invalid match config: " + string.Join("; ", errors));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex MapNamePattern = new("^[A-Za-z0-9_]+$");
+
+    private static void ValidateMap(MapConfig map, string where, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(map.Id)) errors.Add($"{where}.id is required");
+        var hasWorkshop = !string.IsNullOrEmpty(map.WorkshopId);
+        if (hasWorkshop && !map.WorkshopId!.All(char.IsAsciiDigit)) errors.Add($"{where}.workshopId must be digits");
+        if (!string.IsNullOrEmpty(map.MapName) && !MapNamePattern.IsMatch(map.MapName)) errors.Add($"{where}.mapName is not a valid map name");
+        if (map.LoadCommand() is null) errors.Add($"{where} needs a workshopId or a mapName");
+        if (map.Loadout is { } l)
+        {
+            foreach (var (slot, w) in new[] { ("primary.ct", l.Primary?.Ct), ("primary.t", l.Primary?.T), ("secondary.ct", l.Secondary?.Ct), ("secondary.t", l.Secondary?.T) })
+                if (!string.IsNullOrWhiteSpace(w) && !Match.Loadout.IsWeaponName(w.Trim()))
+                    errors.Add($"{where}.loadout.{slot} '{w}' is not a weapon_ name");
+            if (!Match.Loadout.TryParseArmor(l.Armor, out _))
+                errors.Add($"{where}.loadout.armor must be none, kevlar or kevlar_helmet");
+        }
+    }
+
+    private static void ValidateSeries(MatchConfig cfg, SeriesConfig s, List<string> errors)
+    {
+        if (s.BestOf < 1 || s.BestOf % 2 == 0) errors.Add("series.bestOf must be an odd number");
+        if (s.Maps.Count != s.BestOf) errors.Add($"series.maps has {s.Maps.Count} entries but bestOf is {s.BestOf}");
+        for (var i = 0; i < s.Maps.Count; i++) ValidateMap(s.Maps[i], $"series.maps[{i}]", errors);
+        if (s.StartMapNumber < 1 || s.StartMapNumber > s.Maps.Count) errors.Add("series.startMapNumber is out of range");
+        if (s.DemoUploads.Count > 0 && s.DemoUploads.Count != s.BestOf) errors.Add($"series.demoUploads has {s.DemoUploads.Count} entries but bestOf is {s.BestOf}");
+        foreach (var d in s.DemoUploads)
+            if (d is not null && !string.IsNullOrEmpty(d.PresignedPutUrl) && !Uri.TryCreate(d.PresignedPutUrl, UriKind.Absolute, out _))
+                errors.Add("series.demoUploads presignedPutUrl must be an absolute URL");
+        var teams = cfg.Teams.Select(t => t.Name).ToHashSet();
+        foreach (var (team, wins) in s.Wins)
+        {
+            if (!teams.Contains(team)) errors.Add($"series.wins has unknown team '{team}'");
+            if (wins < 0) errors.Add($"series.wins for '{team}' is negative");
+        }
+        if (s.BestOf >= 1 && s.Wins.Values.Any(w => w >= s.WinsNeeded)) errors.Add("series.wins already decides the series");
+        if (s.Wins.Values.Where(w => w > 0).Sum() >= s.StartMapNumber) errors.Add("series.wins counts more maps than were played before startMapNumber");
     }
 
     public static bool IsSteamId64(string s) =>

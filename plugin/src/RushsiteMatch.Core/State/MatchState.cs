@@ -1,6 +1,7 @@
 using System.Text.Json;
 using RushsiteMatch.Core.Config;
 using RushsiteMatch.Core.Events;
+using RushsiteMatch.Core.Match;
 
 namespace RushsiteMatch.Core.State;
 
@@ -22,6 +23,15 @@ public sealed class MatchState
     // "T" or "CT" once the Rush mirror has decided the match.
     public string? RushDecided { get; init; }
     public List<PlayerStats> Players { get; init; } = new();
+    // Aim overtime. Score each team had when the current period began, and the round it began on.
+    public int? OvertimeBase { get; init; }
+    public int? OvertimePeriodStart { get; init; }
+    // Series only.
+    public int? MapNumber { get; init; }
+    public Dictionary<string, int>? SeriesWins { get; init; }
+    public List<MapResult>? MapResults { get; init; }
+    public List<PlayerStats>? SeriesPlayers { get; init; }
+    public bool? SeriesOver { get; init; }
     public DateTimeOffset SavedAt { get; init; }
 }
 

@@ -1,5 +1,7 @@
 using RushsiteMatch.Core.Config;
 
+using static RushsiteMatch.Tests.TestData;
+
 namespace RushsiteMatch.Tests;
 
 public class ConfigTests
@@ -126,5 +128,34 @@ public class TeamSideConfigTests
             .Replace("{ \"name\": \"alpha\",", "{ \"name\": \"alpha\", \"side\": \"t\",")
             .Replace("{ \"name\": \"bravo\",", "{ \"name\": \"bravo\", \"side\": \"t\",");
         Assert.Contains("same side", Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(clash)).Message);
+    }
+
+    [Fact]
+    public void ParsesSeriesAndMap()
+    {
+        var cfg = AimBo3();
+        Assert.True(cfg.IsSeries);
+        Assert.Equal(3, cfg.Series!.Maps.Count);
+        Assert.Equal("host_workshop_map 3084291314", cfg.MapAt(1)!.LoadCommand());
+        Assert.Equal("changelevel awp_india", cfg.MapAt(3)!.LoadCommand());
+        Assert.Equal("https://s3.example/m2", cfg.DemoUploadFor(2)!.PresignedPutUrl);
+        Assert.False(Aim1v1().IsSeries);
+        Assert.Equal("https://s3.example/demo?sig=1", Aim1v1().DemoUploadFor(1)!.PresignedPutUrl);
+    }
+
+    [Theory]
+    [InlineData("\"bestOf\": 3", "\"bestOf\": 2", "odd")]
+    [InlineData("\"startMapNumber\": 1", "\"startMapNumber\": 4", "startMapNumber")]
+    [InlineData("\"alpha\": 0", "\"alpha\": 2", "already decides")]
+    [InlineData("\"alpha\": 0", "\"zulu\": 0", "unknown team")]
+    [InlineData("\"mapName\": \"awp_india\"", "\"mapName\": \"awp india;quit\"", "not a valid map name")]
+    [InlineData("\"id\": \"awp_india\", \"displayName\": \"AWP India\", \"mapName\": \"awp_india\"", "\"id\": \"awp_india\"", "workshopId or a mapName")]
+    [InlineData("\"id\": \"aim_usp\",", "\"id\": \"aim_usp\", \"loadout\": { \"primary\": { \"ct\": \"ak47\" } },", "not a weapon_ name")]
+    [InlineData("\"id\": \"aim_usp\",", "\"id\": \"aim_usp\", \"loadout\": { \"armor\": \"heavy\" },", "armor")]
+    public void RejectsBadSeries(string find, string replace, string error)
+    {
+        var json = WithSeries(Json("aim1v1", "first_to_13", 1), SeriesJson.Replace(find, replace));
+        var e = Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(json));
+        Assert.Contains(error, e.Message);
     }
 }

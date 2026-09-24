@@ -55,30 +55,6 @@ public class StatsAggregatorTests
     }
 }
 
-public class ReadyTrackerTests
-{
-    [Fact]
-    public void ReadyStateMachine()
-    {
-        var r = new ReadyTracker(new[] { A1, B1 });
-        Assert.Equal(ReadyResult.NotAPlayer, r.SetReady(Outsider, true));
-        Assert.Equal(ReadyResult.WrongSide, r.SetReady(A1, false));
-        Assert.Equal(ReadyResult.Ok, r.SetReady(A1, true));
-        Assert.Equal(ReadyResult.AlreadyReady, r.SetReady(A1, true));
-        Assert.False(r.AllReady);
-        Assert.Equal(new[] { B1 }, r.NotReady);
-        Assert.Equal(ReadyResult.Ok, r.SetReady(B1, true));
-        Assert.True(r.AllReady);
-        Assert.Equal(ReadyResult.Ok, r.SetUnready(B1));
-        Assert.Equal(ReadyResult.NotReady, r.SetUnready(B1));
-        r.Drop(A1);
-        Assert.Empty(r.Ready);
-        r.Close();
-        Assert.Equal(ReadyResult.NotInWarmup, r.SetReady(A1, true));
-        Assert.Equal(ReadyResult.NotInWarmup, r.SetUnready(A1));
-    }
-}
-
 public class PresenceTrackerTests
 {
     [Fact]
@@ -190,11 +166,83 @@ public class ScoreTrackerTests
             Assert.Null(t.RecordRound("alpha"));
             Assert.Null(t.RecordRound("bravo"));
         }
-        Assert.Null(t.RecordRound(null));
         Assert.Equal("bravo", t.RecordRound("bravo"));
         Assert.Null(t.RecordRound("alpha"));
         Assert.Equal(16, t.Wins["bravo"]);
         Assert.Equal(15, t.Wins["alpha"]);
+    }
+
+    [Fact]
+    public void DrawRoundsCountTowardTheRoundCapAndTheLeaderWins()
+    {
+        var t = new FirstToScoreTracker(2, new[] { "alpha", "bravo" });
+        Assert.Null(t.RecordRound("alpha"));
+        Assert.Null(t.RecordRound(null));
+        Assert.Equal("alpha", t.RecordRound(null));
+        Assert.True(t.IsOver);
+    }
+
+    [Fact]
+    public void TiedRegulationWithoutOvertimeEndsTied()
+    {
+        var t = new FirstToScoreTracker(2, new[] { "alpha", "bravo" });
+        t.RecordRound("alpha");
+        t.RecordRound("bravo");
+        Assert.Null(t.RecordRound(null));
+        Assert.True(t.EndedTied);
+        Assert.True(t.IsOver);
+        Assert.Null(t.RecordRound("alpha"));
+        Assert.Equal(3, t.RoundsPlayed);
+    }
+
+    [Fact]
+    public void OvertimeClinchesAtHalfPlusOne()
+    {
+        var t = new FirstToScoreTracker(13, new[] { "alpha", "bravo" }, overtimeMaxRounds: 6);
+        for (var i = 0; i < 12; i++)
+        {
+            t.RecordRound("alpha");
+            t.RecordRound("bravo");
+        }
+        Assert.Null(t.RecordRound(null));
+        Assert.True(t.InOvertime);
+        Assert.Equal(12, t.OvertimeBase);
+        Assert.False(t.IsOver);
+        for (var i = 0; i < 3; i++) Assert.Null(t.RecordRound("alpha"));
+        Assert.Equal("alpha", t.RecordRound("alpha"));
+        Assert.Equal(16, t.Wins["alpha"]);
+    }
+
+    [Fact]
+    public void TiedOvertimePeriodStartsAnother()
+    {
+        var t = new FirstToScoreTracker(2, new[] { "alpha", "bravo" }, overtimeMaxRounds: 2);
+        t.RecordRound("alpha");
+        t.RecordRound("bravo");
+        t.RecordRound(null);
+        Assert.Equal(1, t.OvertimeBase);
+        t.RecordRound("alpha");
+        Assert.Null(t.RecordRound("bravo"));
+        Assert.Equal(2, t.OvertimeBase);
+        Assert.Equal(5, t.OvertimePeriodStart);
+        t.RecordRound("bravo");
+        Assert.Equal("bravo", t.RecordRound(null));
+    }
+
+    [Fact]
+    public void OvertimeStateSurvivesRestore()
+    {
+        var t = new FirstToScoreTracker(2, new[] { "alpha", "bravo" }, overtimeMaxRounds: 4);
+        t.RecordRound("alpha");
+        t.RecordRound("bravo");
+        t.RecordRound(null);
+        t.RecordRound("alpha");
+        var r = new FirstToScoreTracker(2, new[] { "alpha", "bravo" }, overtimeMaxRounds: 4);
+        r.Restore(t.Wins, t.RoundsPlayed, t.OvertimeBase, t.OvertimePeriodStart);
+        Assert.True(r.InOvertime);
+        Assert.Null(r.RecordRound("bravo"));
+        Assert.Null(r.RecordRound("alpha"));
+        Assert.Equal("alpha", r.RecordRound("alpha"));
     }
 
     [Fact]

@@ -30,6 +30,12 @@ public interface IGameServer
 
     // Rush only. Room id of the current round or null.
     string? DetectRushArena();
+
+    // Name of the loaded map as the engine reports it, or null.
+    string? CurrentMapName { get; }
+
+    // Aim only. Strips weapons the player should not hold, except the knife, then gives what is missing.
+    void ApplyLoadout(string steamId, PlayerLoadout loadout);
 }
 
 // What the plugin reads from player_death. Ids are null for bots, the world and unknown players.
@@ -69,7 +75,19 @@ public sealed class MatchSettings
 {
     public TimeSpan ConnectGrace { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan DisconnectGrace { get; init; } = TimeSpan.FromMinutes(3);
-    public TimeSpan ReadyTimeout { get; init; } = TimeSpan.FromMinutes(3);
+    // Aim. Countdown that starts once every player is in and on their side.
+    public TimeSpan StartCountdown { get; init; } = TimeSpan.FromSeconds(10);
+    // Aim. mp_respawn_immunitytime.
+    public TimeSpan AimSpawnImmunity { get; init; } = TimeSpan.FromSeconds(2);
+    // Aim. Hand out the map loadout and strip everything else on spawn.
+    public bool AimLoadout { get; init; } = true;
+    // Aim. Overtime period length for a tied map. Zero turns overtime off.
+    public int OvertimeMaxRounds { get; init; } = 6;
+    public int OvertimeStartMoney { get; init; } = 16000;
+    // Series. Minimum wait between a map ending and the next map loading.
+    public TimeSpan SeriesMapBreak { get; init; } = TimeSpan.FromSeconds(30);
+    // Series. The match is abandoned when the next map has not loaded by then.
+    public TimeSpan MapLoadTimeout { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan MatchEndWait { get; init; } = TimeSpan.FromSeconds(10);
     public TimeSpan DemoStopExtra { get; init; } = TimeSpan.FromSeconds(5);
     public bool AimHalftime { get; init; }

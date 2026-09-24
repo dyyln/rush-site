@@ -1,37 +1,93 @@
 namespace RushsiteMatch.Core.Match;
 
 // Aim modes. Keyed by config team name so a halftime side swap does not matter.
+// Follows the game with mp_maxrounds 2N-1 and clinch on. The first team to N wins. If regulation runs out
+// on unequal scores, which only draw rounds allow, the leader wins. A tie goes to overtime periods of
+// overtimeMaxRounds rounds when that is above zero. A period is won by clinching half of it plus one,
+// or by leading when it runs out. A tied period starts another one.
 public sealed class FirstToScoreTracker
 {
     private readonly int _target;
+    private readonly int _overtimeRounds;
     private readonly Dictionary<string, int> _wins;
 
-    public FirstToScoreTracker(int roundsToWin, IEnumerable<string> teams)
+    public FirstToScoreTracker(int roundsToWin, IEnumerable<string> teams, int overtimeMaxRounds = 0)
     {
         _target = roundsToWin;
+        _overtimeRounds = overtimeMaxRounds > 0 ? overtimeMaxRounds : 0;
         _wins = teams.ToDictionary(t => t, _ => 0);
     }
 
     public IReadOnlyDictionary<string, int> Wins => _wins;
     public string? DecidedWinner { get; private set; }
+    // Only when overtime is off. Regulation ended level.
+    public bool EndedTied { get; private set; }
+    public int RoundsPlayed { get; private set; }
+    public int RegulationRounds => _target * 2 - 1;
+    public bool InOvertime => OvertimeBase is not null;
+    // Each team's score when the current overtime period began.
+    public int? OvertimeBase { get; private set; }
+    // Rounds played when the current overtime period began.
+    public int OvertimePeriodStart { get; private set; }
+    public bool IsOver => DecidedWinner is not null || EndedTied;
 
-    // Returns the team that won the match with this round, or null.
+    // Counts every round. Pass null for a draw. Returns the team that won the match with this round, or null.
     public string? RecordRound(string? winnerTeam)
     {
-        if (DecidedWinner is not null || winnerTeam is null || !_wins.ContainsKey(winnerTeam)) return null;
-        _wins[winnerTeam]++;
-        if (_wins[winnerTeam] >= _target) DecidedWinner = winnerTeam;
+        if (IsOver) return null;
+        RoundsPlayed++;
+        if (winnerTeam is not null && _wins.ContainsKey(winnerTeam)) _wins[winnerTeam]++;
+        Evaluate();
         return DecidedWinner;
     }
 
+    private void Evaluate()
+    {
+        if (IsOver) return;
+        if (OvertimeBase is null)
+        {
+            DecidedWinner = _wins.FirstOrDefault(kv => kv.Value >= _target).Key;
+            if (DecidedWinner is not null || RoundsPlayed < RegulationRounds) return;
+            DecidedWinner = Leader();
+            if (DecidedWinner is null) StartPeriodOrEnd();
+            return;
+        }
+        var need = _overtimeRounds / 2 + 1;
+        DecidedWinner = _wins.FirstOrDefault(kv => kv.Value - OvertimeBase.Value >= need).Key;
+        if (DecidedWinner is not null || RoundsPlayed - OvertimePeriodStart < _overtimeRounds) return;
+        DecidedWinner = Leader();
+        if (DecidedWinner is null) StartPeriodOrEnd();
+    }
+
+    private void StartPeriodOrEnd()
+    {
+        if (_overtimeRounds == 0)
+        {
+            EndedTied = true;
+            return;
+        }
+        OvertimeBase = _wins.Values.Max();
+        OvertimePeriodStart = RoundsPlayed;
+    }
+
+    private string? Leader()
+    {
+        var ordered = _wins.OrderByDescending(kv => kv.Value).ToList();
+        if (ordered.Count < 2 || ordered[0].Value == ordered[1].Value) return null;
+        return ordered[0].Key;
+    }
+
     // Used after a plugin reload.
-    public void Restore(IReadOnlyDictionary<string, int> wins)
+    public void Restore(IReadOnlyDictionary<string, int> wins, int roundsPlayed = 0, int? overtimeBase = null, int overtimePeriodStart = 0)
     {
         foreach (var t in _wins.Keys.ToList())
-        {
             _wins[t] = wins.TryGetValue(t, out var w) ? w : 0;
-            if (_wins[t] >= _target) DecidedWinner = t;
-        }
+        RoundsPlayed = Math.Max(0, roundsPlayed);
+        OvertimeBase = _overtimeRounds > 0 ? overtimeBase : null;
+        OvertimePeriodStart = overtimePeriodStart;
+        DecidedWinner = null;
+        EndedTied = false;
+        Evaluate();
     }
 }
 

@@ -25,7 +25,12 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<string> MatchConfigPath = new(MatchConfigLoader.ConVarName, "Path to match.json. Relative paths resolve against game/csgo.", "");
     public FakeConVar<int> ConnectGrace = new("rushsite_connect_grace", "Seconds a player may take to first connect before the match is abandoned.", 300);
     public FakeConVar<int> DisconnectGrace = new("rushsite_disconnect_grace", "Seconds a player may stay disconnected before the match is abandoned.", 180);
-    public FakeConVar<int> ReadyTimeout = new("rushsite_ready_timeout", "Aim modes. Seconds after everyone connects before the match starts without all ready.", 180);
+    public FakeConVar<int> StartCountdown = new("rushsite_start_countdown", "Aim modes. Seconds of countdown once every player is in and on their side.", 10);
+    public FakeConVar<float> AimSpawnImmunity = new("rushsite_aim_spawn_immunity", "Aim modes. Seconds of spawn immunity, sets mp_respawn_immunitytime.", 2f);
+    public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout on spawn and strip everything else.", true);
+    public FakeConVar<int> OvertimeMaxRounds = new("rushsite_overtime_maxrounds", "Aim modes. Rounds per overtime period for a tied map. 0 turns overtime off.", 6);
+    public FakeConVar<int> OvertimeStartMoney = new("rushsite_overtime_startmoney", "Aim modes. mp_overtime_startmoney.", 16000);
+    public FakeConVar<int> SeriesMapBreak = new("rushsite_series_map_break", "Series. Minimum seconds between one map ending and the next loading.", 30);
     public FakeConVar<bool> AimHalftime = new("rushsite_aim_halftime", "Aim modes. Swap sides at halftime.", false);
     public FakeConVar<bool> PauseOnDisconnect = new("rushsite_pause_on_disconnect", "Aim modes. Pause at the next freeze time when a player disconnects.", true);
     public FakeConVar<int> MatchEndWait = new("rushsite_match_end_wait", "Seconds to wait for cs_win_panel_match after the score decides the match.", 10);
@@ -55,6 +60,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         RegisterEventHandler<EventPlayerConnectFull>(OnPlayerConnectFull);
         RegisterEventHandler<EventPlayerDisconnect>(OnPlayerDisconnect);
         RegisterEventHandler<EventPlayerTeam>(OnPlayerTeam);
+        RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn);
         RegisterEventHandler<EventRoundStart>(OnRoundStart);
         RegisterEventHandler<EventRoundFreezeEnd>(OnRoundFreezeEnd);
         RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
@@ -65,8 +71,8 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         RegisterEventHandler<EventBeginNewMatch>(OnBeginNewMatch);
 
         AddCommandListener("jointeam", OnJoinTeam, HookMode.Pre);
-        AddCommand("css_ready", "Mark yourself ready", (p, info) => Reply(p, info, id => _match!.OnReady(id)));
-        AddCommand("css_unready", "Mark yourself not ready", (p, info) => Reply(p, info, id => _match!.OnUnready(id)));
+        // Ready-up is automatic. The command only tells players so.
+        AddCommand("css_ready", "Explains that the match starts on its own", (p, info) => Reply(p, info, _ => _match!.ReadyHint()));
         AddCommand("rushsite_status", "Print match status", OnStatusCommand);
         AddCommand("rushsite_force_start", "Start an aim match now", OnForceStartCommand);
         AddCommand("rushsite_reload", "Reload match.json if no match is running", OnReloadCommand);
@@ -148,7 +154,12 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         {
             ConnectGrace = TimeSpan.FromSeconds(ConnectGrace.Value),
             DisconnectGrace = TimeSpan.FromSeconds(DisconnectGrace.Value),
-            ReadyTimeout = TimeSpan.FromSeconds(ReadyTimeout.Value),
+            StartCountdown = TimeSpan.FromSeconds(Math.Max(0, StartCountdown.Value)),
+            AimSpawnImmunity = TimeSpan.FromSeconds(Math.Max(0, AimSpawnImmunity.Value)),
+            AimLoadout = AimLoadout.Value,
+            OvertimeMaxRounds = Math.Max(0, OvertimeMaxRounds.Value),
+            OvertimeStartMoney = Math.Max(0, OvertimeStartMoney.Value),
+            SeriesMapBreak = TimeSpan.FromSeconds(Math.Max(0, SeriesMapBreak.Value)),
             MatchEndWait = TimeSpan.FromSeconds(MatchEndWait.Value),
             DemoStopExtra = TimeSpan.FromSeconds(DemoStopExtra.Value),
             AimHalftime = AimHalftime.Value,
@@ -229,6 +240,21 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         if (_match is null || ev.Disconnect || ev.Isbot) return HookResult.Continue;
         var id = Sid(ev.Userid);
         if (id is not null) _match.OnPlayerTeam(id, SideExtensions.FromTeamNum(ev.Team));
+        return HookResult.Continue;
+    }
+
+    private HookResult OnPlayerSpawn(EventPlayerSpawn ev, GameEventInfo info)
+    {
+        if (_match is null || !_match.ManagesMatch) return HookResult.Continue;
+        var id = Sid(ev.Userid);
+        if (id is null) return HookResult.Continue;
+        // The map and the game hand out their items during the spawn. Apply the loadout after them.
+        AddTimer(0.2f, () =>
+        {
+            var p = CssGameServer.HumanPlayers().FirstOrDefault(x => x.SteamID.ToString() == id);
+            if (p is null || !p.PawnIsAlive) return;
+            _match?.OnPlayerSpawn(id, SideExtensions.FromTeamNum(p.TeamNum));
+        }, TimerFlags.STOP_ON_MAPCHANGE);
         return HookResult.Continue;
     }
 

@@ -57,7 +57,7 @@ public class ControllerTests
         foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.CT);
         foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.T);
         Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
-        Assert.Contains("Rush", m.OnReady(A1));
+        Assert.Contains("Rush", m.ReadyHint());
         m.OnRoundFreezeEnd(isWarmup: false);
         m.OnPlayerDisconnected(B1);
         _clock.Advance(10);
@@ -247,54 +247,143 @@ public class ControllerTests
     }
 
     [Fact]
-    public void AimWarmupReadyUpAndStart()
+    public void AimCountdownStartsWhenLineupIsCompleteThenGoesLive()
     {
-        var m = New(Aim1v1());
+        var m = New(Aim1v1(), new MatchSettings { StartCountdown = TimeSpan.FromSeconds(10) });
         Assert.Contains("mp_warmup_pausetimer 1", _game.Commands);
         Join(m, A1, Side.CT);
         Assert.False(m.OnJoinTeamRequest(B1, Side.CT));
         Assert.True(m.OnJoinTeamRequest(B1, Side.T));
         Join(m, B1, Side.T);
+        Assert.True(m.CountdownRunning);
+        Assert.Contains(_game.Chat, c => c.Contains("starts in 10 seconds"));
 
-        Assert.Contains("ready", m.OnReady(A1));
+        _clock.Advance(9);
+        m.Tick();
         Assert.Equal(MatchPhase.Warmup, m.Phase);
-        m.OnUnready(A1);
-        m.OnReady(B1);
-        m.OnReady(A1);
+        _clock.Advance(1);
+        m.Tick();
 
         Assert.Equal(MatchPhase.Live, m.Phase);
         var start = _game.Commands.SkipWhile(c => c != "mp_maxrounds 25").ToList();
-        Assert.Equal(new[] { "mp_maxrounds 25", "mp_match_can_clinch 1", "mp_overtime_enable 0", "mp_halftime 0", "mp_warmup_pausetimer 0" }, start.Take(5));
-        Assert.StartsWith("tv_record", start[5]);
-        Assert.Equal("mp_warmup_end", start[6]);
+        Assert.Equal(new[] { "mp_maxrounds 25", "mp_match_can_clinch 1", "mp_overtime_enable 1", "mp_overtime_maxrounds 6",
+            "mp_overtime_startmoney 16000", "mp_halftime 0", "mp_warmup_pausetimer 0" }, start.Take(7));
+        Assert.StartsWith("tv_record", start[7]);
+        Assert.Equal("mp_warmup_end", start[8]);
         Assert.Equal(new[] { "server_ready", "player_connected", "player_connected", "match_started" }, _sink.Types);
+        Assert.Null(_sink.Last<MatchStarted>().MapNumber);
     }
 
     [Fact]
-    public void AimReadyRequiresCorrectSideAndSideChangeUnreadies()
+    public void AimCountdownCancelsWhenAPlayerLeavesOrSwitchesSide()
     {
-        var m = New(Aim2v2());
+        var m = New(Aim2v2(), new MatchSettings { StartCountdown = TimeSpan.FromSeconds(10) });
         Join(m, A1, Side.CT);
-        Join(m, A2, Side.T);
-        Assert.Contains("side", m.OnReady(A2));
-        Assert.Contains("ready", m.OnReady(A1));
-        m.OnPlayerTeam(A1, Side.T);
-        Assert.Contains("not ready", m.OnUnready(A1));
-    }
+        Join(m, A2, Side.CT);
+        Join(m, B1, Side.T);
+        Assert.False(m.CountdownRunning);
+        Join(m, B2, Side.T);
+        Assert.True(m.CountdownRunning);
 
-    [Fact]
-    public void AimReadyTimeoutStartsWhenTeamsValid()
-    {
-        var m = New(Aim1v1(), new MatchSettings { ReadyTimeout = TimeSpan.FromSeconds(30) });
-        Join(m, A1, Side.CT);
-        Join(m, B1, Side.CT);
-        _clock.Advance(31);
+        _clock.Advance(5);
+        _game.Sides[B2] = Side.Spectator;
+        m.OnPlayerTeam(B2, Side.Spectator);
+        Assert.False(m.CountdownRunning);
+        Assert.Contains(_game.Chat, c => c.Contains("Countdown stopped"));
+
+        _game.Sides[B2] = Side.T;
+        m.OnPlayerTeam(B2, Side.T);
+        Assert.True(m.CountdownRunning);
+        _clock.Advance(5);
+        m.OnPlayerDisconnected(A2);
+        Assert.False(m.CountdownRunning);
+        _clock.Advance(30);
         m.Tick();
         Assert.Equal(MatchPhase.Warmup, m.Phase);
-        _game.Sides[B1] = Side.T;
-        m.OnPlayerTeam(B1, Side.T);
+
+        m.OnPlayerConnected(A2, 2);
+        Assert.True(m.CountdownRunning);
+        _clock.Advance(10);
         m.Tick();
         Assert.Equal(MatchPhase.Live, m.Phase);
+    }
+
+    [Fact]
+    public void AimNoShowStillAbandonsWhileWaitingForTheLineup()
+    {
+        var m = New(Aim1v1(), new MatchSettings { ConnectGrace = TimeSpan.FromSeconds(60) });
+        Join(m, A1, Side.CT);
+        _clock.Advance(60);
+        m.Tick();
+        Assert.Equal(MatchPhase.Abandoned, m.Phase);
+        Assert.Equal(new[] { B1 }, _sink.Last<MatchAbandoned>().MissingSteamIds);
+    }
+
+    [Fact]
+    public void ReadyCommandOnlyExplains()
+    {
+        var m = New(Aim1v1());
+        Assert.Contains("No ready-up needed", m.ReadyHint());
+    }
+
+    [Fact]
+    public void AimLoadoutConVarsImmunityAndSpawnLoadout()
+    {
+        var cfg = MatchConfigLoader.Parse(Json("aim1v1", "first_to_13", 1).Replace(
+            "\"winCondition\"", "\"map\": { \"id\": \"aim_usp\", \"workshopId\": \"3299812021\" }, \"winCondition\""));
+        var m = New(cfg, new MatchSettings { AimSpawnImmunity = TimeSpan.FromSeconds(2.5) });
+        Assert.Contains("mp_ct_default_secondary \"weapon_usp_silencer\"", _game.Commands);
+        Assert.Contains("mp_t_default_primary \"\"", _game.Commands);
+        Assert.Contains("mp_free_armor 2", _game.Commands);
+        Assert.Contains("mp_buytime 0", _game.Commands);
+        Assert.Contains("mp_respawn_immunitytime 2.5", _game.Commands);
+
+        Join(m, A1, Side.CT);
+        Join(m, B1, Side.T);
+        m.OnPlayerSpawn(B1, Side.T);
+        var (id, loadout) = Assert.Single(_game.Loadouts);
+        Assert.Equal(B1, id);
+        Assert.Equal(new[] { "weapon_usp_silencer" }, loadout.Weapons);
+        Assert.Equal(ArmorKind.KevlarHelmet, loadout.Armor);
+        m.OnPlayerSpawn(Outsider, Side.T);
+        Assert.Single(_game.Loadouts);
+
+        // Loadout convars run again after mode.cfg at the start because the cfg turns buying back on.
+        m.ForceStart();
+        var exec = _game.Commands.LastIndexOf("exec rushsite/matches/5f0c7a3e-1b2c-4d5e-8f90-1234567890ab/mode.cfg");
+        Assert.True(_game.Commands.LastIndexOf("mp_buytime 0") > exec);
+    }
+
+    [Fact]
+    public void RushGetsNoLoadoutOrImmunity()
+    {
+        var m = New(Rush());
+        m.OnPlayerSpawn(A1, Side.CT);
+        Assert.Empty(_game.Loadouts);
+        Assert.DoesNotContain(_game.Commands, c => c.StartsWith("mp_respawn_immunitytime") || c.StartsWith("mp_free_armor") || c.StartsWith("mp_ct_default"));
+        Assert.Null(m.CurrentLoadout);
+    }
+
+    [Fact]
+    public void AimTiedRegulationGoesToOvertime()
+    {
+        var m = New(Aim1v1());
+        Join(m, A1, Side.CT);
+        Join(m, B1, Side.T);
+        m.ForceStart();
+        for (var i = 0; i < 12; i++)
+        {
+            m.OnRoundEnd(Side.CT, false, false);
+            m.OnRoundEnd(Side.T, false, false);
+        }
+        m.OnRoundEnd(Side.None, false, false);
+        _clock.Advance(30);
+        m.Tick();
+        Assert.Equal(MatchPhase.Live, m.Phase);
+        for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.T, false, false);
+        m.OnWinPanelMatch();
+        Assert.Equal("bravo", _sink.Last<MatchEnd>().WinnerTeam);
+        Assert.Equal(16, _sink.Last<MatchEnd>().Score["bravo"]);
     }
 
     [Fact]
@@ -379,7 +468,8 @@ public class ControllerTests
         m.ForceStart();
         var exec = "exec rushsite/matches/5f0c7a3e-1b2c-4d5e-8f90-1234567890ab/mode.cfg";
         var start = _game.Commands.SkipWhile(c => c != exec).ToList();
-        Assert.Equal(new[] { exec, "mp_maxrounds 25" }, start.Take(2));
+        Assert.Equal(exec, start[0]);
+        Assert.True(start.IndexOf("mp_maxrounds 25") > 0);
         Assert.True(start.IndexOf("mp_warmup_pausetimer 0") > 0);
         Assert.True(start.IndexOf("mp_warmup_end") > start.IndexOf("mp_warmup_pausetimer 0"));
 
