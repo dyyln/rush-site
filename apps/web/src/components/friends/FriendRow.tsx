@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, type ReactNode } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 import type { Friend, SteamOnlyFriend } from "@rushsite/shared";
 import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendAction } from "@/components/party/FriendAction";
@@ -18,7 +18,18 @@ type Actions = ReturnType<typeof useFriendInvite>;
 // Line icons drawn for this row, 18px on a 20px grid
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg className={styles.icon} width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      className={styles.icon}
+      width="18"
+      height="18"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       {children}
     </svg>
   );
@@ -94,9 +105,10 @@ function InviteIconButton({ friend, actions }: { friend: Friend; actions: Action
   );
 }
 
-// A friend here: avatar and name link to the profile, the status line sits under the name. With a mouse,
-// hovering the row or focusing anything in it fades the status line out and Invite, Challenge and Watch or
-// Join queue in, in the same place. Touch screens keep the status and show the icons on the right
+// A friend here: avatar and name link to the profile, the status line sits under the name. Invite, Challenge
+// and Watch or Join queue sit at the right of the row, vertically centred. With a mouse they are hidden until
+// the row is hovered or anything in it has focus, when the status line fades out and they fade in. Touch
+// screens keep both visible
 export function FriendRow({ friend, actions, joinable }: { friend: Friend; actions: Actions; joinable?: JoinableModes }) {
   const { displayName: name, presence, detail } = friend;
   const statusId = useId();
@@ -105,9 +117,11 @@ export function FriendRow({ friend, actions, joinable }: { friend: Friend; actio
   const joinLabels = join.map((m) => MODE_COPY[m].label).join(", ");
   // The dot's hidden label repeats the status line, except in a match where the line shows mode and map
   const dotLabelled = presence === "match" && !!detail?.mode;
+  // How many icons show, so the name can make room for them while they are visible
+  const iconCount = 2 + (watchId ? 1 : 0) + (join.length > 0 ? 1 : 0);
 
   return (
-    <li className={cx(styles.row, styles.compactRow)}>
+    <li className={cx(styles.row, styles.compactRow)} style={{ "--icon-count": iconCount } as CSSProperties}>
       <Link href={`/profile/${friend.steamId}`} className={styles.profileLink} aria-describedby={statusId}>
         <PresenceAvatar name={name} src={friend.avatarUrl} presence={presence} labelled={dotLabelled} />
         <span className={styles.name}>{name}</span>
