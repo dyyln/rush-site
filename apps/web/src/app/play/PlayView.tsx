@@ -10,14 +10,12 @@ import { FriendsCard } from "@/components/friends/FriendsCard";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
 import { offeredModes, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { Card } from "@/components/ui/Card";
-import { FormDots } from "@/components/ui/FormDots";
 import { PartySize } from "@/components/ui/PartySize";
 import { Throbber } from "@/components/ui/Throbber";
 import { TierChip } from "@/components/ui/TierChip";
 import { useToast } from "@/components/ui/Toast";
 import { cx } from "@/components/ui/cx";
 import { api } from "@/lib/api";
-import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { trustProgressLine, type TrustStatus } from "@/lib/trust";
@@ -32,7 +30,6 @@ import { useBackdrop } from "@/lib/useBackdrop";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import { CooldownLine } from "./CooldownLine";
 import styles from "./play.module.css";
-
 
 // Play: the modes as picture tiles and friends on the right. The dock at the bottom of every page starts the queue
 // for the picked ones, and the party sits in the top bar
@@ -180,10 +177,13 @@ export function PlayView() {
           )}
 
           {cooldown && play.queue.cooldownUntil && <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />}
-          {user && !isLeader && <p className={styles.hint}>{queued ? "Any member can cancel the queue. The leader starts it." : "The party leader picks the modes and starts the queue."}</p>}
+          {user && !isLeader && (
+            <p className={styles.hint}>
+              {queued ? "Any member can cancel the queue. The leader starts it." : "The party leader picks the modes and starts the queue."}
+            </p>
+          )}
           <ModeAvailabilityHint status={service} />
           {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
-          {me && <YourStats profile={me} />}
         </div>
 
         <aside className={cx("glass", styles.rail)} aria-label={user ? "Friends" : "How it works"}>
@@ -331,44 +331,5 @@ function VerifyLine({ trust }: { trust: TrustStatus | undefined }) {
         ))}
       </span>
     </p>
-  );
-}
-
-function YourStats({ profile }: { profile: Profile }) {
-  const modes = profile.modes.filter((m) => m.matches > 0);
-  const matches = modes.reduce((n, m) => n + m.matches, 0);
-  const wins = modes.reduce((n, m) => n + m.wins, 0);
-  const weighted = (f: (m: Profile["modes"][number]) => number) => (matches > 0 ? modes.reduce((n, m) => n + f(m) * m.matches, 0) / matches : 0);
-  const last = profile.recentMatches.slice(0, 5);
-  return (
-    <section aria-labelledby="your-stats" className={cx("glass", styles.stats)}>
-      <h2 id="your-stats" className="visually-hidden">
-        Your stats
-      </h2>
-      <dl>
-        <div>
-          <dt>Win rate</dt>
-          <dd className="mono">{formatStat(matches ? wins / matches : null, "pct", matches)}</dd>
-        </div>
-        <div>
-          <dt>Headshot</dt>
-          <dd className="mono">{formatStat(weighted((m) => m.headshotPct), "pct", matches)}</dd>
-        </div>
-        <div>
-          <dt>K/D</dt>
-          <dd className="mono">{formatStat(weighted((m) => m.kd), "kd", matches)}</dd>
-        </div>
-        <div>
-          <dt>Matches</dt>
-          <dd className="mono">{matches}</dd>
-        </div>
-        <div>
-          <dt>Last 5</dt>
-          <dd>
-            <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} label="Last 5" />
-          </dd>
-        </div>
-      </dl>
-    </section>
   );
 }
