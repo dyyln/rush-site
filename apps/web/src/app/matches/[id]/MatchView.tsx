@@ -329,6 +329,7 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
   const selected = started.find((x) => `map-${x.mapNumber}` === tab);
   const current = selected ? `map-${selected.mapNumber}` : "all";
   const keys = ["all", ...started.map((x) => `map-${x.mapNumber}`)];
+  const flip = isRushMode(m.mode) && rushFlip(m);
   const [a, b] = m.teams;
   const view: MatchDetail = selected
     ? {
@@ -398,7 +399,7 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
               onClick={() => !upcoming && setTab(key)}
               onKeyDown={onKey}
             >
-              <SeriesMapImage mode={m.mode} map={x} />
+              <SeriesMapImage mode={m.mode} map={x} flip={flip} />
               <span className={styles.mapTabBody}>
                 <span className={styles.mapTabTop}>
                   <span className={styles.mapTabName}>
@@ -446,12 +447,35 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
 
 const SERIES_STATUS: Record<MatchMap["status"], string> = { upcoming: "Upcoming", live: "Live", done: "Done" };
 
-// Aim maps show their preview. A Rush map shows its start room once the rooms are known, else the Complex tile
-function SeriesMapImage({ mode, map }: { mode: MatchDetail["mode"]; map: MatchMap }) {
-  const start = isRushMode(mode) ? map.rushRooms?.[3] : undefined;
+// Aim maps show their preview. A Rush map shows the five rooms between the castles in a row, the start room
+// largest in the middle and each step out smaller, in the page's left team first order. The castles are the
+// same every match so they are left out. Outlines until the rooms are drawn
+const RUSH_ROW_SIZE = [30, 25, 21];
+// How far each room tucks under the one nearer the middle, in percent of the row
+const RUSH_ROW_TUCK = [6, 5];
+
+function SeriesMapImage({ mode, map, flip }: { mode: MatchDetail["mode"]; map: MatchMap; flip: boolean }) {
+  if (!isRushMode(mode)) {
+    return (
+      <span className={styles.mapTabImage} aria-hidden="true">
+        <MapThumb mapId={map.mapId} />
+      </span>
+    );
+  }
+  const slots = Array.from({ length: 5 }, (_, i) => map.rushRooms?.[i + 1]);
+  const shown = flip ? [...slots].reverse() : slots;
   return (
-    <span className={styles.mapTabImage} aria-hidden="true">
-      {start !== undefined ? <RoomImage room={String(start)} /> : <MapThumb mapId={map.mapId} />}
+    <span className={cx(styles.mapTabImage, styles.roomRow)} aria-hidden="true">
+      {shown.map((room, i) => {
+        const d = Math.abs(i - 2);
+        // The room nearer the middle overlaps this one
+        const tuck = i === 0 ? 0 : i <= 2 ? RUSH_ROW_TUCK[2 - i]! : RUSH_ROW_TUCK[i - 3]!;
+        return (
+          <span key={i} className={styles.roomRowItem} style={{ width: `${RUSH_ROW_SIZE[d]}%`, marginLeft: `-${tuck}%`, zIndex: 10 - d }}>
+            {room !== undefined ? <RoomImage room={String(room)} /> : <span className={styles.roomRowBlank} />}
+          </span>
+        );
+      })}
     </span>
   );
 }

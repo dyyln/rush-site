@@ -325,3 +325,36 @@
 .mapTabScore [data-side="enemy"] {
   color: var(--team-enemy);
 }
+
+/* Rush map card: the seven rooms in a row, largest in the middle */
+.roomRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 6;
+  padding: 0 var(--space-2);
+  background: var(--color-surface-1);
+}
+.roomRowItem {
+  position: relative;
+  flex: none;
+  display: block;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.5);
+}
+.roomRowItem img,
+.roomRowItem > span {
+  display: block;
+  border-radius: 0;
+}
+/* Rooms not drawn yet: the same row as outlines only */
+.roomRowBlank {
+  aspect-ratio: 16 / 10;
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 2px;
+}
+.roomRowItem:has(> .roomRowBlank) {
+  box-shadow: none;
+}
