@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import type { MatchAcceptView, MatchVetoView, Mode, RoomServer } from "@rushsite/shared";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Timer } from "@/components/ui/Timer";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { VetoSummary } from "@/components/play/VetoSummary";
+import { AcceptOverlay } from "./AcceptOverlay";
 import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
 import { cancelCopy } from "@/lib/errors";
 import { mapName, modeLabel } from "@/lib/modes";
@@ -24,7 +25,8 @@ export function AcceptPanel({
   participant: boolean;
   onRespond: (accept: boolean) => void;
 }) {
-  const open = participant && !accept.responded;
+  // Players get the blocking in-game style overlay. Spectators keep an inline panel
+  if (participant) return <AcceptOverlay accept={accept} mode={mode} onRespond={onRespond} />;
   return (
     <Card tone="accent" eyebrow="Match found" title={modeLabel(mode)}>
       <div className={styles.accept}>
@@ -38,21 +40,7 @@ export function AcceptPanel({
               <li key={i} className={i < accept.accepted ? styles.pipOn : undefined} />
             ))}
           </ol>
-          {open ? (
-            <div className={styles.acceptActions}>
-              <Button size="lg" onClick={() => onRespond(true)} autoFocus>
-                Accept
-              </Button>
-              <Button size="lg" variant="ghost" onClick={() => onRespond(false)}>
-                Decline
-              </Button>
-            </div>
-          ) : participant ? (
-            <p className={styles.waiting}>Accepted. Waiting for the others.</p>
-          ) : (
-            <p className="muted">Players are accepting the match.</p>
-          )}
-          {open && <p className="muted">Declining or letting the timer run out puts you on a short queue cooldown.</p>}
+          <p className="muted">Players are accepting the match.</p>
         </div>
       </div>
     </Card>

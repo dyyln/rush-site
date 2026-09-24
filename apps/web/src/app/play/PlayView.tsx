@@ -36,6 +36,7 @@ import { StartCountdown } from "@/components/play/StartCountdown";
 import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
+import { useBackdrop } from "@/lib/useBackdrop";
 import styles from "./play.module.css";
 
 const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
@@ -64,6 +65,7 @@ export function PlayView() {
     },
   });
   const [selected, setSelected] = useState<Mode[]>([]);
+  useBackdrop(selected);
   const [minTrust, setMinTrust] = useState<TrustLevel>("new");
   useEffect(() => {
     if (user?.settings?.minTrust) setMinTrust(user.settings.minTrust);

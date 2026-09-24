@@ -4,7 +4,7 @@
      --color-bg stays opaque: focus rings and badge cut-outs need a solid colour */
   --color-bg: #0f0e13;
   --color-surface-1: rgb(18 16 26 / 0.62);
-  --color-surface-2: rgb(34 30 46 / 0.58);
+  --color-surface-2: rgb(30 27 42 / 0.66);
   --color-surface-3: rgb(255 255 255 / 0.08);
   --color-border: rgb(255 255 255 / 0.09);
   --color-border-strong: rgb(255 255 255 / 0.17);
@@ -99,9 +99,10 @@
   --space-8: 4rem;
 
   /* Shape */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  /* Near square, like the in-game menus */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
   --radius-full: 999px;
 
   /* Cards. Every card-like surface uses this border and radius */
@@ -129,6 +130,11 @@
   --z-toast: 60;
 
   color-scheme: dark;
+}
+
+/* Scene per mode, set by useBackdrop. Aim falls back to the default until it has its own capture */
+:root[data-backdrop="rush"] {
+  --backdrop-image: url("/backdrops/rush-tower.webp");
 }
 
 /* Colourblind team palette. Set from Settings */

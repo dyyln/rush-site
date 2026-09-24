@@ -31,6 +31,7 @@ import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
 import { mapName, modeLabel } from "@/lib/modes";
+import { useBackdrop } from "@/lib/useBackdrop";
 import type { MatchDetail, MatchPlayer, MatchStatus } from "@/lib/types";
 import { useMatchRoom } from "@/lib/useMatchRoom";
 import { useSession } from "@/lib/session";
@@ -57,6 +58,7 @@ export function MatchView({ id }: { id: string }) {
   const router = useRouter();
   const { detail, room, stage, error, respond, vote } = useMatchRoom(id);
   const match = useLiveExtras(detail);
+  useBackdrop(detail?.mode);
 
   // Old uuid links move to the room id so the address bar shows the name
   const slug = detail?.slug;

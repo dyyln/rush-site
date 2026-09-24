@@ -179,6 +179,22 @@ table {
   box-shadow: var(--glass-shadow);
 }
 
+/* Panels settle in when a page mounts. Animated on the glass itself: fading a wrapper
+   would make it the backdrop root and the blur inside would pop in at the end */
+@media (prefers-reduced-motion: no-preference) {
+  .page .glass,
+  .page .page-header,
+  .page .title-band {
+    animation: panel-in 260ms var(--ease) both;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
 .page-header p {
   color: var(--color-text-muted);
   margin-top: var(--space-2);
