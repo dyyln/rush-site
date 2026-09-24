@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ProfileView } from "./ProfileView";
 
 type Props = { params: Promise<{ steamId: string }> };
@@ -10,5 +11,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProfilePage({ params }: Props) {
   const { steamId } = await params;
-  return <ProfileView steamId={steamId} />;
+  return (
+    <Suspense>
+      <ProfileView steamId={steamId} />
+    </Suspense>
+  );
 }

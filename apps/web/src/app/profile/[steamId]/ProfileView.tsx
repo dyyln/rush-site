@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { RANKED_MODES as MODES, type Mode } from "@rushsite/shared";
+import { useSearchParams } from "next/navigation";
+import { RANKED_MODES as MODES, isRushMode, type Mode } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -16,12 +17,13 @@ import { BestMaps } from "@/components/profile/BestMaps";
 import { CupBadges } from "@/components/profile/CupBadges";
 import { FormDots } from "@/components/ui/FormDots";
 import { StatTile } from "@/components/ui/StatTile";
-import { Tabs } from "@/components/ui/Tabs";
+import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { api, ApiError } from "@/lib/api";
-import { formatStat, shortDate, signed, winRate } from "@/lib/format";
-import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
+import { formatStat, signed, winRate } from "@/lib/format";
+import { MODE_ART, MODE_COPY, modeLabel } from "@/lib/modes";
+import { useBackdrop } from "@/lib/useBackdrop";
 import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
@@ -29,7 +31,6 @@ import { TrustChip } from "@/components/trust/TrustChip";
 import { MyReports } from "@/components/review/MyReports";
 import { WeaponIcon, weaponLabel } from "@/components/icons";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
-import { MapThumb } from "@/components/play/MapThumb";
 import { MatchHistory } from "./MatchHistory";
 import styles from "./profile.module.css";
 
@@ -38,7 +39,6 @@ const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
   verified: { label: "Verified", tone: "info" },
   trusted: { label: "Trusted", tone: "win" },
 };
-
 
 export function ProfileView({ steamId }: { steamId: string }) {
   const data = useAsync(() => api.profile(steamId), [steamId]);
@@ -64,6 +64,8 @@ export function ProfileView({ steamId }: { steamId: string }) {
   return <ProfileBody profile={data.data} />;
 }
 
+type ProfileTab = "overview" | "matches" | "cups" | "reports";
+
 function ProfileBody({ profile }: { profile: Profile }) {
   const best = [...profile.modes].sort((a, b) => b.rating - a.rating)[0]?.mode ?? "rush3v3";
   const [mode, setMode] = useState<Mode>(best);
@@ -71,83 +73,117 @@ function ProfileBody({ profile }: { profile: Profile }) {
   const { user: viewer } = useSession();
   const trust = TRUST[profile.user.trustLevel];
   const own = !!viewer && viewer.steamId === profile.user.steamId;
+  useBackdrop(mode);
+
+  const params = useSearchParams();
+  const tabs: PageTab[] = [
+    { key: "overview", label: "Overview", href: "?" },
+    { key: "matches", label: "Matches", href: "?tab=matches" },
+    { key: "cups", label: "Cups", href: "?tab=cups", count: profile.badges.length },
+    ...(own ? [{ key: "reports", label: "Reports", href: "?tab=reports" }] : []),
+  ];
+  const raw = params.get("tab");
+  const tab = (tabs.some((t) => t.key === raw) ? raw : "overview") as ProfileTab;
 
   return (
-    <div className="container page">
-      <header className={cx(styles.hero, "title-band")}>
-        <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
-        <div className={styles.heroText}>
-          <h1>{profile.user.displayName}</h1>
-          <div className="row">
-            {viewer?.trust && viewer.steamId === profile.user.steamId ? (
-              <TrustChip trust={viewer.trust} />
-            ) : (
-              <Badge tone={trust.tone}>{trust.label}</Badge>
+    <div className={cx("container", styles.page)}>
+      <header className={styles.hero}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className={styles.heroArt} src={MODE_ART[best]} alt="" />
+        <div className={styles.heroShade} />
+        <div className={styles.heroMain}>
+          <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
+          <div className={styles.heroText}>
+            <h1 className={styles.name}>{profile.user.displayName}</h1>
+            <div className={styles.chips}>
+              {viewer?.trust && own ? <TrustChip trust={viewer.trust} /> : <Badge tone={trust.tone}>{trust.label}</Badge>}
+              <Badge>{profile.user.region.toUpperCase()}</Badge>
+              <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
+                Steam profile
+              </a>
+            </div>
+            {(profile.recentMatches.length > 0 || profile.favouriteWeapon) && (
+              <div className={styles.heroMeta}>
+                {profile.recentMatches.length > 0 && <RecentForm matches={profile.recentMatches} />}
+                {profile.favouriteWeapon && <Favourite weapon={profile.favouriteWeapon} />}
+              </div>
             )}
-            <Badge>{profile.user.region.toUpperCase()}</Badge>
-            <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
-              Steam profile
-            </a>
-            <FriendButton target={profile.user} />
-            <ChallengeButton target={profile.user} />
           </div>
-          {(profile.recentMatches.length > 0 || profile.favouriteWeapon) && (
-            <div className={styles.heroMeta}>
-              {profile.recentMatches.length > 0 && <RecentForm matches={profile.recentMatches} />}
-              {profile.favouriteWeapon && <Favourite weapon={profile.favouriteWeapon} />}
+          {!own && (
+            <div className={styles.heroActions}>
+              <FriendButton target={profile.user} />
+              <ChallengeButton target={profile.user} />
             </div>
           )}
         </div>
+        <PageTabs label="Profile" items={tabs} current={tab} className={styles.heroTabs} />
       </header>
 
-      {own && <ProfileNudge trust={viewer?.trust} enabled />}
+      {own && <ProfileNudge trust={viewer?.trust} enabled variant="line" />}
 
-      <section aria-labelledby="ratings-heading">
-        <h2 id="ratings-heading" className="visually-hidden">
-          Ratings
-        </h2>
-        <ul className={styles.ratings}>
-          {MODES.map((m) => {
-            const s = profile.modes.find((x) => x.mode === m);
-            return (
-              <li key={m}>
-                <RatingCard mode={m} stats={s} active={m === mode} onSelect={() => setMode(m)} />
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {tab === "overview" && (
+        <>
+          <section aria-labelledby="ratings-heading">
+            <h2 id="ratings-heading" className="visually-hidden">
+              Ratings
+            </h2>
+            <ul className={styles.ratings}>
+              {[...MODES]
+                .sort((a, b) => Number(isRushMode(b)) - Number(isRushMode(a)))
+                .map((m) => (
+                  <li key={m}>
+                    <RatingCard mode={m} stats={profile.modes.find((x) => x.mode === m)} active={m === mode} onSelect={() => setMode(m)} />
+                  </li>
+                ))}
+            </ul>
+          </section>
+          <section aria-labelledby="mode-heading" className="stack">
+            <h2 id="mode-heading" className="visually-hidden">
+              {modeLabel(mode)}
+            </h2>
+            {stats ? <ModeDetail stats={stats} /> : <p className={cx("glass", styles.empty)}>No matches in {modeLabel(mode)} yet.</p>}
+          </section>
+        </>
+      )}
 
-      <Tabs label="Mode details" value={mode} onChange={setMode} items={MODES.map((m) => ({ key: m, label: MODE_COPY[m].label }))}>
-        {stats ? <ModeDetail stats={stats} /> : <p className="muted">No matches in {modeLabel(mode)} yet.</p>}
-      </Tabs>
+      {tab === "matches" && <MatchHistory steamId={profile.user.steamId} first={profile.recentMatches} firstCursor={profile.recentMatchesCursor ?? null} />}
 
-      <div className="grid-2">
-        <MatchHistory steamId={profile.user.steamId} first={profile.recentMatches} firstCursor={profile.recentMatchesCursor ?? null} />
+      {tab === "cups" && (
         <section aria-labelledby="badges-heading" className="stack">
-          <h2 id="badges-heading">Cup badges</h2>
-          <CupBadges badges={profile.badges} />
+          <h2 id="badges-heading" className={styles.sectionTitle}>
+            Cup badges
+          </h2>
+          {profile.badges.length > 0 ? (
+            <CupBadges badges={profile.badges} />
+          ) : (
+            <p className={cx("glass", styles.empty)}>
+              No cup placings yet. <Link href="/tournaments">See the next cups</Link>
+            </p>
+          )}
         </section>
-      </div>
+      )}
 
-      {viewer?.steamId === profile.user.steamId && <MyReports />}
+      {tab === "reports" && own && <MyReports />}
     </div>
   );
 }
 
+// One tile per mode, the mode's art behind it. Picking one shows that mode below
 function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: ModeStats; active: boolean; onSelect: () => void }) {
+  const played = !!stats && stats.matches > 0;
   return (
-    <button type="button" className={cx("glass", styles.ratingCard, active && styles.active)} onClick={onSelect} aria-pressed={active}>
+    <button type="button" className={cx(styles.ratingCard, active && styles.active)} onClick={onSelect} aria-pressed={active}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className={styles.ratingArt} src={MODE_ART[mode]} alt="" />
+      <span className={styles.ratingShade} />
       <span className={styles.ratingTop}>
-        <span className="eyebrow">{MODE_COPY[mode].label}</span>
+        <span className={styles.ratingMode}>{MODE_COPY[mode].label}</span>
+        <span className={styles.ratingSub}>{played ? (stats.leaderboardRank ? `#${stats.leaderboardRank}` : "Unplaced") : "No matches"}</span>
       </span>
       <span className={styles.ratingValue}>
-        {stats && stats.matches > 0 ? <TierChip tier={stats.tier} rating={stats.rating} rank={stats.leaderboardRank} /> : <TierChip unranked />}
+        {played ? <TierChip tier={stats.tier} rating={stats.rating} rank={stats.leaderboardRank} /> : <TierChip unranked />}
       </span>
-      <span className={styles.ratingSub}>
-        {stats && stats.matches > 0 ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "\u00a0"}
-      </span>
-      {stats?.streak && stats.matches > 0 && <StreakLine streak={stats.streak} />}
+      {played && stats.streak ? <StreakLine streak={stats.streak} /> : <span className={styles.streak}>{" "}</span>}
       {stats && (
         <span className={styles.ratingSpark}>
           <RatingChart points={stats.history} label={`${MODE_COPY[mode].label} rating trend`} compact />
@@ -164,7 +200,12 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
   return (
     <div className="stack">
       <div className={styles.tiles}>
-        <StatTile label="Rating" value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />} sub={`${signed(delta)} over ${stats.history.length} matches`} trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"} />
+        <StatTile
+          label="Rating"
+          value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />}
+          sub={`${signed(delta)} over ${stats.history.length} matches`}
+          trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"}
+        />
         <StatTile label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
         <StatTile label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
         <StatTile label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
@@ -209,7 +250,10 @@ function StreakLine({ streak }: { streak: Streak }) {
   return (
     <span className={styles.streak}>
       <span>
-        Streak <span className="mono" data-sign={streak.current > 0 ? "up" : streak.current < 0 ? "down" : "none"}>{now}</span>
+        Streak{" "}
+        <span className="mono" data-sign={streak.current > 0 ? "up" : streak.current < 0 ? "down" : "none"}>
+          {now}
+        </span>
       </span>
       <span>
         Best <span className="mono">W{streak.longest}</span>
