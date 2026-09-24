@@ -64,6 +64,10 @@ export function PlayView() {
       const copy = describeError(e);
       toast.push({ title: copy.title, body: copy.body, tone: "error" });
     },
+    onRemoved: (r) => {
+      const names = r.modes.map((m) => MODE_COPY[m].label).join(" and ");
+      toast.push({ title: `${names} queue closed`, body: `You were taken out of the ${names} queue.`, tone: "info", durationMs: 8000 });
+    },
   });
   const [selected, setSelected] = useState<Mode[]>([]);
   const [minTrust, setMinTrust] = useState<TrustLevel>("new");

@@ -22,6 +22,7 @@ import { registerQueueRoutes } from "./modules/queue/routes.js"
 import reviewPlugin from "./modules/review/index.js"
 import { MODE_STATS_KEY, type LiveTicket } from "./modules/queue/service.js"
 import { registerStatsFeatures } from "./modules/stats/features.js"
+import { publishServiceStatus } from "./modules/stats/status.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { sampleMetrics } from "./modules/admin/metrics.js"
 import { fetchWorkshopItem } from "./modules/maps/workshop.js"
@@ -200,7 +201,8 @@ export function adminOptions(ctx: AppContext) {
     flags: ctx.flags,
     announcements: ctx.announcements,
     chat: ctx.chat,
-    onModeClosed: (mode: Mode) => drainMode(ctx, mode),
+    onModeClosed: (mode: Mode) => ctx.queue.closeMode(mode),
+    onQueueFlagChanged: () => publishServiceStatus(ctx),
     resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
     mapPool: ctx.maps,
     notifyQueueStatus: (steamId: string) => ctx.queue.notifyParty([steamId]),
@@ -208,16 +210,6 @@ export function adminOptions(ctx: AppContext) {
       fetchWorkshopItem(ctx.fetch, workshopId, async (id) => (await ctx.steam.playerSummaries([id]))[0]?.personaname ?? null),
     now: () => new Date(ctx.now()),
   }
-}
-
-// Removes a closed mode from every waiting ticket. Tickets with no other mode leave the queue
-async function drainMode(ctx: AppContext, mode: Mode): Promise<number> {
-  const tickets = await ctx.queue.waiting(mode)
-  for (const t of tickets) {
-    const member = t.steamIds[0]
-    if (member) await ctx.queue.leave(member, [mode])
-  }
-  return tickets.length
 }
 
 async function resolveVanity(ctx: AppContext, vanity: string): Promise<string | null> {
@@ -285,6 +277,8 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics,
       for (const t of await queueSnapshot(ctx)) for (const m of t.modes) depth[m] += t.steamIds.length
       await sampleMetrics(ctx.db, { at: new Date(ctx.now()), queueDepth: depth, activeSockets: hub.connectedSockets() })
     })
+    // Mode availability goes out only when it changes. Admin flag writes also send at once
+    loop("service_status", 5000, () => publishServiceStatus(ctx))
     // Every instance holds the last value it saw so only changes go out. The lock picks one sender
     let lastStats = ""
     loop("mode_stats", 5000, async () => {

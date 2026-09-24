@@ -110,3 +110,26 @@ export function createAvailabilitySource(ctx: AppContext, ttlMs = 5000): (mode: 
     return m.reason ?? "unavailable"
   }
 }
+
+export const SERVICE_STATUS_KEY = "service_status:last"
+
+// What the site offers per mode. Slot counts move with every match so they stay out of the diff
+export function availabilityKey(status: ServiceStatus): string {
+  return JSON.stringify(status.modes.map((m) => [m.mode, m.available, m.reason ?? null]))
+}
+
+const lastSent = new WeakMap<AppContext, string>()
+
+// Broadcasts the status to every socket when mode availability changed since the last send
+// Redis holds the last key so other instances skip a change one of them already sent
+// Returns true when it sent
+export async function publishServiceStatus(ctx: AppContext): Promise<boolean> {
+  const status = await serviceStatus(ctx)
+  const key = availabilityKey(status)
+  const prev = await ctx.redis.get(SERVICE_STATUS_KEY)
+  if (key === prev && key === lastSent.get(ctx)) return false
+  lastSent.set(ctx, key)
+  await ctx.redis.set(SERVICE_STATUS_KEY, key, "EX", 24 * 3600)
+  ctx.notifier.send({ kind: "broadcast" }, { type: "service_status", payload: status, ts: ctx.now() })
+  return true
+}

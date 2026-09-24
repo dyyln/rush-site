@@ -17,11 +17,14 @@ export type FriendsLeaderboard = Omit<Leaderboard, "rows"> & {
   reason?: "steam_api_disabled" | "friends_private";
 };
 
+// Modes the server switched off, such as a test queue, are left out so the site hides them
+export function visibleStatus(s: ServiceStatus): ServiceStatus {
+  return { ...s, modes: s.modes.filter((m) => m.reason !== "disabled") };
+}
+
 export const statsApi = {
-  // Modes the server switched off, such as a test queue, are left out so the site hides them
   async status(): Promise<ServiceStatus> {
-    const s = isMock ? await mockCall(mockStatus, 200) : await api.get<ServiceStatus>("/status");
-    return { ...s, modes: s.modes.filter((m) => m.reason !== "disabled") };
+    return visibleStatus(isMock ? await mockCall(mockStatus, 200) : await api.get<ServiceStatus>("/status"));
   },
   async distribution(mode: Mode): Promise<TierDistribution> {
     if (isMock) return mockCall(() => mockDistribution(mode), 200);
