@@ -27,6 +27,16 @@ export class MemoryTournamentStore implements TournamentStore {
   private locks = new Map<string, Promise<unknown>>()
   private clock = 0
 
+  async reopenCancelled(cupKey: string, startsAt: Date, reasons: readonly string[]): Promise<string | null> {
+    for (const x of this.tournaments.values()) {
+      if (x.cupKey !== cupKey || +x.startsAt !== +startsAt || x.status !== "cancelled") continue
+      if (!x.cancelReason || !reasons.includes(x.cancelReason)) return null
+      Object.assign(x, { status: "open", cancelReason: null, completedAt: null })
+      return x.id
+    }
+    return null
+  }
+
   async createTournament(t: NewTournament): Promise<string | null> {
     for (const x of this.tournaments.values()) {
       if (x.cupKey === t.cupKey && +x.startsAt === +t.startsAt) return null

@@ -129,6 +129,33 @@ async function runningFour() {
 }
 
 describe("scheduler reads cup_schedules", () => {
+  it("reopens the cup it cancelled when a schedule is turned off and on before the slot", async () => {
+    const x = await harness([cup("daily-aim1v1")])
+    h = x
+    await x.tick()
+    const t = x.only()
+    const [schedule] = (await x.admin("GET", "/admin/tournaments/schedules")).json().schedules
+    await x.admin("PATCH", `/admin/tournaments/schedules/${schedule.id}`, { enabled: false })
+    expect(x.only()).toMatchObject({ status: "cancelled", cancelReason: "schedule_disabled" })
+
+    await x.admin("PATCH", `/admin/tournaments/schedules/${schedule.id}`, { enabled: true })
+    await x.tick()
+    expect(x.only()).toMatchObject({ id: t.id, status: "open", cancelReason: null, completedAt: null })
+    expect(x.only().startsAt).toEqual(t.startsAt)
+  })
+
+  it("moves on to the next slot when an admin cancelled the upcoming cup", async () => {
+    const x = await harness([cup("daily-aim1v1")])
+    h = x
+    await x.tick()
+    const t = x.only()
+    expect((await x.admin("POST", `/admin/tournaments/${t.id}/cancel`, { reason: "Not enough servers tonight" })).statusCode).toBe(200)
+    await x.tick()
+    const open = x.tournaments().filter((c) => c.status === "open")
+    expect(open).toHaveLength(1)
+    expect(open[0]!.startsAt.getTime() - t.startsAt.getTime()).toBe(24 * 3600_000)
+  })
+
   it("creates cups only for enabled schedule rows", async () => {
     const x = await harness()
     h = x

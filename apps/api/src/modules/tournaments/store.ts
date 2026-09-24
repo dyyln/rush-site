@@ -116,6 +116,9 @@ export interface TournamentFilter {
 export interface TournamentStore {
   // Returns the new id, or null when the cup already has a tournament at that start time.
   createTournament(t: NewTournament): Promise<string | null>
+  // Reopens the cup's cancelled tournament at that start time when it was cancelled for one of the reasons.
+  // Returns its id, or null when there is none to reopen.
+  reopenCancelled(cupKey: string, startsAt: Date, reasons: readonly string[]): Promise<string | null>
   getTournament(id: string): Promise<TournamentRecord | null>
   listTournaments(f: TournamentFilter): Promise<TournamentRecord[]>
   updateTournament(id: string, patch: Partial<TournamentRecord>): Promise<void>
@@ -241,6 +244,22 @@ export class DrizzleTournamentStore implements TournamentStore {
       .insert(tournaments)
       .values({ ...t, status: "open" })
       .onConflictDoNothing({ target: [tournaments.cupKey, tournaments.startsAt] })
+      .returning({ id: tournaments.id })
+    return rows[0]?.id ?? null
+  }
+
+  async reopenCancelled(cupKey: string, startsAt: Date, reasons: readonly string[]): Promise<string | null> {
+    const rows = await this.db
+      .update(tournaments)
+      .set({ status: "open", cancelReason: null, completedAt: null })
+      .where(
+        and(
+          eq(tournaments.cupKey, cupKey),
+          eq(tournaments.startsAt, startsAt),
+          eq(tournaments.status, "cancelled"),
+          inArray(tournaments.cancelReason, [...reasons]),
+        ),
+      )
       .returning({ id: tournaments.id })
     return rows[0]?.id ?? null
   }

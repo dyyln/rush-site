@@ -67,6 +67,9 @@ import {
 
 export const TEAM_NAMES: Record<Side, string> = { a: "A", b: "B" }
 
+// Cancel reasons of a cup its schedule retired, rather than an admin
+const SCHEDULE_RETIRED = ["schedule_disabled", "schedule_removed"] as const
+
 export class TournamentError extends Error {
   constructor(
     readonly statusCode: number,
@@ -404,22 +407,35 @@ export class TournamentService {
     for (const cup of schedules.map(scheduleToCup)) {
       if (waiting.has(cup.key)) continue
       if (!(await this.modeOpen(cup.mode, "cup creation"))) continue
-      const startsAt = nextStart(cup, now)
-      const created = await this.d.store.createTournament({
-        cupKey: cup.key,
-        name: cup.name,
-        mode: cup.mode,
-        cadence: cup.cadence,
-        maxEntrants: cup.maxEntrants,
-        minTrust: cup.minTrust,
-        entryFee: cup.entryFee,
-        format: cup.format,
-        registrationOpensAt: new Date(startsAt.getTime() - cup.registrationOpensHours * 3600_000),
-        startsAt,
-      })
-      if (!created) continue
-      this.d.log.info({ cup: cup.key, startsAt }, "tournament created")
-      await this.announce(created, "created")
+      // A slot can already hold a cancelled cup. Turning the schedule off cancelled it, so turning it back on
+      // reopens it. One an admin cancelled stays cancelled and the schedule moves on to its next slot
+      let startsAt = nextStart(cup, now)
+      for (let tries = 0; tries < 3; tries++) {
+        const created = await this.d.store.createTournament({
+          cupKey: cup.key,
+          name: cup.name,
+          mode: cup.mode,
+          cadence: cup.cadence,
+          maxEntrants: cup.maxEntrants,
+          minTrust: cup.minTrust,
+          entryFee: cup.entryFee,
+          format: cup.format,
+          registrationOpensAt: new Date(startsAt.getTime() - cup.registrationOpensHours * 3600_000),
+          startsAt,
+        })
+        if (created) {
+          this.d.log.info({ cup: cup.key, startsAt }, "tournament created")
+          await this.announce(created, "created")
+          break
+        }
+        const reopened = await this.d.store.reopenCancelled(cup.key, startsAt, SCHEDULE_RETIRED)
+        if (reopened) {
+          this.d.log.info({ cup: cup.key, startsAt }, "tournament reopened")
+          await this.announce(reopened, "created")
+          break
+        }
+        startsAt = nextStart(cup, startsAt)
+      }
     }
   }
 
@@ -800,6 +816,7 @@ export class TournamentService {
   }
 
   // The open cup of a disabled or deleted schedule is cancelled when nobody entered, otherwise kept.
+  // The reasons are in SCHEDULE_RETIRED, so the scheduler can reopen the cup when the schedule comes back
   private async retireOpenCup(cupKey: string, reason: string): Promise<OpenCupOutcome | null> {
     const open = (await this.d.store.listTournaments({ status: ["open"], limit: 1000 })).find((t) => t.cupKey === cupKey)
     if (!open) return null
