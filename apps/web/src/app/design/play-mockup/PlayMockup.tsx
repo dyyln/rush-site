@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { Mode } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { TierChip } from "@/components/ui/TierChip";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { FormDots } from "@/components/ui/FormDots";
 import { PartySize } from "@/components/ui/PartySize";
 import { Logo } from "@/components/ui/Logo";
@@ -117,16 +116,10 @@ const CHAT: Record<"party" | "global", ChatLine[]> = {
     { time: "16:32", name: "vanta", text: "2v2 duo? need one" },
   ],
 };
-const TRUST = [
-  { value: "new", label: "Any" },
-  { value: "verified", label: "Verified" },
-  { value: "trusted", label: "Trusted" },
-] as const;
 
 export function PlayMockup() {
   const [tab, setTab] = useState<Tab>("ranked");
   const [selected, setSelected] = useState<Mode[]>(["rush3v3"]);
-  const [trust, setTrust] = useState<(typeof TRUST)[number]["value"]>("new");
   const [queuedAt, setQueuedAt] = useState<number | null>(null);
   const [party, setParty] = useState<Member[]>(START_PARTY);
   const [leader, setLeader] = useState(ME);
@@ -174,11 +167,13 @@ export function PlayMockup() {
   const toggle = (m: Mode) => !queued && setSelected((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]));
   const names = [...RANKED, ...TEST].filter((t) => selected.includes(t.mode) && t.size >= PARTY.length).map((t) => `${t.format} ${t.name}`);
   const elapsed = queuedAt ? Math.floor((now - queuedAt) / 1000) : 0;
+  // Mock: the queue finds a match after 8 seconds
+  const inMatch = queued && elapsed >= 8;
 
   return (
     <div className={styles.page} data-mockup-play>
       <div className={cx("container", styles.wrap)}>
-        <p className={styles.mockNote}>Mockup. Fake data, nothing here queues.</p>
+        <p className={styles.brandLine}>{BRAND_NAME}</p>
 
         {/* 5. Tabs replace the title band. 3. Party slots sit on the right of the same row */}
         <div className={styles.topRow}>
@@ -515,22 +510,36 @@ export function PlayMockup() {
       <div className={styles.dock}>
         <div className={cx("container", styles.dockInner)}>
           <div className={styles.dockLeft}>
+            {/* Server status moves here from the footer */}
+            <Link href="/status" className={styles.status}>
+              <span className={styles.statusDot} />
+              All servers up
+            </Link>
             <span className={styles.dockModes}>
-              <span className={styles.dockLabel}>{queued ? "Searching" : "Selected"}</span>
-              <span className={styles.dockValue}>{names.length ? names.join(" + ") : "Pick a mode"}</span>
+              <span className={styles.dockLabel}>{inMatch ? "In match" : queued ? "Searching" : "Selected"}</span>
+              <span className={styles.dockValue}>
+                {inMatch ? (
+                  <>
+                    3v3 Rush · Round 4 · <span className="mono">2 : 1</span>
+                  </>
+                ) : names.length ? (
+                  names.join(" + ")
+                ) : (
+                  "Pick a mode"
+                )}
+              </span>
             </span>
-            <SegmentedControl
-              label="Opponents"
-              value={trust}
-              onChange={setTrust}
-              disabled={queued}
-              options={TRUST.map((o) => ({
-                ...o,
-                disabled: o.value === "trusted",
-              }))}
-            />
           </div>
-          {queued ? (
+          {inMatch ? (
+            <span className={styles.searching}>
+              <Link href="/matches/steady-violet-lynx" className={styles.goLink}>
+                Return to match
+              </Link>
+              <button type="button" className={styles.cancel} onClick={() => setQueuedAt(null)} title="Mockup only">
+                Reset
+              </button>
+            </span>
+          ) : queued ? (
             <div className={styles.searching}>
               <span className={styles.timer}>
                 <span className={cx(styles.timerValue, "mono")}>{fmt(elapsed)}</span>
