@@ -1,8 +1,8 @@
 import styles from "./home.module.css";
 
 const STEPS = [
-  { title: "Sign in with Steam", body: "Your Steam account is your identity. No new password." },
-  { title: "Pick modes, press GO", body: "Queue solo or with your party for one or more modes at once." },
+  { title: "Sign in with Steam", body: "We will never ask for your credentials, sign in securely via Steam." },
+  { title: "Grab your mates and play", body: "Queue solo or with your party for one or more modes at once." },
   { title: "Accept, veto, connect", body: "Accept in 20 seconds, vote on the maps, then join the server from the dock." },
 ];
 
