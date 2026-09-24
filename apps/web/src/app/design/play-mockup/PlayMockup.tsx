@@ -7,6 +7,9 @@ import { TierChip } from "@/components/ui/TierChip";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { FormDots } from "@/components/ui/FormDots";
 import { PartySize } from "@/components/ui/PartySize";
+import { Logo } from "@/components/ui/Logo";
+import { BRAND_NAME } from "@rushsite/shared";
+import Link from "next/link";
 import { useBackdrop } from "@/lib/useBackdrop";
 import { cx } from "@/components/ui/cx";
 import { CupsTab } from "./CupsTab";
@@ -173,12 +176,16 @@ export function PlayMockup() {
   const elapsed = queuedAt ? Math.floor((now - queuedAt) / 1000) : 0;
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-mockup-play>
       <div className={cx("container", styles.wrap)}>
         <p className={styles.mockNote}>Mockup. Fake data, nothing here queues.</p>
 
         {/* 5. Tabs replace the title band. 3. Party slots sit on the right of the same row */}
         <div className={styles.topRow}>
+          {/* The site header is gone. The logo leads the tabs and goes home */}
+          <Link href="/" className={styles.logo} title={BRAND_NAME}>
+            <Logo size={40} title={`${BRAND_NAME} home`} />
+          </Link>
           <nav className={styles.tabs} aria-label="Play">
             {(["ranked", "cups", "leaderboard", "test"] as const).map((t) => (
               <button key={t} type="button" className={styles.tab} aria-current={tab === t ? "page" : undefined} onClick={() => setTab(t)}>
@@ -262,6 +269,44 @@ export function PlayMockup() {
                 </span>
               );
             })}
+            {/* Everything the header's account menu held, behind one button */}
+            <span className={cx(styles.slotWrap, styles.menuWrap)}>
+              <button
+                type="button"
+                className={styles.burger}
+                aria-label="Menu"
+                aria-haspopup="menu"
+                aria-expanded={menu === "main"}
+                onClick={() => setMenu((m) => (m === "main" ? null : "main"))}
+              >
+                <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+              {menu === "main" && (
+                <span className={cx(styles.popover, styles.menu)} role="menu" aria-label="Menu">
+                  <span className={styles.menuHead}>
+                    <strong>{ME}</strong>
+                    <span className="muted">Signed in with Steam</span>
+                  </span>
+                  {[
+                    ["Profile", `/profile`],
+                    ["Friends", "/friends"],
+                    ["Ranks", "/ranks"],
+                    ["Settings", "/settings"],
+                    ["Admin", "/admin"],
+                  ].map(([label, href]) => (
+                    <Link key={label} href={href!} role="menuitem" className={styles.menuItem} onClick={() => setMenu(null)}>
+                      {label}
+                    </Link>
+                  ))}
+                  <span className={styles.menuRule} />
+                  <button type="button" role="menuitem" className={cx(styles.menuItem, styles.menuDanger)} onClick={() => setMenu(null)}>
+                    Sign out
+                  </button>
+                </span>
+              )}
+            </span>
           </div>
         </div>
 
