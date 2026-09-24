@@ -26,7 +26,7 @@ export function HomeHero() {
         <br />
         Prove your skill.
       </h1>
-      <p className={styles.lede}>3v3 Rush, 1v1 Aim and 2v2 Aim on our own servers. A rating per mode and free cups every day.</p>
+      <p className={styles.lede}>3v3 Rush, 1v1 and 2v2 Aim with skill ratings. Free cups every day. Also try out 1v1 and 2v2 Rush.</p>
       {closed && (
         <p className={styles.notice} role="status">
           Servers are not open yet. Queues open as soon as servers come online. <Link href="/status">Server status</Link>
