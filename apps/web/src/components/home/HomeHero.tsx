@@ -22,9 +22,9 @@ export function HomeHero() {
       <div className={styles.heroShade} />
       <p className={styles.kicker}>For CS2</p>
       <h1 id="home-title" className={styles.heroTitle}>
-        Short matches.
+        Challenge your aim.
         <br />
-        Real ladder.
+        Prove your skill.
       </h1>
       <p className={styles.lede}>3v3 Rush, 1v1 Aim and 2v2 Aim on our own servers. A rating per mode and free cups every day.</p>
       {closed && (
