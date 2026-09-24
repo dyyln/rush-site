@@ -121,7 +121,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         })}
       </ol>
 
-      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} previewRoom={previewRoom} flip={flip} />
+      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} previewRoom={previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)} flip={flip} />
 
       {phaseSteps.length > 0 && (
       <ol className={styles.steps} aria-label="Veto steps">

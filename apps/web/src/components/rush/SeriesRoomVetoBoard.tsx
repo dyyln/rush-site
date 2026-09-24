@@ -175,7 +175,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   {done && <span className="visually-hidden">, done</span>}
                 </span>
               </div>
-              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? previewRoom : null} flip={flip} compact />
+              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? (previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)) : null} flip={flip} compact />
             </li>
           );
         })}
