@@ -192,12 +192,12 @@ func TestNilCheckerNeverUpdates(t *testing.T) {
 	}
 }
 
-func TestEnsureMetamodIdempotent(t *testing.T) {
+func TestEnsureGameinfoMetamodIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gameinfo.gi")
 	if err := os.WriteFile(path, []byte(gameinfo), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := EnsureMetamod(path)
+	changed, err := EnsureGameinfo(path, false)
 	if err != nil || !changed {
 		t.Fatalf("first patch changed=%v err=%v", changed, err)
 	}
@@ -206,14 +206,14 @@ func TestEnsureMetamodIdempotent(t *testing.T) {
 	if !strings.Contains(string(b), want) {
 		t.Fatalf("patched file:\n%s", b)
 	}
-	changed, err = EnsureMetamod(path)
+	changed, err = EnsureGameinfo(path, false)
 	if err != nil || changed {
 		t.Fatalf("second patch changed=%v err=%v", changed, err)
 	}
 	if err := os.WriteFile(path, []byte("\"GameInfo\" {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := EnsureMetamod(path); err == nil {
+	if _, err := EnsureGameinfo(path, false); err == nil {
 		t.Fatal("want error when anchor line is missing")
 	}
 }

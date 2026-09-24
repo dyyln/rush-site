@@ -17,6 +17,10 @@
 #   METAMOD_URL      optional. Metamod:Source 2.0 linux tarball. Default is the latest 2.0 dev build.
 #   PUBLIC_IP        optional. Detected from the default route when unset.
 #   SKIP_CS2_INSTALL set to 1 to skip the 60 GB CS2 download, for example on a re-run.
+#   PLUGIN_DIR       optional. Built rushsite plugin folder (plugin/src/RushsiteMatch/bin/Release/net8.0).
+#                    Copied to addons/counterstrikesharp/plugins/RushsiteMatch.
+#   RUSH_ROOMS_VPK   optional. rushsite_rooms.vpk for the Rush room veto, with rushsite_rooms.json next to it.
+#                    See plugin/rush-script/README.md. The agent adds its gameinfo.gi line on start.
 
 set -euo pipefail
 
@@ -35,6 +39,8 @@ CSS_ZIP="${CSS_ZIP:-}"
 CSS_SHA256="${CSS_SHA256:-}"
 METAMOD_URL="${METAMOD_URL:-}"
 SKIP_CS2_INSTALL="${SKIP_CS2_INSTALL:-0}"
+PLUGIN_DIR="${PLUGIN_DIR:-}"
+RUSH_ROOMS_VPK="${RUSH_ROOMS_VPK:-}"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -179,6 +185,35 @@ install_css() {
 	echo "CounterStrikeSharp installed. Drop the rushsite plugin into addons/counterstrikesharp/plugins/."
 }
 
+install_plugin() {
+	if [ -z "$PLUGIN_DIR" ]; then
+		echo "PLUGIN_DIR not set. Drop the rushsite plugin into addons/counterstrikesharp/plugins/RushsiteMatch by hand."
+		return
+	fi
+	log "Installing the rushsite plugin from $PLUGIN_DIR"
+	[ -f "$PLUGIN_DIR/RushsiteMatch.dll" ] || die "PLUGIN_DIR has no RushsiteMatch.dll"
+	local dest="$CS2_DIR/game/csgo/addons/counterstrikesharp/plugins/RushsiteMatch"
+	mkdir -p "$dest"
+	cp -a "$PLUGIN_DIR/." "$dest/"
+	chown -R "$CS2_USER:" "$dest"
+}
+
+# The Rush room veto needs our rush_001 script. The agent checks it against Valve's pak01 and
+# adds `Game csgo/rushsite_rooms.vpk` to gameinfo.gi on start and after every CS2 update.
+install_rush_rooms() {
+	if [ -z "$RUSH_ROOMS_VPK" ]; then
+		echo "RUSH_ROOMS_VPK not set. Rush uses Valve's random room draw."
+		return
+	fi
+	log "Installing the Rush room veto script from $RUSH_ROOMS_VPK"
+	local info
+	info="$(dirname "$RUSH_ROOMS_VPK")/rushsite_rooms.json"
+	[ -f "$RUSH_ROOMS_VPK" ] || die "RUSH_ROOMS_VPK not found"
+	[ -f "$info" ] || die "rushsite_rooms.json must sit next to the VPK"
+	install -o "$CS2_USER" -m 644 "$RUSH_ROOMS_VPK" "$CS2_DIR/game/csgo/rushsite_rooms.vpk"
+	install -o "$CS2_USER" -m 644 "$info" "$CS2_DIR/game/csgo/rushsite_rooms.json"
+}
+
 install_agent() {
 	log "Installing agent to $AGENT_BIN_DIR/rushsite-agent"
 	install -m 755 "$AGENT_BINARY" "$AGENT_BIN_DIR/rushsite-agent"
@@ -242,6 +277,8 @@ install_cs2
 link_steamclient
 install_metamod
 install_css
+install_plugin
+install_rush_rooms
 install_agent
 
 log "Done"
@@ -250,6 +287,7 @@ Next steps:
   - Firewall per infra/hetzner/README.md. UDP $PORT_RANGE open to all, TCP 8080 to the API only.
     GOTV uses game port + 100 (RUSHSITE_TV_PORT_OFFSET) and should stay closed.
   - curl -s -H "Authorization: Bearer \$TOKEN" http://127.0.0.1:8080/health
+    update.rushRooms says whether the Rush room veto script is on, off, stale or in error.
   - journalctl -u rushsite-agent -f
   - Rush test by hand, as $CS2_USER, before wiring the allocator:
     $CS2_DIR/game/bin/linuxsteamrt64/cs2 -dedicated -port 27015 +tv_enable 1 +bot_quota 0 +game_type 0 +game_mode 6 +map rush_001 +sv_setsteamaccount <GSLT>
