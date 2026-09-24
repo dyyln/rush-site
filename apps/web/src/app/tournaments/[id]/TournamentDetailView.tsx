@@ -20,10 +20,10 @@ import { Badge } from "@/components/ui/Badge";
 import { BracketView, entryName, roundName } from "@/components/ui/BracketView";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
-import { CountdownRing } from "@/components/ui/CountdownRing";
 import { cx } from "@/components/ui/cx";
 import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { useToast } from "@/components/ui/Toast";
+import { StepClock } from "@/components/ui/VetoHead";
 import { ApiError, api } from "@/lib/api";
 import { describeError } from "@/lib/errors";
 import { MODE_ART, MODE_COPY } from "@/lib/modes";
@@ -47,18 +47,6 @@ const COUNTDOWN_WINDOW_MS = 3 * 3_600_000;
 // A cup still open this long after its start time is stale data, not a countdown
 const COUNTDOWN_STALE_MS = 15 * 60_000;
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-// hh:mm:ss from an hour out, mm:ss inside the last hour
-function clock(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
-}
-
 // Minute steps for screen readers. role="timer" is not live, so this is read on demand only
 function spokenLeft(sec: number): string {
   if (sec <= 0) return "The cup is starting.";
@@ -80,7 +68,7 @@ function useNowEverySecond(): number | null {
   return now;
 }
 
-// Large countdown in the header while sign ups are open and the start is close. Renders nothing
+// Big countdown on the hero while sign ups are open and the start is close. Renders nothing
 // before mount so the server and client markup agree
 function StartCountdown({ startsAt, onStart }: { startsAt: string; onStart: () => void }) {
   const now = useNowEverySecond();
@@ -98,15 +86,10 @@ function StartCountdown({ startsAt, onStart }: { startsAt: string; onStart: () =
   }, [diff, onStart]);
 
   if (diff === null || diff > COUNTDOWN_WINDOW_MS || diff < -COUNTDOWN_STALE_MS) return null;
-  const remainingMs = Math.max(0, diff);
-  const sec = Math.ceil(remainingMs / 1000);
-  const text = clock(sec);
+  const sec = Math.ceil(Math.max(0, diff) / 1000);
   return (
     <div className={styles.countdown}>
-      <CountdownRing remainingMs={remainingMs} totalMs={COUNTDOWN_WINDOW_MS} warnMs={0} tickMs={1000} size="var(--cup-ring-size)">
-        <span className={styles.ringLabel}>{sec > 0 ? "Starts in" : "Starting"}</span>
-        <span className={cx("mono", styles.ringTime, text.length > 5 && styles.ringTimeLong)}>{text}</span>
-      </CountdownRing>
+      <StepClock until={start} totalSec={COUNTDOWN_WINDOW_MS / 1000} mine label={sec > 0 ? "to start" : "starting"} />
       <p className="visually-hidden" role="timer">
         {spokenLeft(sec)}
       </p>

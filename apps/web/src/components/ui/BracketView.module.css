@@ -302,3 +302,14 @@
 .rounds[data-tracing] .tracedOut::after {
   border-top: 2px solid var(--color-text);
 }
+
+/* Narrow screens: one round at a time under round tabs, the column takes the full width */
+.single .round {
+  flex: 1 1 auto;
+}
+.trophyInline {
+  position: static;
+  display: block;
+  margin: 0 auto var(--space-3);
+  translate: none;
+}

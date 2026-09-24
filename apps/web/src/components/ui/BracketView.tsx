@@ -9,6 +9,7 @@ import { resolutionText, sideMarks } from "@/components/tournaments/bracketScore
 import { mapName } from "@/lib/modes";
 import type { Bracket, BracketMatch, CupCadence, EntryView, Mode } from "@/lib/types";
 import { Badge } from "./Badge";
+import { Tabs } from "./Tabs";
 import { TeamCard, type TeamCardPlayer } from "./TeamCard";
 import { TeamMarker, type TeamSide } from "./TeamMarker";
 import { cx } from "./cx";
@@ -54,25 +55,39 @@ const MIRROR_COLUMN_MIN = 140;
 const MIRROR_FINAL_GROW = 1.4;
 const MIRROR_GAP = 16;
 
-// Mirrored only when every column fits at its minimum width, otherwise rounds run left to right and scroll
-function useMirrored(rounds: number) {
+// Below this width one round shows at a time, picked from tabs, instead of scrolling sideways
+const ROUNDS_TABS_MAX = 600;
+
+type Layout = "mirrored" | "linear" | "tabs";
+
+// Mirrored only when every column fits at its minimum width, one round at a time on narrow screens,
+// otherwise rounds run left to right and scroll
+function useLayout(rounds: number) {
   const ref = useRef<HTMLDivElement>(null);
-  const [mirrored, setMirrored] = useState(false);
+  const [layout, setLayout] = useState<Layout>("linear");
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el || rounds < 2) {
-      setMirrored(false);
-      return;
-    }
+    if (!el) return;
     const cols = rounds * 2 - 1;
     const need = (cols - 1 + MIRROR_FINAL_GROW) * MIRROR_COLUMN_MIN + (cols - 1) * MIRROR_GAP;
-    const check = () => setMirrored(el.clientWidth >= need);
+    const check = () => {
+      const w = el.clientWidth;
+      setLayout(w < ROUNDS_TABS_MAX && rounds > 1 ? "tabs" : rounds >= 2 && w >= need ? "mirrored" : "linear");
+    };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
   }, [rounds]);
-  return { ref, mirrored };
+  return { ref, layout };
+}
+
+// The round a narrow screen opens on: the viewer's next match, else the first round still being played, else the final
+function openingRound(bracket: Bracket, nextId: string | null | undefined): number {
+  const next = nextId ? bracket.matches.find((m) => m.id === nextId) : undefined;
+  if (next) return next.round;
+  const open = bracket.matches.filter((m) => m.status !== "done").sort((a, b) => a.round - b.round)[0];
+  return open?.round ?? bracket.rounds;
 }
 
 function columnsOf(bracket: Bracket, mirrored: boolean): Column[] {
@@ -96,59 +111,104 @@ export function BracketView({ bracket, entries, highlightEntryId, mode, cadence,
   const byId = new Map(entries.map((e) => [e.id, e]));
   const path = bracketPath(bracket, highlightEntryId);
   const trace = bracketPath(bracket, traceEntryId);
-  const { ref, mirrored } = useMirrored(bracket.rounds);
-  const columns = columnsOf(bracket, mirrored);
+  const { ref, layout } = useLayout(bracket.rounds);
+  const mirrored = layout === "mirrored";
+  const [picked, setPicked] = useState<number | null>(null);
+  const shownRound = picked ?? openingRound(bracket, path?.nextId);
+  const columns =
+    layout === "tabs"
+      ? [{ round: shownRound, matches: bracket.matches.filter((m) => m.round === shownRound).sort((a, b) => a.index - b.index), half: null, out: null }]
+      : columnsOf(bracket, mirrored);
 
+  const list = (
+    <ol className={cx(styles.rounds, mirrored && styles.mirrored, layout === "tabs" && styles.single)} data-tracing={trace ? "" : undefined}>
+      {columns.map((c) => {
+        const bo = c.matches[0]?.bestOf ?? 1;
+        const final = c.round === bracket.rounds;
+        return (
+          <li key={`${c.round}-${c.half ?? "all"}`} className={cx(styles.round, final && styles.finalRound)} data-out={c.out ?? undefined}>
+            <h3 className={styles.roundTitle}>
+              {mirrored ? (
+                <>
+                  <span aria-hidden="true">{SHORT_ROUND[roundName(c.round, bracket.rounds)] ?? roundName(c.round, bracket.rounds)}</span>
+                  <span className="visually-hidden">{roundName(c.round, bracket.rounds)}</span>
+                </>
+              ) : (
+                roundName(c.round, bracket.rounds)
+              )}{" "}
+              <span className="muted">Bo{bo}</span>
+              {c.half && <span className="visually-hidden">, {c.half} half</span>}
+            </h3>
+            <ol className={styles.matches}>
+              {c.matches.map((m) => (
+                <li
+                  key={m.id}
+                  className={cx(
+                    styles.slot,
+                    path?.connectorIds.has(m.id) && styles.pathOut,
+                    trace?.matchIds.has(m.id) && styles.traced,
+                    trace?.connectorIds.has(m.id) && styles.tracedOut,
+                  )}
+                >
+                  {/* Sits above the final without moving it, so the card stays level with the semis */}
+                  {final && (
+                    <BadgeEmblem
+                      kind="cup_champion"
+                      cadence={cadence}
+                      size={mirrored ? 64 : 80}
+                      className={cx(styles.trophy, layout === "tabs" && styles.trophyInline)}
+                    />
+                  )}
+                  <MatchBox
+                    match={m}
+                    byId={byId}
+                    mode={mode}
+                    highlight={highlightEntryId}
+                    onPath={!!path?.matchIds.has(m.id)}
+                    isNext={path?.nextId === m.id}
+                    compact={mirrored}
+                  />
+                </li>
+              ))}
+            </ol>
+          </li>
+        );
+      })}
+    </ol>
+  );
+
+  if (layout === "tabs") {
+    return (
+      <div className={styles.wrap} ref={ref}>
+        <Tabs
+          label="Bracket rounds"
+          items={Array.from({ length: bracket.rounds }, (_, i) => {
+            // Four tabs fit a phone: early rounds read R1, R2
+            const name = roundName(i + 1, bracket.rounds);
+            const short = SHORT_ROUND[name] ?? (name.startsWith("Round ") ? `R${i + 1}` : name);
+            const label =
+              short === name ? (
+                name
+              ) : (
+                <>
+                  <span aria-hidden="true">{short}</span>
+                  <span className="visually-hidden">{name}</span>
+                </>
+              );
+            return { key: String(i + 1), label };
+          })}
+          value={String(shownRound)}
+          onChange={(k) => setPicked(Number(k))}
+        >
+          {list}
+        </Tabs>
+      </div>
+    );
+  }
   return (
     <div className={styles.wrap} ref={ref}>
       <div className={styles.scroller} role="region" aria-label="Bracket" tabIndex={mirrored ? undefined : 0}>
-        <ol className={cx(styles.rounds, mirrored && styles.mirrored)} data-tracing={trace ? "" : undefined}>
-          {columns.map((c) => {
-            const bo = c.matches[0]?.bestOf ?? 1;
-            const final = c.round === bracket.rounds;
-            return (
-              <li key={`${c.round}-${c.half ?? "all"}`} className={cx(styles.round, final && styles.finalRound)} data-out={c.out ?? undefined}>
-                <h3 className={styles.roundTitle}>
-                  {mirrored ? (
-                    <>
-                      <span aria-hidden="true">{SHORT_ROUND[roundName(c.round, bracket.rounds)] ?? roundName(c.round, bracket.rounds)}</span>
-                      <span className="visually-hidden">{roundName(c.round, bracket.rounds)}</span>
-                    </>
-                  ) : (
-                    roundName(c.round, bracket.rounds)
-                  )}{" "}
-                  <span className="muted">Bo{bo}</span>
-                  {c.half && <span className="visually-hidden">, {c.half} half</span>}
-                </h3>
-                <ol className={styles.matches}>
-                  {c.matches.map((m) => (
-                    <li
-                      key={m.id}
-                      className={cx(
-                        styles.slot,
-                        path?.connectorIds.has(m.id) && styles.pathOut,
-                        trace?.matchIds.has(m.id) && styles.traced,
-                        trace?.connectorIds.has(m.id) && styles.tracedOut,
-                      )}
-                    >
-                      {/* Sits above the final without moving it, so the card stays level with the semis */}
-                      {final && <BadgeEmblem kind="cup_champion" cadence={cadence} size={mirrored ? 64 : 80} className={styles.trophy} />}
-                      <MatchBox
-                        match={m}
-                        byId={byId}
-                        mode={mode}
-                        highlight={highlightEntryId}
-                        onPath={!!path?.matchIds.has(m.id)}
-                        isNext={path?.nextId === m.id}
-                        compact={mirrored}
-                      />
-                    </li>
-                  ))}
-                </ol>
-              </li>
-            );
-          })}
-        </ol>
+        {list}
       </div>
     </div>
   );

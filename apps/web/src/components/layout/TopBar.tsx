@@ -23,7 +23,7 @@ const TABS = [
 // Top of every page, in place of a header bar: logo and tabs on the left, party and menu on the right
 export function TopBar() {
   const pathname = usePathname();
-  const { user } = useSession();
+  const { user, loading } = useSession();
 
   useEffect(() => {
     if (user) startPlayStore();
@@ -40,20 +40,23 @@ export function TopBar() {
           <p className={styles.brand} aria-hidden="true">
             {BRAND_NAME}
           </p>
-          <nav aria-label="Main">
-            <ul className={styles.tabs}>
-              {TABS.map((t) => {
-                const active = [t.href, ...(("also" in t && t.also) || [])].some((h) => pathname === h || pathname.startsWith(h + "/"));
-                return (
-                  <li key={t.href}>
-                    <Link href={t.href} className={styles.tab} aria-current={active ? "page" : undefined}>
-                      {t.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+          {/* Guests only see the landing page, so no tabs until the session says who they are */}
+          {(user || loading) && (
+            <nav aria-label="Main">
+              <ul className={styles.tabs}>
+                {TABS.map((t) => {
+                  const active = [t.href, ...(("also" in t && t.also) || [])].some((h) => pathname === h || pathname.startsWith(h + "/"));
+                  return (
+                    <li key={t.href}>
+                      <Link href={t.href} className={styles.tab} aria-current={active ? "page" : undefined}>
+                        {t.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          )}
         </div>
         <div className={styles.end}>
           {pathname === "/banned" ? null : user ? (
