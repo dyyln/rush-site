@@ -15,6 +15,7 @@ import { RatingChart } from "@/components/ui/RatingChart";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { BestMaps } from "@/components/profile/BestMaps";
 import { CupBadges } from "@/components/profile/CupBadges";
+import { BadgeEmblem, cadenceFromName } from "@/components/profile/BadgeEmblem";
 import { FormDots } from "@/components/ui/FormDots";
 import { StatTile } from "@/components/ui/StatTile";
 import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
@@ -24,7 +25,7 @@ import { api, ApiError } from "@/lib/api";
 import { formatStat, signed, winRate } from "@/lib/format";
 import { MODE_ART, MODE_COPY, modeLabel } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
-import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel } from "@/lib/types";
+import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel, BadgeKind, CupCadence, ProfileBadge } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
 import { TrustChip } from "@/components/trust/TrustChip";
@@ -89,7 +90,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
     <div className={cx("container", styles.page)}>
       <header className={styles.hero}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className={styles.heroArt} src={MODE_ART[best]} alt="" />
+        <img className={styles.heroArt} src={profile.backgroundUrl ?? MODE_ART[best]} alt="" />
         <div className={styles.heroShade} />
         <div className={styles.heroMain}>
           <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
@@ -109,10 +110,15 @@ function ProfileBody({ profile }: { profile: Profile }) {
               </div>
             )}
           </div>
-          {!own && (
-            <div className={styles.heroActions}>
-              <FriendButton target={profile.user} />
-              <ChallengeButton target={profile.user} />
+          {(profile.badges.length > 0 || !own) && (
+            <div className={styles.heroSide}>
+              {profile.badges.length > 0 && <TrophyShelf badges={profile.badges} />}
+              {!own && (
+                <div className={styles.heroActions}>
+                  <FriendButton target={profile.user} />
+                  <ChallengeButton target={profile.user} />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -219,6 +225,49 @@ function ModeDetail({ stats }: { stats: ModeStats }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+const PLACING_ORDER: Record<BadgeKind, number> = { cup_champion: 0, cup_runner_up: 1, cup_semifinalist: 2 };
+const PLACING_NAME: Record<BadgeKind, [string, string]> = {
+  cup_champion: ["cup win", "cup wins"],
+  cup_runner_up: ["runner-up", "runner-ups"],
+  cup_semifinalist: ["top 4", "top 4s"],
+};
+const CADENCE_ORDER: Record<CupCadence, number> = { special: 0, weekly: 1, daily: 2 };
+const SHELF_MAX = 6;
+
+// The best cup placings on the hero, one trophy per placing and cup kind with a count.
+// Links to the full list on the Cups tab
+function TrophyShelf({ badges }: { badges: ProfileBadge[] }) {
+  const groups = new Map<string, { kind: BadgeKind; cadence: CupCadence; n: number }>();
+  for (const b of badges) {
+    const cadence = cadenceFromName(b.tournamentName);
+    const key = `${b.kind}:${cadence}`;
+    const g = groups.get(key);
+    if (g) g.n += 1;
+    else groups.set(key, { kind: b.kind, cadence, n: 1 });
+  }
+  const shelf = [...groups.values()]
+    .sort((a, b) => PLACING_ORDER[a.kind] - PLACING_ORDER[b.kind] || CADENCE_ORDER[a.cadence] - CADENCE_ORDER[b.cadence])
+    .slice(0, SHELF_MAX);
+  const counts = (Object.keys(PLACING_ORDER) as BadgeKind[])
+    .map((k) => [k, badges.filter((b) => b.kind === k).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${n} ${PLACING_NAME[k][n === 1 ? 0 : 1]}`);
+  return (
+    <Link href="?tab=cups" scroll={false} replace className={styles.shelf}>
+      <span className={styles.shelfTrophies} aria-hidden="true">
+        {shelf.map((g) => (
+          <span key={`${g.kind}:${g.cadence}`} className={styles.shelfItem}>
+            <BadgeEmblem kind={g.kind} cadence={g.cadence} size={56} />
+            {g.n > 1 && <span className={cx(styles.shelfCount, "mono")}>×{g.n}</span>}
+          </span>
+        ))}
+      </span>
+      <span className={styles.shelfText}>{counts.join(" · ")}</span>
+      <span className="visually-hidden">, see all cup placings</span>
+    </Link>
   );
 }
 

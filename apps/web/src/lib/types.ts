@@ -107,6 +107,8 @@ export type Profile = {
   // Cursor for the next history page. Null when there is none
   recentMatchesCursor?: string | null;
   favouriteWeapon?: FavouriteWeapon | null;
+  // Equipped Steam profile background, shown behind the profile hero
+  backgroundUrl?: string | null;
 };
 
 export type MatchHistoryPage = { matches: MatchSummary[]; nextCursor: string | null };

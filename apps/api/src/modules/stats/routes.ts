@@ -254,6 +254,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       // Pass to /users/:steamId/matches for the next page
       recentMatchesCursor: firstPage.nextCursor,
       favouriteWeapon: weapon ? { weapon: weapon.weapon, kills: weapon.kills } : null,
+      backgroundUrl: await profileBackground(ctx, steamId),
     }
   })
 
@@ -270,4 +271,21 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
     if (!q.success) throw badRequest("invalid_query", "bad limit, cursor or mode", q.error.issues)
     return matchHistory(ctx, id.data, q.data)
   })
+}
+
+const BACKGROUND_TTL_SEC = 6 * 3600
+
+// The player's Steam profile background for the profile hero, cached so a busy profile
+// doesn't ask Steam on every view. Steam failing only loses the art
+async function profileBackground(ctx: AppContext, steamId: string): Promise<string | null> {
+  const key = `steam:bg:${steamId}`
+  try {
+    const cached = await ctx.redis.get(key)
+    if (cached !== null) return cached || null
+    const url = await ctx.steam.profileBackground(steamId)
+    await ctx.redis.set(key, url ?? "", "EX", BACKGROUND_TTL_SEC)
+    return url
+  } catch {
+    return null
+  }
 }

@@ -64,10 +64,46 @@ export async function mockCall<T>(fn: () => T, ms = 250): Promise<T> {
 }
 
 const NAMES = [
-  "vexa", "kolt", "mirren", "ashgrove", "tessler", "b1tter", "nollie", "quarry", "harlan", "sunk",
-  "drift", "orbit", "palecrow", "juno", "reyk", "fenn", "lowkey", "strata", "tamsin", "voss",
-  "kettle", "embr", "crane", "dusk", "haze", "morrow", "pike", "ridley", "slate", "tovi",
-  "umber", "wren", "yarrow", "zeph", "alder", "brisk", "cinder", "dover", "elm", "flint",
+  "vexa",
+  "kolt",
+  "mirren",
+  "ashgrove",
+  "tessler",
+  "b1tter",
+  "nollie",
+  "quarry",
+  "harlan",
+  "sunk",
+  "drift",
+  "orbit",
+  "palecrow",
+  "juno",
+  "reyk",
+  "fenn",
+  "lowkey",
+  "strata",
+  "tamsin",
+  "voss",
+  "kettle",
+  "embr",
+  "crane",
+  "dusk",
+  "haze",
+  "morrow",
+  "pike",
+  "ridley",
+  "slate",
+  "tovi",
+  "umber",
+  "wren",
+  "yarrow",
+  "zeph",
+  "alder",
+  "brisk",
+  "cinder",
+  "dover",
+  "elm",
+  "flint",
 ];
 
 // Stable fake UUID from any string
@@ -284,6 +320,11 @@ export function mockProfile(steamId: string): Profile {
     recentMatches: mockMatches(steamId).slice(0, MOCK_FIRST_PAGE),
     recentMatchesCursor: String(MOCK_FIRST_PAGE),
     favouriteWeapon: mockFavouriteWeapon(steamId),
+    // Every other player has a Steam background equipped, the rest fall back to mode art
+    backgroundUrl:
+      hash(steamId) % 2 === 0
+        ? "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/items/1098340/4767cee1380bccb7abdae29d0ad7c2de587aba26.jpg"
+        : null,
   };
 }
 
@@ -420,13 +461,12 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
     for (let index = 0; index < count; index++) {
       const aSeed = round === 1 ? order[index * 2]! : null;
       const bSeed = round === 1 ? order[index * 2 + 1]! : null;
-      const a = round === 1 ? bySeed(aSeed!) : prevWinners[index * 2] ?? null;
-      const b = round === 1 ? bySeed(bSeed!) : prevWinners[index * 2 + 1] ?? null;
+      const a = round === 1 ? bySeed(aSeed!) : (prevWinners[index * 2] ?? null);
+      const b = round === 1 ? bySeed(bSeed!) : (prevWinners[index * 2 + 1] ?? null);
       const known = round === 1 || round <= completedRounds + 1;
       const bye = round === 1 && (!a || !b);
       const done = bye || (round <= completedRounds && !!a && !!b);
-      const live =
-        !done && round === completedRounds + 1 && !!a && !!b && (index === 0 || a === mine || b === mine) && t.status === "running";
+      const live = !done && round === completedRounds + 1 && !!a && !!b && (index === 0 || a === mine || b === mine) && t.status === "running";
       let winner: string | null = null;
       const games: BracketMatch["games"] = [];
       // The last first round pairing of a running cup is won by forfeit
@@ -518,7 +558,7 @@ export function mockTournamentDetail(id: string): TournamentDetail | null {
   const final = bracket?.matches.find((m) => m.round === bracket.rounds);
   return {
     ...t,
-    winnerEntryId: t.status === "completed" ? final?.winner ?? null : null,
+    winnerEntryId: t.status === "completed" ? (final?.winner ?? null) : null,
     entries,
     bracket,
     bracketVersion: mockBracketVersion(id),
@@ -534,7 +574,9 @@ function mockMyEntryId(): string {
 // Avatar stack preview and champion for list rows
 function enrichMockSummary(t: TournamentSummary) {
   const entries = mockEntries(t);
-  t.entrantPreview = entries.slice(0, 5).map((e) => ({ steamId: e.captainSteamId, displayName: e.name ?? e.captainSteamId, avatarUrl: e.players?.[0]?.avatarUrl ?? null }));
+  t.entrantPreview = entries
+    .slice(0, 5)
+    .map((e) => ({ steamId: e.captainSteamId, displayName: e.name ?? e.captainSteamId, avatarUrl: e.players?.[0]?.avatarUrl ?? null }));
   if (t.status === "completed") {
     const bracket = mockBracket(t, entries);
     const winnerId = bracket.matches.find((m) => m.round === bracket.rounds)?.winner;
@@ -598,7 +640,10 @@ function playOut(mode: Mode, seed: number, rush?: RushPlan): { winners: number[]
 // room toward the CT castle. Ends on a win in the enemy castle or 8 wins, with Convoy at 7-7
 function playOutRush(seed: number, plan?: RushPlan): { winners: number[]; arenas: string[]; rooms: number[] } {
   const r = rng(seed);
-  const mids = [...RUSH_ROOMS.midRooms].sort(() => r() - 0.5).slice(0, 4).map((x) => x.id);
+  const mids = [...RUSH_ROOMS.midRooms]
+    .sort(() => r() - 0.5)
+    .slice(0, 4)
+    .map((x) => x.id);
   const start = RUSH_ROOMS.startRooms[Math.floor(r() * RUSH_ROOMS.startRooms.length)]!.id;
   const rooms = plan?.rooms ?? [RUSH_ROOMS.castles.t.id, mids[0]!, mids[1]!, start, mids[2]!, mids[3]!, RUSH_ROOMS.castles.ct.id];
   const tTeam = plan?.ct === 1 ? 0 : 1;
@@ -628,7 +673,7 @@ function players(mode: Mode, seed: number, offset: number, rounds: number, meFir
   return Array.from({ length: size }, (_, i) => {
     const u = meFirst && i === 0 ? mockUser(0) : mockUser(offset + i + 1);
     const rating = Math.round(1400 + r() * 700);
-    const kills = Math.round(rounds * (0.5 + r() * 0.6) / Math.max(1, size - 1 || 1));
+    const kills = Math.round((rounds * (0.5 + r() * 0.6)) / Math.max(1, size - 1 || 1));
     return {
       steamId: u.steamId,
       displayName: u.displayName,
@@ -636,7 +681,7 @@ function players(mode: Mode, seed: number, offset: number, rounds: number, meFir
       tier: tierForRating(rating).id,
       rating,
       kills,
-      deaths: Math.round(rounds * (0.4 + r() * 0.5) / Math.max(1, size - 1 || 1)),
+      deaths: Math.round((rounds * (0.4 + r() * 0.5)) / Math.max(1, size - 1 || 1)),
       headshots: Math.round(kills * (0.3 + r() * 0.4)),
       damage: Math.round(kills * (95 + r() * 30)),
     };
@@ -667,7 +712,7 @@ function build(
       round: i + 1,
       winnerTeam: w,
       score: { ...score },
-      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.id : undefined,
+      arena: isRushMode(mode) ? (plan.arenas[i] ?? RUSH_ROOMS.decider.id) : undefined,
       endedAt: new Date(startedAt + (i + 1) * 60_000).toISOString(),
     });
   }
@@ -707,7 +752,7 @@ function buildSeries(
   rushPlans?: RushPlan[],
 ): MatchDetail {
   let base = seed;
-  const winnerOf = (m: MatchDetail) => ([...m.teams].sort((x, y) => y.score - x.score)[0]!.name);
+  const winnerOf = (m: MatchDetail) => [...m.teams].sort((x, y) => y.score - x.score)[0]!.name;
   if (!live) {
     // First seed pair that splits the first two maps
     while (winnerOf(build(id, mode, mapIds[0]!, base, null, startedAt)) === winnerOf(build(id, mode, mapIds[1]!, base + 1, null, startedAt))) base += 2;
@@ -802,7 +847,17 @@ function mockRoomDetail(): MatchDetail {
   const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
   const player = (steamId: string): MatchPlayer => {
     const u = mockUserBySteamId(steamId);
-    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1500).id, rating: 1500, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+    return {
+      steamId,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
+      tier: tierForRating(1500).id,
+      rating: 1500,
+      kills: 0,
+      deaths: 0,
+      headshots: 0,
+      damage: 0,
+    };
   };
   const base: MatchDetail = {
     id: MOCK_ROOM_MATCH_ID,
@@ -873,7 +928,17 @@ function mockAimBo3VetoDetail(): MatchDetail {
   const { state, stepDeadline } = mockSeriesVeto(MOCK_AIM_BO3_VETO_ID);
   const player = (steamId: string): MatchPlayer => {
     const u = mockUserBySteamId(steamId);
-    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1700).id, rating: 1700, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+    return {
+      steamId,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
+      tier: tierForRating(1700).id,
+      rating: 1700,
+      kills: 0,
+      deaths: 0,
+      headshots: 0,
+      damage: 0,
+    };
   };
   const names = state.teams.map((t) => t.id);
   const maps: MatchMap[] = state.done
@@ -907,7 +972,17 @@ function mockSeriesVetoDetail(): MatchDetail {
   const { state, stepDeadline } = mockSeriesVeto();
   const player = (steamId: string): MatchPlayer => {
     const u = mockUserBySteamId(steamId);
-    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1700).id, rating: 1700, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+    return {
+      steamId,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
+      tier: tierForRating(1700).id,
+      rating: 1700,
+      kills: 0,
+      deaths: 0,
+      headshots: 0,
+      damage: 0,
+    };
   };
   const names = state.teams.map((t) => t.id);
   // Once the veto is done every map carries its rooms and the team playing CT

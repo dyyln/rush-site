@@ -4,6 +4,8 @@ const IDENTIFIER_SELECT = "http://specs.openid.net/auth/2.0/identifier_select"
 const CLAIMED_ID_RE = /^https?:\/\/steamcommunity\.com\/openid\/id\/(\d{17})\/?$/
 const STEAM_API = "https://api.steampowered.com"
 const CS2_APP_ID = 730
+// Base for community item images, such as profile backgrounds
+export const STEAM_ITEM_CDN = "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/"
 
 export type FetchFn = typeof fetch
 
@@ -158,6 +160,17 @@ export class SteamWebApi {
     })
     if (!r) return null
     return r.friendslist?.friends ?? []
+  }
+
+  // Full url of the player's equipped profile background, the still image even for animated ones.
+  // null when they have none equipped
+  async profileBackground(steamId: string): Promise<string | null> {
+    const r = await this.get<{ response?: { profile_background?: { image_large?: string } } }>(
+      "/IPlayerService/GetProfileItemsEquipped/v1/",
+      { steamid: steamId },
+    )
+    const path = r?.response?.profile_background?.image_large
+    return path ? `${STEAM_ITEM_CDN}${path}` : null
   }
 
   // Minutes played. null when the library is private

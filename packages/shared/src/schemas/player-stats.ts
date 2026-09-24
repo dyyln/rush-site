@@ -18,6 +18,8 @@ export type FavouriteWeapon = z.infer<typeof FavouriteWeaponSchema>
 
 export const ProfileExtrasSchema = z.object({
   favouriteWeapon: FavouriteWeaponSchema.nullable(),
+  // The player's equipped Steam profile background, null when none is equipped
+  backgroundUrl: z.string().url().nullable(),
 })
 export type ProfileExtras = z.infer<typeof ProfileExtrasSchema>
 
