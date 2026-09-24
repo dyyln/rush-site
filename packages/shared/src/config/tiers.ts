@@ -30,4 +30,4 @@ export function tierForRating(rating: number): TierBand {
   return band
 }
 
-export const LEADERBOARD_MIN_MATCHES = 20
+export const LEADERBOARD_MIN_MATCHES = 1

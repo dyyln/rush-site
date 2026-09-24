@@ -18,6 +18,11 @@ import { formatStat, winRate } from "@/lib/format";
 import { MODE_COPY, isMode } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import type { Leaderboard, LeaderboardRow } from "@/lib/types";
+
+// Says "1 match" or "N matches" depending on the count
+function matchCountLabel(count: number) {
+  return `${count} ${count === 1 ? "match" : "matches"}`;
+}
 import { useAsync } from "@/lib/useAsync";
 import { CONTAINS_MIN_LEN, leaderboardApi } from "./leaderboardApi";
 import { Medal } from "./Medal";
@@ -86,7 +91,7 @@ function buildColumns(opts: { podium: boolean; friendIds: Set<string>; jumpedId:
       header: "Rating",
       cell: (r) =>
         unplaced(r) ? (
-          <span className={styles.unranked} title={`${LEADERBOARD_MIN_MATCHES} matches to place`}>
+          <span className={styles.unranked} title={`${matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place`}>
             <TierChip unranked size="sm" />
             <RatingText value={r.rating} className="mono muted" />
           </span>
@@ -234,7 +239,7 @@ export function LeaderboardView() {
       <header className="page-header">
         <div>
           <h1>Leaderboard</h1>
-          <p>{LEADERBOARD_MIN_MATCHES} matches to place.</p>
+          <p>{matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place.</p>
         </div>
       </header>
 
@@ -320,7 +325,7 @@ export function LeaderboardView() {
                   highlight={(r) => r.steamId === user?.steamId}
                   empty={
                     friends
-                      ? `No placed friends yet. ${LEADERBOARD_MIN_MATCHES} matches to place.`
+                      ? `No placed friends yet. ${matchCountLabel(LEADERBOARD_MIN_MATCHES)} to place.`
                       : q
                         ? `No placed players match "${q}".`
                         : "No placed players yet."

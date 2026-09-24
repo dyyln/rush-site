@@ -110,7 +110,8 @@ describe("stats routes", () => {
   const login = async (steamId: string) => ({ rs_sid: h.app.signCookie(await h.ctx.sessions.create(steamId)) })
 
   async function rate(db: Db, steamId: string, mode: Mode, rating: number, matchesPlayed = 25) {
-    await db.insert(ratings).values({ steamId, mode, rating, rd: 80, volatility: 0.06, matchesPlayed, wins: 10, losses: matchesPlayed - 10 })
+    const wins = Math.min(matchesPlayed, 10)
+    await db.insert(ratings).values({ steamId, mode, rating, rd: 80, volatility: 0.06, matchesPlayed, wins, losses: matchesPlayed - wins })
   }
 
   async function newMatch(mode: Mode, status: "live" | "finished" | "ready", extra: Partial<typeof matches.$inferInsert> = {}) {
@@ -166,7 +167,7 @@ describe("stats routes", () => {
     await rate(h.db, ids[2]!, "aim1v1", 1450)
     await rate(h.db, ids[3]!, "aim1v1", 2300)
     // Unplaced and banned players are left out
-    await rate(h.db, ids[4]!, "aim1v1", 1500, 5)
+    await rate(h.db, ids[4]!, "aim1v1", 1500, 0)
     await rate(h.db, ids[5]!, "aim1v1", 1500)
     await h.db.insert(bans).values({ steamId: ids[5]!, reason: "test" })
 
@@ -177,8 +178,9 @@ describe("stats routes", () => {
 
     const res = await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/distribution", cookies: await login(ids[2]!) })
     expect(res.json().you).toEqual({ tier: "silver", rating: 1450, percentile: 50, placed: true })
+    // With no matches played yet, there is no rating to show at all
     const unplaced = await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/distribution", cookies: await login(ids[4]!) })
-    expect(unplaced.json().you).toMatchObject({ placed: false, percentile: 75 })
+    expect(unplaced.json().you).toBeUndefined()
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/nope/distribution" })).statusCode).toBe(404)
   })
 
@@ -188,7 +190,7 @@ describe("stats routes", () => {
     friendsOf = [f1, f2]
     await rate(h.db, me, "rush3v3", 1500)
     await rate(h.db, f1, "rush3v3", 1700)
-    await rate(h.db, f2, "rush3v3", 1400, 3)
+    // f2 has never played a match in this mode, so it has no rating row and is left out entirely
     await rate(h.db, stranger, "rush3v3", 2000)
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/rush3v3/friends" })).statusCode).toBe(401)
     const res = await h.app.inject({ method: "GET", url: "/leaderboard/rush3v3/friends", cookies: await login(me) })
@@ -197,7 +199,6 @@ describe("stats routes", () => {
     expect(body.rows.map((r: { steamId: string; rank: number | null; placed: boolean }) => [r.rank, r.placed, r.steamId])).toEqual([
       [1, true, f1],
       [2, true, me],
-      [null, false, f2],
     ])
   })
 
@@ -212,7 +213,7 @@ describe("stats routes", () => {
     await rate(h.db, me, "aim1v1", 1700)
     await rate(h.db, banned, "aim1v1", 1900)
     await h.db.insert(bans).values({ steamId: banned, reason: "test" })
-    await rate(h.db, unplaced, "aim1v1", 2500, 4)
+    await rate(h.db, unplaced, "aim1v1", 2500, 0)
 
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me" })).statusCode).toBe(401)
     const mine = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me?limit=2", cookies: await login(me) })).json()
@@ -226,7 +227,7 @@ describe("stats routes", () => {
     expect(tie).toMatchObject({ rank: 3, offset: 0, limit: 50 })
 
     const early = (await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(unplaced) })).json()
-    expect(early).toMatchObject({ placed: false, rank: null, offset: null, matches: 4, needed: 16 })
+    expect(early).toMatchObject({ placed: false, rank: null, offset: null, matches: 0, needed: 1 })
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(banned) })).json()).toMatchObject({
       placed: false,
       rank: null,
@@ -234,7 +235,7 @@ describe("stats routes", () => {
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me", cookies: await login(unrated) })).json()).toMatchObject({
       placed: false,
       matches: 0,
-      needed: 20,
+      needed: 1,
     })
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1/me?limit=0", cookies: await login(me) })).statusCode).toBe(400)
     expect((await h.app.inject({ method: "GET", url: "/leaderboard/nope/me", cookies: await login(me) })).statusCode).toBe(404)

@@ -116,7 +116,8 @@ describe("POST /webhooks/match/:matchId", () => {
     const profile = (await h.app.inject({ method: "GET", url: `/users/${a}/profile` })).json()
     expect(profile.user).toMatchObject({ steamId: a, trustLevel: "new", region: "eu" })
     const duel = profile.modes.find((x: { mode: string }) => x.mode === "aim1v1")
-    expect(duel).toMatchObject({ matches: 1, wins: 1, losses: 0, leaderboardRank: null, kd: 2.5, headshotPct: 0.6 })
+    // Placing after one match, so the first match already gives a rank
+    expect(duel).toMatchObject({ matches: 1, wins: 1, losses: 0, leaderboardRank: 1, kd: 2.5, headshotPct: 0.6 })
     expect(duel.history).toHaveLength(1)
     expect(duel.bestMaps[0]).toMatchObject({ matches: 1, wins: 1 })
     expect(profile.recentMatches[0]).toMatchObject({ matchId, result: "win", scoreFor: 16, scoreAgainst: 9, kills: 30 })

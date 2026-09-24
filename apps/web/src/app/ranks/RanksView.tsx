@@ -53,8 +53,8 @@ export function RanksView() {
           <h1>Ranks</h1>
           <p>
             Each mode has its own rating, calculated with Glicko-2. It moves after every match based on the result and how your
-            opponents are rated, and it shows from your first match. Play {LEADERBOARD_MIN_MATCHES} matches in a mode to appear on its
-            leaderboard.
+            opponents are rated, and it shows from your first match. Play {LEADERBOARD_MIN_MATCHES}{" "}
+            {LEADERBOARD_MIN_MATCHES === 1 ? "match" : "matches"} in a mode to appear on its leaderboard.
           </p>
         </div>
       </header>

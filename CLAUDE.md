@@ -42,7 +42,7 @@ A competitive platform for Counter-Strike 2 in the spirit of the old PvPRO (CS:G
 4. **Match flow**: match found, accept within 20 seconds, veto, server allocated, connect info shown. Declining or timing out gives a short queue cooldown. A player who never connects or leaves mid-match forfeits, takes the rating loss, and gets an escalating queue cooldown.
 5. **Ratings and tiers**: Glicko-2 per mode. Rating is visible from the first match, no placement phase. Tiers are Iron <1000, Bronze 1000 to 1299, Silver 1300 to 1599, Gold 1600 to 1899, Platinum 1900 to 2199, Elite 2200+. Bands live in config and will be tuned once the distribution is visible. No seasons at launch.
 6. **Profiles**: rating per mode, win rate, headshot %, rating history, best maps, match history, cup badges.
-7. **Leaderboards**: per mode, global. Minimum of 20 matches to place.
+7. **Leaderboards**: per mode, global. Minimum of 1 match to place.
 8. **Tournaments**: free daily and weekly cups per mode. Single elimination, Bo1 until the semis and a Bo3 final. Verified trust level required for every cup. No check-in. Bracket built from sign-ups, absent players forfeit round one. Server slots are first come first served with the ladder. Prizes are cosmetic profile badges. Leagues (round robin) are a later milestone.
 9. **Fair play**: trust levels, demo capture, rating rollback and bans. Details below.
 10. **Admin interface** at /admin, gated on a whitelist of SteamID64s in `ADMIN_STEAM_IDS`. Live view of queues per mode, active matches with server and connect info, hosts and slot capacity, recent webhooks and errors, user lookup with trust signals, and actions: kick a ticket from queue, cancel a match, ban or unban, adjust trust level.

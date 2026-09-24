@@ -63,7 +63,7 @@ export type ModeStats = {
   kd: number;
   history: RatingPoint[];
   bestMaps: MapStat[];
-  // null until the player has 20 matches in the mode
+  // null until the player has reached the leaderboard match minimum in the mode
   leaderboardRank: number | null;
   // Optional so older api responses still render
   streak?: Streak;
