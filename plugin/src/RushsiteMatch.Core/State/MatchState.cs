@@ -15,6 +15,8 @@ public sealed class MatchState
     public Dictionary<string, int> Score { get; init; } = new();
     public bool Recording { get; init; }
     public string? Arena { get; init; }
+    // Rush. True once rush_rooms_mismatch went out for this map.
+    public bool? RushRoomsMismatchSent { get; init; }
     // Rush only. Mirror of the rush_001.js front and wins per side.
     public int? RushFrontSlot { get; init; }
     public int? RushTWins { get; init; }

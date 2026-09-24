@@ -274,3 +274,7 @@ CounterStrikeSharp 1.0.374), `game_type 0`, `game_mode 6`, `changelevel rush_001
 `mp_team_intro_type = rush`, `mp_maxrounds = 15`, `mp_halftime = false`. A player joined, was put on T and spawned,
 and `Match_Start` fired. The map ships in the dedicated server depot. Not yet checked: round flow, tower capture,
 `round_end` reasons, the win panel, GOTV demo completeness, and the room names (`ent_find` needs `sv_cheats 1`).
+
+## Result: room draw control (24 Sep 2026)
+
+The room draw can be controlled. A modified `rush_001.js`, packed as a single-file VPK and named in gameinfo.gi above `Game csgo`, replaces Valve's script on a dedicated server. Rooms are sent by console chat, because `ent_fire` does nothing from a dedicated server console. Details, and what is still untested, are in docs/RUSH-ROOM-VETO.md under "Results".

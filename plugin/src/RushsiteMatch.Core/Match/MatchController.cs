@@ -57,6 +57,9 @@ public sealed class MatchController
     private FirstToScoreTracker? _firstTo;
     private RushScoreTracker? _rush;
     private Loadout? _loadout;
+    // Rush. Rooms picked in the veto for this map, null for Valve's random draw.
+    private RushRoomPlan? _roomPlan;
+    private bool _roomsMismatchSent;
 
     private int _round;
     // True from round_end until the next round starts. Kills in that gap belong to the round that just ended.
@@ -154,6 +157,8 @@ public sealed class MatchController
         _started = true;
         ApplyServerSetup();
         BeginMapWarmup();
+        LoadRushRooms();
+        FireRushRooms();
         _game.Log($"match {_cfg.MatchId} mode {_cfg.Mode} win condition {_cfg.WinCondition}. " +
                   (ManagesMatch ? "Plugin manages warmup and rounds." : "Valve's Rush rules. Plugin holds teams on their configured sides.") +
                   (_series is null ? "" : $" Series Bo{_series.BestOf} starting on map {MapNumber} {CurrentMapId}."));
@@ -206,6 +211,8 @@ public sealed class MatchController
                 st.RushRoundsPlayed ?? _round, decided);
         }
         _stats.Restore(st.Players);
+        LoadRushRooms();
+        _roomsMismatchSent = st.RushRoomsMismatchSent ?? false;
         _recording = st.Recording;
         if (_recording) MarkRecording();
         _currentArena = st.Arena;
@@ -215,6 +222,8 @@ public sealed class MatchController
             case MatchPhase.Warmup:
                 if (ManagesMatch) _game.ExecuteCommand("mp_warmup_pausetimer 1");
                 else HoldRushWarmup();
+                // Only before the match is live. Applying resets the script's game state.
+                FireRushRooms();
                 break;
             case MatchPhase.Live:
                 _countdown?.Close();
@@ -245,6 +254,35 @@ public sealed class MatchController
         _warmupHeld = true;
     }
 
+    // Rush. Reads this map's rooms from match.json. A bad list is logged and Valve's draw stands.
+    private void LoadRushRooms()
+    {
+        _roomPlan = null;
+        if (!IsRush || !_settings.RushRooms) return;
+        if (RushRoomPlan.TryParse(_cfg.RushRoomsFor(MapNumber), out var plan, out var error))
+            _roomPlan = plan;
+        else if (error is not null)
+            _game.Log($"ignoring rushRooms for map {MapNumber}: {error}. Valve's random draw stands.");
+    }
+
+    // Rush. Hands the picked rooms to our rush_001.js. Only in warmup, because applying resets the script's game state.
+    private void FireRushRooms()
+    {
+        if (_roomPlan is null || Phase != MatchPhase.Warmup) return;
+        _game.ExecuteCommand(_roomPlan.Command());
+        _game.Log($"rush rooms sent for map {MapNumber}: {string.Join(",", _roomPlan.Path)}.");
+    }
+
+    // Console command. Sends the rooms again, for testing on a server.
+    public string ResendRushRooms()
+    {
+        if (!IsRush) return "not a Rush match";
+        if (_roomPlan is null) return "no rushRooms for this map";
+        if (Phase != MatchPhase.Warmup) return "rooms can only be sent in warmup";
+        FireRushRooms();
+        return $"rooms sent: {string.Join(",", _roomPlan.Path)}";
+    }
+
     public void OnMapStart()
     {
         if (!_started) return;
@@ -252,6 +290,8 @@ public sealed class MatchController
         if (_mapLoadingSince is null)
         {
             if (ManagesMatch && Phase == MatchPhase.Warmup) ApplyAimSetup();
+            // The map reloaded in warmup and the script forgot the rooms.
+            if (IsRush && Phase == MatchPhase.Warmup) FireRushRooms();
             return;
         }
         // The next map of the series is up. Players reconnect and are counted again as they arrive.
@@ -260,6 +300,8 @@ public sealed class MatchController
         Phase = MatchPhase.Warmup;
         _game.ExecuteCommand(ModeCfgExec);
         BeginMapWarmup();
+        LoadRushRooms();
+        FireRushRooms();
         _game.Log($"map {MapNumber} of the series is up ({CurrentMapId}). Waiting for players.");
         SaveState();
     }
@@ -588,7 +630,7 @@ public sealed class MatchController
         _stats.Reset();
         _round = 0;
         _betweenRounds = false;
-        _sink.Enqueue(new MatchStarted { MapNumber = EventMapNumber });
+        _sink.Enqueue(new MatchStarted { MapNumber = EventMapNumber, RushRooms = _roomPlan?.Path });
         SaveState();
     }
 
@@ -619,8 +661,27 @@ public sealed class MatchController
         if (IsRush)
         {
             if (!isWarmup) OnRushMatchLive();
-            if (Phase == MatchPhase.Live) _currentArena = _game.DetectRushArena() ?? _currentArena;
+            if (Phase == MatchPhase.Live)
+            {
+                var detected = _game.DetectRushArena();
+                _currentArena = detected ?? _currentArena;
+                CheckRushRoom(detected);
+            }
         }
+    }
+
+    // Rush. Compares the room of the round about to be played with the veto. Reports the first difference per map.
+    private void CheckRushRoom(string? detected)
+    {
+        if (_roomPlan is null || _roomsMismatchSent || detected is null || _rush is null) return;
+        var expected = _roomPlan.ExpectedArena(_rush.FrontSlot, _rush.NextIsDecider);
+        if (expected is null || expected == detected) return;
+        _roomsMismatchSent = true;
+        var round = _round + 1;
+        _game.Log($"round {round} is in room {detected} but the veto put {expected} in slot {_rush.FrontSlot}. " +
+                  "The modified rush_001 script did not take.");
+        _sink.Enqueue(new RushRoomsMismatch(round, expected, detected, _roomPlan.Path) { MapNumber = EventMapNumber });
+        SaveState();
     }
 
     public void OnRoundEnd(Side winner, bool gameCommencing, bool isWarmup)
@@ -930,6 +991,8 @@ public sealed class MatchController
         _round = 0;
         _betweenRounds = false;
         _currentArena = null;
+        _roomPlan = null;
+        _roomsMismatchSent = false;
         _endDeadline = null;
         _pausedForDisconnect = false;
         _warmupHeld = false;
@@ -1023,6 +1086,7 @@ public sealed class MatchController
         Score = new Dictionary<string, int>(_teamScore),
         Recording = _recording,
         Arena = _currentArena,
+        RushRoomsMismatchSent = _roomsMismatchSent ? true : null,
         RushFrontSlot = _rush?.FrontSlot,
         RushTWins = _rush?.Wins[Side.T],
         RushCtWins = _rush?.Wins[Side.CT],
@@ -1059,6 +1123,7 @@ public sealed class MatchController
                $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))} " +
                $"connected {_cfg.AllowedSteamIds.Count - _presence.Missing.Count}/{_cfg.AllowedSteamIds.Count} countdown {countdown} " +
                $"recording {_recording}" + (IsRush ? $" arena {_currentArena ?? "?"} front {_rush!.FrontSlot} " +
+               $"rooms {(_roomPlan is null ? "random" : string.Join(",", _roomPlan.Path))}{(_roomsMismatchSent ? " MISMATCH" : "")} " +
                $"lineup {_cfg.AllowedSteamIds.Count - RushNotReady().Count}/{_cfg.AllowedSteamIds.Count} " +
                $"wrong side [{string.Join(",", WrongSidePlayers())}] warmup held {_warmupHeld}" : "");
     }

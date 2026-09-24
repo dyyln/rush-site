@@ -96,7 +96,8 @@ type MatchEvent =
   | { type: "server_ready" }
   | { type: "player_connected"; steamId: string }
   | { type: "player_disconnected"; steamId: string }
-  | { type: "match_started"; mapNumber?: number }   // a series sends it when each map goes live
+  | { type: "match_started"; mapNumber?: number; rushRooms?: number[] }   // a series sends it when each map goes live. rushRooms: Rush only, the 7 room ids castle to castle when the veto picked them
+  | { type: "rush_rooms_mismatch"; round: number; expected: string; detected: string; rushRooms: number[]; mapNumber?: number }   // Rush only, once per map. The room played is not the one the veto picked, so the modified script did not take
   | { type: "round_end"; round: number; winnerTeam: string; score: Record<string, number>; arena?: string; mapNumber?: number }   // winnerTeam may be "draw". arena only in rush
   | { type: "map_end"; mapNumber: number; mapId: string; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean }   // series only, every map including the last. winnerTeam is a team name, or "draw" if a Rush map ever ends level
   | { type: "match_end"; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean; maps?: SeriesMapResult[] }   // sent immediately at match end, demoUploaded is false when the upload is still running. In a series: once at series end, score is maps won, players are totals, maps lists every map played
@@ -109,6 +110,7 @@ type SeriesMapResult = { mapNumber: number; mapId: string; winnerTeam: string; s
 
 The plugin reads its match config from `match.json` written by the agent next to the server cfg:
 `{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition, series? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series` is the StartServerRequest block, copied as is. Both the Go agent and the DatHost driver write these.
+Optional and not written by the API yet: `rushRooms: number[]`, 5 room ids for Rush slots 1 to 5 from the room veto, at the top level or per `series.maps[n]`. See `docs/RUSH-ROOM-VETO.md` and the plugin README.
 In Rush the plugin holds warmup until every player is on their team's side, redirects wrong joins, and kicks after 3 refusals. It writes `match_state.json` beside match.json so a hot reload with the same matchId resumes without a second `server_ready`.
 
 ## API -> Web (WebSocket at `/ws`, JSON messages, auth via session cookie)

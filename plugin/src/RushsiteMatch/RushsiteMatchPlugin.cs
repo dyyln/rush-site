@@ -39,6 +39,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<bool> TryChangeTeam = new("rushsite_try_changeteam", "Also try ChangeTeam to put players on their side. Broken on CS2 1.41.8.2.", false);
     public FakeConVar<int> TeamJoinRefusals = new("rushsite_team_refusals", "Rush. Wrong side joins before the player is kicked.", 3);
     public FakeConVar<bool> HoldRushWarmup = new("rushsite_rush_hold_warmup", "Rush. Hold warmup until every player is in and on their side.", true);
+    public FakeConVar<bool> RushRooms = new("rushsite_rush_rooms", "Rush. Send the veto's rushRooms to the modified rush_001 script.", true);
     public FakeConVar<int> WebhookMaxAttempts = new("rushsite_webhook_max_attempts", "Delivery attempts per webhook event before it is dropped.", 10);
 
     private MatchController? _match;
@@ -75,6 +76,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         AddCommand("css_ready", "Explains that the match starts on its own", (p, info) => Reply(p, info, _ => _match!.ReadyHint()));
         AddCommand("rushsite_status", "Print match status", OnStatusCommand);
         AddCommand("rushsite_force_start", "Start an aim match now", OnForceStartCommand);
+        AddCommand("rushsite_rush_rooms_send", "Send this map's Rush rooms to the script again (warmup only)", OnRushRoomsSendCommand);
         AddCommand("rushsite_reload", "Reload match.json if no match is running", OnReloadCommand);
 
         AddTimer(1.0f, () =>
@@ -168,6 +170,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
             TryChangeTeam = TryChangeTeam.Value,
             TeamJoinRefusalsBeforeKick = Math.Max(1, TeamJoinRefusals.Value),
             HoldRushWarmup = HoldRushWarmup.Value,
+            RushRooms = RushRooms.Value,
         };
         var uploader = new HttpDemoUploader(msg => Logger.LogInformation("{Message}", msg));
         var store = new FileMatchStateStore(FileMatchStateStore.PathNextTo(path), msg => Logger.LogWarning("{Message}", msg));
@@ -342,6 +345,12 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     {
         if (player is not null) return;
         info.ReplyToCommand(_match?.ForceStart() == true ? "match started" : "force start only works in aim warmup");
+    }
+
+    private void OnRushRoomsSendCommand(CCSPlayerController? player, CommandInfo info)
+    {
+        if (player is not null) return;
+        info.ReplyToCommand(_match?.ResendRushRooms() ?? $"no match loaded. {_loadError}");
     }
 
     private void OnReloadCommand(CCSPlayerController? player, CommandInfo info)
