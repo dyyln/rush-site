@@ -38,7 +38,7 @@ export const EnvSchema = z.object({
 
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
-  // Set when web and api live on sibling subdomains, for example .rushsite.gg
+  // Set when web and api live on sibling subdomains, for example .duelrush.site
   COOKIE_DOMAIN: optionalString,
 
   STEAM_API_KEY: optionalString,

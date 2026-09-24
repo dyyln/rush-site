@@ -250,7 +250,7 @@ What would have to be true: a creator or an existing community commits a few hun
 
 ## 9. Other risks noted
 
-- **The name is undecided** (AimRift or DuelPoint). Do a trademark check before buying domains or ordering creator assets. (Low)
+- **The name is DuelRush** (duelrush.site). Do a trademark check before ordering creator assets. (Low)
 - **Ratings at launch.** Everyone starts at 1500 with a high RD and there is no placement phase. Early leaderboards reward grinding and smurfs. Buying a fresh Steam account is cheap, and the trust gate is the only defence. (Medium)
 - **No seasons.** Ratings freeze in place and the top of the board goes stale, which removes a re-engagement lever FACEIT and Valve both use. (Low)
 

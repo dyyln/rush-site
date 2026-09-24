@@ -47,7 +47,7 @@ public static class CountdownMarks
 // Chat lines the match plugin prints. Brand, team labels and the match link come from match.json.
 public sealed class MatchMessages
 {
-    public const string DefaultBrand = "rushsite";
+    public const string DefaultBrand = "DuelRush";
 
     private readonly MatchConfig _cfg;
 

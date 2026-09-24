@@ -34,7 +34,7 @@ export const NAME_SCHEMES: readonly NameScheme[] = [
     id: "duel",
     label: "D",
     name: "Duel path",
-    why: "Original and brand-led: works for AimRift or DuelPoint and names the climb, not a metal.",
+    why: "Original and brand-led: fits DuelRush and names the climb, not a metal.",
     names: ["Initiate", "Contender", "Duelist", "Challenger", "Paragon", "Zenith"],
   },
 ];

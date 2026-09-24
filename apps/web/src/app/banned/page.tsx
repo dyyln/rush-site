@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Account banned", robots: { index: fa
 
 type Props = { searchParams: Promise<{ until?: string; reason?: string; permanent?: string }> };
 
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@rushsite.dyyln.dev";
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@duelrush.site";
 
 // Shown instead of a session when a banned player signs in. React escapes the reason
 export default async function BannedPage({ searchParams }: Props) {
