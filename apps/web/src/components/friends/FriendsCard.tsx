@@ -42,7 +42,7 @@ export function FriendsCard({ canJoinQueue, ...invite }: FriendsCardProps) {
       title="Friends"
       actions={
         requests > 0 ? (
-          <Link href="/friends" className={styles.watch}>
+          <Link href="/friends?tab=requests" className={styles.watch}>
             {requests} request{requests === 1 ? "" : "s"}
           </Link>
         ) : undefined
@@ -95,9 +95,7 @@ export function FriendsCard({ canJoinQueue, ...invite }: FriendsCardProps) {
       )}
       {data && (
         <p className={styles.seeAll}>
-          <Link href="/friends">
-            {filtered.length > SHOWN ? `See all ${filtered.length} friends` : "See all friends"}
-          </Link>
+          <Link href="/friends">{filtered.length > SHOWN ? `See all ${filtered.length} friends` : "See all friends"}</Link>
         </p>
       )}
     </Card>

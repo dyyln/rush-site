@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { BRAND_NAME, type FriendRequest, type RecentPlayer } from "@rushsite/shared";
 import { FriendRow, SteamOnlyRow } from "@/components/friends/FriendRow";
@@ -11,6 +12,7 @@ import { reloadFriends, reloadPending, useFriends } from "@/components/friends/s
 import { useFriendInvite } from "@/components/party/useFriendInvite";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
@@ -26,6 +28,14 @@ function parseSteamId(input: string): string | null {
 }
 
 const STEAM_PAGE = 50;
+
+type FriendsTab = "friends" | "requests" | "recent";
+
+const SEARCH_PLACEHOLDER: Record<FriendsTab, string> = {
+  friends: "Search friends",
+  requests: "Search requests",
+  recent: "Search recent players",
+};
 
 const byName = <T extends { displayName: string }>(list: readonly T[]) =>
   [...list].sort((a, b) => a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }));
@@ -55,6 +65,7 @@ function ago(iso: string): string {
 }
 
 export function FriendsView() {
+  const params = useSearchParams();
   const { user, loading } = useSession();
   const { data, error } = useFriends(!!user);
   const recent = useAsync(() => (user ? api.friends.recent() : Promise.resolve([] as RecentPlayer[])), [user?.steamId]);
@@ -75,6 +86,7 @@ export function FriendsView() {
   if (!loading && !user) {
     return (
       <div className="container page">
+        <h1 className={styles.pageTitle}>Friends</h1>
         <Card title="Sign in to see your friends" tone="raised">
           <p className="muted">Your Steam friends who play here are added for you when you sign in.</p>
           <SignInLink />
@@ -149,6 +161,14 @@ export function FriendsView() {
   const steamExpanded = steamOpen || (searching && steamOnly.length > 0);
   const noMatch = <p className={styles.empty}>No one matches “{query.trim()}”.</p>;
 
+  const tabs: PageTab[] = [
+    { key: "friends", label: "Friends", href: "?" },
+    { key: "requests", label: "Requests", href: "?tab=requests", count: data?.incoming.length },
+    { key: "recent", label: "Recent", href: "?tab=recent" },
+  ];
+  const raw = params.get("tab");
+  const tab = (tabs.some((t) => t.key === raw) ? raw : "friends") as FriendsTab;
+
   const requestRow = (r: FriendRequest, dir: "in" | "out") => {
     const other = dir === "in" ? r.from : r.to;
     return (
@@ -192,169 +212,189 @@ export function FriendsView() {
 
   return (
     <div className="container page">
-      <header className="page-header">
-        <div>
-          <h1>Friends</h1>
-          <p>Invite friends to your party, challenge them, or watch their matches.</p>
-        </div>
+      <div className={styles.titleRow}>
+        <h1 className={styles.pageTitle}>Friends</h1>
         <Button variant="secondary" onClick={sync} loading={syncing}>
           Refresh from Steam
         </Button>
-      </header>
+      </div>
 
       <div className={styles.page}>
+        <PageTabs label="Friends" items={tabs} current={tab} />
+
         <div className={styles.pageSearch}>
-          <SearchBox value={query} onChange={setQuery} label="Search all friends" placeholder="Search friends, requests and players" />
+          <SearchBox value={query} onChange={setQuery} label={SEARCH_PLACEHOLDER[tab]} placeholder={SEARCH_PLACEHOLDER[tab]} />
         </div>
 
-        {(incoming.length > 0 || outgoing.length > 0) && (
-          <Section id="requests-heading" title="Requests" count={incoming.length + outgoing.length}>
-            {incoming.length > 0 && <ul className={styles.list}>{incoming.map((r) => requestRow(r, "in"))}</ul>}
-            {outgoing.length > 0 && (
-              <>
-                <h3 className={styles.sectionTitle}>Sent</h3>
-                <ul className={styles.list}>{outgoing.map((r) => requestRow(r, "out"))}</ul>
-              </>
+        {tab === "requests" && (
+          <>
+            <Section id="incoming-heading" title="Received" count={data ? incoming.length : undefined}>
+              {!data && !error ? (
+                <p className={styles.empty}>Loading requests…</p>
+              ) : !data ? (
+                <p className={styles.error}>Could not load requests.</p>
+              ) : data.incoming.length === 0 ? (
+                <p className={styles.empty}>No one has sent you a friend request.</p>
+              ) : incoming.length === 0 ? (
+                noMatch
+              ) : (
+                <ul className={styles.list}>{incoming.map((r) => requestRow(r, "in"))}</ul>
+              )}
+            </Section>
+            {data && (
+              <Section id="outgoing-heading" title="Sent" count={outgoing.length}>
+                {data.outgoing.length === 0 ? (
+                  <p className={styles.empty}>Requests you send wait here until they answer.</p>
+                ) : outgoing.length === 0 ? (
+                  noMatch
+                ) : (
+                  <ul className={styles.list}>{outgoing.map((r) => requestRow(r, "out"))}</ul>
+                )}
+              </Section>
             )}
-          </Section>
+          </>
         )}
 
-        <Section id="friends-heading" title={`Friends on ${BRAND_NAME}`} count={data ? friends.length : undefined}>
-          {!data && !error ? (
-            <p className={styles.empty}>Loading friends…</p>
-          ) : error && !data ? (
-            <p className={styles.error}>Could not load friends.</p>
-          ) : sortedFriends.length === 0 ? (
-            <p className={styles.empty}>
-              No friends yet. Steam friends who sign in here are added for you, or add players from your recent matches.
-            </p>
-          ) : friends.length === 0 ? (
-            noMatch
-          ) : (
-            <ul className={styles.list}>
-              {friends.map((f) => (
-                <FriendRow key={f.steamId} friend={f} actions={actions} joinable={joinable} />
-              ))}
-            </ul>
-          )}
-        </Section>
+        {tab === "friends" && (
+          <>
+            <Section id="friends-heading" title={`Friends on ${BRAND_NAME}`} count={data ? friends.length : undefined}>
+              {!data && !error ? (
+                <p className={styles.empty}>Loading friends…</p>
+              ) : error && !data ? (
+                <p className={styles.error}>Could not load friends.</p>
+              ) : sortedFriends.length === 0 ? (
+                <p className={styles.empty}>No friends yet. Steam friends who sign in here are added for you, or add players from your recent matches.</p>
+              ) : friends.length === 0 ? (
+                noMatch
+              ) : (
+                <ul className={styles.list}>
+                  {friends.map((f) => (
+                    <FriendRow key={f.steamId} friend={f} actions={actions} joinable={joinable} />
+                  ))}
+                </ul>
+              )}
+            </Section>
 
-        <Section id="recent-heading" title="Recent players" count={recent.status === "success" ? recentPlayers.length : undefined}>
-          {recent.status === "loading" ? (
-            <p className={styles.empty}>Loading…</p>
-          ) : (recent.data ?? []).length === 0 ? (
-            <p className={styles.empty}>Players from your last 20 matches show up here.</p>
-          ) : recentPlayers.length === 0 ? (
-            noMatch
-          ) : (
-            <ul className={styles.list}>
-              {recentPlayers.map((p) => (
-                <li key={p.steamId} className={styles.row}>
-                  <span className={styles.who}>
-                    <PresenceAvatar name={p.displayName} src={p.avatarUrl} presence="offline" />
-                    <span className={styles.names}>
-                      <Link href={`/profile/${p.steamId}`} className={styles.name}>
-                        {p.displayName}
-                      </Link>
-                      <span className={styles.presenceLine}>
-                        <span className={styles.presenceText}>
-                          {modeLabel(p.mode)} · {ago(p.playedAt)}
+            {data && (
+              <Card tone="flat" padded={false} aria-labelledby="steam-heading">
+                <div className={styles.sectionScroll}>
+                  <div className={styles.sectionHead}>
+                    <h2 id="steam-heading" style={{ flex: 1 }}>
+                      <button
+                        type="button"
+                        className={styles.disclosure}
+                        aria-expanded={steamExpanded}
+                        aria-controls="steam-list"
+                        onClick={() => setSteamOpen((v) => !v)}
+                        disabled={!data.steamListAvailable}
+                      >
+                        Steam friends not on {BRAND_NAME}
+                        <span className={styles.count}>{data.steamListAvailable ? steamOnly.length : "private"}</span>
+                        <svg className={styles.chevron} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </h2>
+                  </div>
+                  {!data.steamListAvailable ? (
+                    <p className={styles.empty}>Your Steam friends list is private, so we cannot suggest anyone.</p>
+                  ) : (
+                    steamExpanded && (
+                      <div id="steam-list">
+                        {sortedSteam.length === 0 ? (
+                          <p className={styles.empty}>Every Steam friend who plays here is already on your list.</p>
+                        ) : steamOnly.length === 0 ? (
+                          noMatch
+                        ) : (
+                          <>
+                            <p className={`muted ${styles.subtitle}`}>Send link copies your party link and opens the Steam chat.</p>
+                            <ul className={styles.list}>
+                              {steamOnly.slice(0, steamShown).map((f) => (
+                                <SteamOnlyRow key={f.steamId} friend={f} actions={actions} />
+                              ))}
+                            </ul>
+                            {steamOnly.length > steamShown && (
+                              <Button variant="ghost" block onClick={() => setSteamShown((n) => n + STEAM_PAGE)}>
+                                Show more ({steamOnly.length - steamShown} left)
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </Card>
+            )}
+
+            <Section id="add-heading" title="Add a friend">
+              <form className={styles.addForm} onSubmit={submitAdd} noValidate>
+                <label htmlFor="add-friend" className="visually-hidden">
+                  SteamID64 or Steam profile link
+                </label>
+                <input
+                  id="add-friend"
+                  inputMode="text"
+                  autoComplete="off"
+                  placeholder="SteamID64 or profile link"
+                  value={addValue}
+                  onChange={(e) => setAddValue(e.target.value)}
+                  aria-describedby="add-friend-hint"
+                  aria-invalid={!!addError || undefined}
+                />
+                <Button type="submit" loading={busy === "add-form"}>
+                  Send request
+                </Button>
+              </form>
+              <p id="add-friend-hint" className={addError ? styles.error : styles.hint} role={addError ? "alert" : undefined}>
+                {addError ?? "They need to have signed in here once."}
+              </p>
+            </Section>
+          </>
+        )}
+
+        {tab === "recent" && (
+          <Section id="recent-heading" title="Recent players" count={recent.status === "success" ? recentPlayers.length : undefined}>
+            {recent.status === "loading" ? (
+              <p className={styles.empty}>Loading…</p>
+            ) : (recent.data ?? []).length === 0 ? (
+              <p className={styles.empty}>Players from your last 20 matches show up here.</p>
+            ) : recentPlayers.length === 0 ? (
+              noMatch
+            ) : (
+              <ul className={styles.list}>
+                {recentPlayers.map((p) => (
+                  <li key={p.steamId} className={styles.row}>
+                    <span className={styles.who}>
+                      <PresenceAvatar name={p.displayName} src={p.avatarUrl} presence="offline" />
+                      <span className={styles.names}>
+                        <Link href={`/profile/${p.steamId}`} className={styles.name}>
+                          {p.displayName}
+                        </Link>
+                        <span className={styles.presenceLine}>
+                          <span className={styles.presenceText}>
+                            {modeLabel(p.mode)} · {ago(p.playedAt)}
+                          </span>
                         </span>
                       </span>
                     </span>
-                  </span>
-                  <span className={styles.actions}>
-                    <Button
-                      variant="secondary"
-                      disabled={p.requested || !!busy}
-                      loading={busy === `add:${p.steamId}`}
-                      onClick={() => add(p.steamId, p.displayName)}
-                      aria-label={p.requested ? `Request sent to ${p.displayName}` : `Add ${p.displayName} as a friend`}
-                    >
-                      {p.requested ? "Requested" : "Add"}
-                    </Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        {data && (
-          <Card tone="flat" padded={false} aria-labelledby="steam-heading">
-            <div className={styles.sectionScroll}>
-              <div className={styles.sectionHead}>
-                <h2 id="steam-heading" style={{ flex: 1 }}>
-                  <button
-                    type="button"
-                    className={styles.disclosure}
-                    aria-expanded={steamExpanded}
-                    aria-controls="steam-list"
-                    onClick={() => setSteamOpen((v) => !v)}
-                    disabled={!data.steamListAvailable}
-                  >
-                    Steam friends not on {BRAND_NAME}
-                    <span className={styles.count}>{data.steamListAvailable ? steamOnly.length : "private"}</span>
-                    <svg className={styles.chevron} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                </h2>
-              </div>
-              {!data.steamListAvailable ? (
-                <p className={styles.empty}>Your Steam friends list is private, so we cannot suggest anyone.</p>
-              ) : (
-                steamExpanded && (
-                  <div id="steam-list">
-                    {sortedSteam.length === 0 ? (
-                      <p className={styles.empty}>Every Steam friend who plays here is already on your list.</p>
-                    ) : steamOnly.length === 0 ? (
-                      noMatch
-                    ) : (
-                      <>
-                        <p className={`muted ${styles.subtitle}`}>Send link copies your party link and opens the Steam chat.</p>
-                        <ul className={styles.list}>
-                          {steamOnly.slice(0, steamShown).map((f) => (
-                            <SteamOnlyRow key={f.steamId} friend={f} actions={actions} />
-                          ))}
-                        </ul>
-                        {steamOnly.length > steamShown && (
-                          <Button variant="ghost" block onClick={() => setSteamShown((n) => n + STEAM_PAGE)}>
-                            Show more ({steamOnly.length - steamShown} left)
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          </Card>
+                    <span className={styles.actions}>
+                      <Button
+                        variant="secondary"
+                        disabled={p.requested || !!busy}
+                        loading={busy === `add:${p.steamId}`}
+                        onClick={() => add(p.steamId, p.displayName)}
+                        aria-label={p.requested ? `Request sent to ${p.displayName}` : `Add ${p.displayName} as a friend`}
+                      >
+                        {p.requested ? "Requested" : "Add"}
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
         )}
-
-        <Section id="add-heading" title="Add a friend">
-          <form className={styles.addForm} onSubmit={submitAdd} noValidate>
-            <label htmlFor="add-friend" className="visually-hidden">
-              SteamID64 or Steam profile link
-            </label>
-            <input
-              id="add-friend"
-              inputMode="text"
-              autoComplete="off"
-              placeholder="SteamID64 or profile link"
-              value={addValue}
-              onChange={(e) => setAddValue(e.target.value)}
-              aria-describedby="add-friend-hint"
-              aria-invalid={!!addError || undefined}
-            />
-            <Button type="submit" loading={busy === "add-form"}>
-              Send request
-            </Button>
-          </form>
-          <p id="add-friend-hint" className={addError ? styles.error : styles.hint} role={addError ? "alert" : undefined}>
-            {addError ?? "They need to have signed in here once."}
-          </p>
-        </Section>
       </div>
     </div>
   );
