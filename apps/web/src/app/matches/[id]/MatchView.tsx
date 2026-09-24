@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { connectDeadlineOf, isRushMode, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
+import { RUSH_ROOM_VETO, connectDeadlineOf, isRushMode, roomSlots, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -28,7 +28,6 @@ import { useLiveExtras } from "@/components/match/useLiveExtras";
 import { AcceptPanel, AllocatingPanel, CancelledPanel, ConnectPanel, VetoPanel } from "@/components/match/room/StagePanels";
 import { RoomResult } from "@/components/match/room/RoomResult";
 import { SeriesStrip } from "@/components/match/room/SeriesStrip";
-import { RoomsCard } from "@/components/rush/RoomsCard";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
@@ -166,8 +165,10 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
-      {isRushMode(m.mode) && stage !== "veto" && (
-        <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} flip={rushFlip(m)} />
+      {/* One Rush rooms card for a single map: who picked each room, then where play is and who holds what.
+          A series shows one per map in its map tab */}
+      {isRushMode(m.mode) && stage !== "veto" && !series && (
+        <MatchRushTrack m={m} rounds={m.rounds} sideOf={sideOf} picks={room.veto?.kind === "rooms" && room.veto.state.done ? roomSlots(room.veto.state, RUSH_ROOM_VETO.format) : null} />
       )}
 
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
@@ -299,7 +300,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
           <TeamScore team={b} side={sideOf(1)} />
         </Card>
       )}
-      {isRushMode(m.mode) && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
+      {isRushMode(m.mode) && mapNumber !== undefined && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
       {a && b && rounds.length > 0 && (
         <RoundTimeline
           rounds={rounds}

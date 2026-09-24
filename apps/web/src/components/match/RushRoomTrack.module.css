@@ -186,6 +186,21 @@
   font-weight: 400;
   color: var(--color-text-muted);
 }
+/* How the room got into the match, from the room veto */
+.pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+.pick[data-side="own"] svg {
+  color: var(--team-own);
+}
+.pick[data-side="enemy"] svg {
+  color: var(--team-enemy);
+}
 .defender {
   display: inline-flex;
   align-items: center;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type CSSProperties } from "react";
-import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RushRoom } from "@rushsite/shared";
+import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RoomSlot, type RushRoom } from "@rushsite/shared";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
@@ -31,6 +31,8 @@ type Props = {
   // Veto preview: empty slots show a placeholder and latestSlot, the slot the last step filled, animates in
   building?: { latestSlot: number | null };
   title?: string;
+  // How each slot got its room, from the room veto. Left out when the rooms were drawn by the map
+  picks?: readonly RoomSlot[];
 };
 
 type Visit = { round: number; team: RushTrackTeam | null; toward: RushSide | null };
@@ -125,7 +127,7 @@ export function buildRushTrack(rooms: readonly (number | null)[] | undefined, ro
 const SLOT_LABEL: Record<Slot["kind"], string> = { castle: "Castle", start: "Start room", mid: "Mid room" };
 
 
-export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "Room track" }: Props) {
+export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "Rooms", picks }: Props) {
   const headingId = useId();
   const listRef = useRef<HTMLOListElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -229,6 +231,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                   )}
                 </span>
                 <span className={styles.meta}>
+                  <PickLine pick={picks?.find((p) => p.slot === slot.index)} teams={teams} />
                   {def && (
                     <span className={styles.defender} data-side={def.side}>
                       <TeamMarker side={def.side} />
@@ -284,6 +287,30 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
   );
 }
 
+function pickedFromIds(ids: readonly number[]): RoomSlot[] {
+  return ids.map((id, slot) => ({
+    slot,
+    room: String(id),
+    source: slot === 0 || slot === ids.length - 1 ? "castle" : slot === START_SLOT ? "leftover" : "pick",
+  }));
+}
+
+// How a room got into the match: a team's pick, or the room left over after the bans
+function PickLine({ pick, teams }: { pick: RoomSlot | undefined; teams: readonly [RushTrackTeam, RushTrackTeam] }) {
+  if (!pick) return null;
+  if (pick.source === "leftover") return <span className={styles.pick}>Last room left</span>;
+  if (pick.source !== "pick") return null;
+  // Stored room ids say a room was picked, only the live veto state says by whom
+  if (pick.team === undefined) return <span className={styles.pick}>Picked</span>;
+  const team = teams[pick.team];
+  return (
+    <span className={styles.pick} data-side={team.side}>
+      <TeamMarker side={team.side} />
+      <span>Picked by {team.label}</span>
+    </span>
+  );
+}
+
 // Match page wrapper. mapNumber picks one map of a series, where each map is its own Rush match
 // The room play ended in. A match decided in Convoy ended in the room Convoy replaced at 7-7
 function endedIn(track: RushTrack): number | null {
@@ -309,12 +336,28 @@ function rushInputs(m: MatchDetail, mapNumber: number | undefined, sideOf: (i: n
   return { rooms: map ? map.rushRooms : m.rushRooms, live: m.status === "live" && (!map || map.status === "live"), teams };
 }
 
-export function MatchRushTrack({ m, rounds, mapNumber, sideOf }: { m: MatchDetail; rounds: MatchRound[]; mapNumber?: number; sideOf: (i: number) => TeamSide }) {
+export function MatchRushTrack({
+  m,
+  rounds,
+  mapNumber,
+  sideOf,
+  picks,
+}: {
+  m: MatchDetail;
+  rounds: MatchRound[];
+  mapNumber?: number;
+  sideOf: (i: number) => TeamSide;
+  picks?: readonly RoomSlot[] | null;
+}) {
   const inputs = rushInputs(m, mapNumber, sideOf);
   if (!inputs) return null;
-  // Before the first round only a known room draw is worth showing
-  if (rounds.length === 0 && !(inputs.live && inputs.rooms)) return null;
-  return <RushRoomTrack rooms={inputs.rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} />;
+  // Room ids from the server, or from the veto result until the server has them
+  const rooms = inputs.rooms ?? (picks?.every((p) => p.room) ? picks.map((p) => Number(p.room)) : undefined);
+  // The server stores room ids only when the room veto ran, so they are picks around a leftover start room
+  const shownPicks = picks ?? (inputs.rooms ? pickedFromIds(inputs.rooms) : undefined);
+  // Shown once the rooms are known or the first round is in
+  if (rounds.length === 0 && !rooms) return null;
+  return <RushRoomTrack rooms={rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} picks={shownPicks} />;
 }
 
 // True when the left team (teams[0]) defends the CT castle, so every room row draws CT castle first
