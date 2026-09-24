@@ -84,7 +84,7 @@ export function Dock() {
     value = page.value;
     action = page.action;
   } else if (!user) {
-    label = "Free for CS2";
+    label = "Free to play";
     value = "Sign in to queue";
     action = (
       <SignInLink plain className={styles.go}>
