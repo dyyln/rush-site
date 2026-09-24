@@ -4,6 +4,7 @@ using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using RushsiteMatch.Core.Match;
+using RushsiteMatch.Core.Runtime;
 
 namespace RushsiteMatch;
 
@@ -14,12 +15,17 @@ public sealed class CssGameServer : IGameServer
 {
     private readonly ILogger _logger;
     private readonly Func<bool> _tryChangeTeam;
+    private readonly HandlerTiming _timing;
 
-    public CssGameServer(ILogger logger, Func<bool> tryChangeTeam)
+    public CssGameServer(ILogger logger, Func<bool> tryChangeTeam, HandlerTiming timing)
     {
         _logger = logger;
         _tryChangeTeam = tryChangeTeam;
+        _timing = timing;
     }
+
+    public void NextFrame(string name, Action action) =>
+        Server.NextFrame(() => _timing.Run("next_frame " + name, action));
 
     public string CsgoDirectory => Path.Combine(Server.GameDirectory, "csgo");
 
@@ -91,7 +97,7 @@ public sealed class CssGameServer : IGameServer
     {
         if (!side.IsPlaying()) return;
         var team = (int)side;
-        Server.NextFrame(() =>
+        NextFrame("jointeam_redirect", () =>
         {
             var p = FindPlayer(steamId);
             if (p is null) return;

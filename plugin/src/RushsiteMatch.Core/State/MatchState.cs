@@ -99,3 +99,67 @@ public sealed class FileMatchStateStore : IMatchStateStore
     public static bool ShouldRestore(MatchState? state, MatchConfig cfg, bool hotReload) =>
         hotReload && state is not null && state.MatchId == cfg.MatchId && !string.IsNullOrEmpty(state.Phase);
 }
+
+// Writes state on a background task so serialising and file IO never run on the game thread.
+// Only the newest state matters, so a save that arrives while one is writing replaces any
+// state still waiting. One writer at a time keeps the file on the latest state.
+public sealed class BackgroundMatchStateStore : IMatchStateStore
+{
+    private readonly IMatchStateStore _inner;
+    private readonly Action<string> _log;
+    private readonly object _lock = new();
+    private readonly ManualResetEventSlim _idle = new(true);
+    private MatchState? _pending;
+    private bool _writing;
+
+    public BackgroundMatchStateStore(IMatchStateStore inner, Action<string>? log = null)
+    {
+        _inner = inner;
+        _log = log ?? (_ => { });
+    }
+
+    public void Save(MatchState state)
+    {
+        lock (_lock)
+        {
+            _pending = state;
+            if (_writing) return;
+            _writing = true;
+            _idle.Reset();
+        }
+        Task.Run(Drain);
+    }
+
+    // Reads straight from the inner store. Only used at load, before any save.
+    public MatchState? Load() => _inner.Load();
+
+    // Waits for pending writes. Returns false on timeout.
+    public bool Flush(TimeSpan timeout) => _idle.Wait(timeout);
+
+    private void Drain()
+    {
+        while (true)
+        {
+            MatchState next;
+            lock (_lock)
+            {
+                if (_pending is null)
+                {
+                    _writing = false;
+                    _idle.Set();
+                    return;
+                }
+                next = _pending;
+                _pending = null;
+            }
+            try
+            {
+                _inner.Save(next);
+            }
+            catch (Exception e)
+            {
+                _log($"could not save match state: {e.Message}");
+            }
+        }
+    }
+}

@@ -40,6 +40,11 @@ public interface IGameServer
 
     // Aim only. Gives each loadout weapon whose slot is empty. Never removes a weapon.
     void ApplyLoadout(string steamId, PlayerLoadout loadout);
+
+    // Runs the action on the next server frame, outside the event that asked for it.
+    // Event handlers can run inside a client's message processing, and CS2 kicks a client
+    // whose messages take too long. Slow follow-up work goes here.
+    void NextFrame(string name, Action action);
 }
 
 // What the plugin reads from player_death. Ids are null for bots, the world and unknown players.

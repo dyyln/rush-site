@@ -41,6 +41,22 @@ internal sealed class FakeGame : IGameServer
     public string? CurrentMapName { get; set; }
     public readonly List<(string SteamId, PlayerLoadout Loadout)> Loadouts = new();
     public void ApplyLoadout(string steamId, PlayerLoadout loadout) => Loadouts.Add((steamId, loadout));
+
+    // Off by default so next frame work runs at once, as most tests expect.
+    // With DeferFrames on it waits for RunFrame.
+    public bool DeferFrames;
+    public readonly List<(string Name, Action Action)> Frames = new();
+    public void NextFrame(string name, Action action)
+    {
+        if (DeferFrames) Frames.Add((name, action));
+        else action();
+    }
+    public void RunFrame()
+    {
+        var due = Frames.ToList();
+        Frames.Clear();
+        foreach (var (_, a) in due) a();
+    }
 }
 
 internal sealed class MemoryStateStore : RushsiteMatch.Core.State.IMatchStateStore

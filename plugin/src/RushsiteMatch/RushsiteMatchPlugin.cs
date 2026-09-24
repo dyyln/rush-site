@@ -4,11 +4,13 @@ using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
+using CounterStrikeSharp.API.Modules.Events;
 using CounterStrikeSharp.API.Modules.Timers;
 using Microsoft.Extensions.Logging;
 using RushsiteMatch.Core.Config;
 using RushsiteMatch.Core.Demo;
 using RushsiteMatch.Core.Match;
+using RushsiteMatch.Core.Runtime;
 using RushsiteMatch.Core.State;
 using RushsiteMatch.Core.Webhooks;
 
@@ -43,37 +45,48 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<bool> HoldRushWarmup = new("rushsite_rush_hold_warmup", "Rush. Hold Valve's warmup timer until the start countdown ends warmup.", true);
     public FakeConVar<bool> RushRooms = new("rushsite_rush_rooms", "Rush. Send the veto's rushRooms to the modified rush_001 script.", true);
     public FakeConVar<int> WebhookMaxAttempts = new("rushsite_webhook_max_attempts", "Delivery attempts per webhook event before it is dropped.", 10);
+    public FakeConVar<int> SlowHandlerMs = new("rushsite_slow_handler_ms", "Warn once per map when a plugin handler runs longer than this on the game thread. 0 turns it off.", 20);
 
     private MatchController? _match;
     private WebhookDispatcher? _webhooks;
     private HttpClientTransport? _transport;
     private CssGameServer? _game;
+    private HandlerTiming _timing = null!;
+    private BackgroundMatchStateStore? _store;
+    private bool _warmedUp;
     private string? _loadError;
     private bool _hotReload;
 
     public override void Load(bool hotReload)
     {
         _hotReload = hotReload;
-        _game = new CssGameServer(Logger, () => TryChangeTeam.Value);
+        _timing = new HandlerTiming(TimeSpan.FromMilliseconds(Math.Max(0, SlowHandlerMs.Value)), msg => Logger.LogWarning("{Message}", msg));
+        _game = new CssGameServer(Logger, () => TryChangeTeam.Value, _timing);
         WarnIfHotReloadEnabled();
+        PrepareCode();
 
-        RegisterListener<Listeners.OnMapStart>(_ => AddTimer(1.0f, EnsureMatch, TimerFlags.STOP_ON_MAPCHANGE));
-        RegisterListener<Listeners.OnClientAuthorized>(OnClientAuthorized);
+        RegisterListener<Listeners.OnMapStart>(_ =>
+        {
+            _timing.Threshold = TimeSpan.FromMilliseconds(Math.Max(0, SlowHandlerMs.Value));
+            _timing.NewMap();
+            AddTimer(1.0f, () => _timing.Run("map_start", EnsureMatch), TimerFlags.STOP_ON_MAPCHANGE);
+        });
+        RegisterListener<Listeners.OnClientAuthorized>((slot, id) => _timing.Run("client_authorized", () => OnClientAuthorized(slot, id)));
 
-        RegisterEventHandler<EventPlayerConnectFull>(OnPlayerConnectFull);
-        RegisterEventHandler<EventPlayerDisconnect>(OnPlayerDisconnect);
-        RegisterEventHandler<EventPlayerTeam>(OnPlayerTeam);
-        RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn);
-        RegisterEventHandler<EventRoundStart>(OnRoundStart);
-        RegisterEventHandler<EventRoundFreezeEnd>(OnRoundFreezeEnd);
-        RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
-        RegisterEventHandler<EventPlayerDeath>(OnPlayerDeath);
-        RegisterEventHandler<EventPlayerHurt>(OnPlayerHurt);
-        RegisterEventHandler<EventCsWinPanelMatch>(OnWinPanelMatch);
-        RegisterEventHandler<EventRoundAnnounceMatchStart>(OnMatchStartSignal);
-        RegisterEventHandler<EventBeginNewMatch>(OnBeginNewMatch);
+        On<EventPlayerConnectFull>("player_connect_full", OnPlayerConnectFull);
+        On<EventPlayerDisconnect>("player_disconnect", OnPlayerDisconnect);
+        On<EventPlayerTeam>("player_team", OnPlayerTeam);
+        On<EventPlayerSpawn>("player_spawn", OnPlayerSpawn);
+        On<EventRoundStart>("round_start", OnRoundStart);
+        On<EventRoundFreezeEnd>("round_freeze_end", OnRoundFreezeEnd);
+        On<EventRoundEnd>("round_end", OnRoundEnd);
+        On<EventPlayerDeath>("player_death", OnPlayerDeath);
+        On<EventPlayerHurt>("player_hurt", OnPlayerHurt);
+        On<EventCsWinPanelMatch>("cs_win_panel_match", OnWinPanelMatch);
+        On<EventRoundAnnounceMatchStart>("round_announce_match_start", OnMatchStartSignal);
+        On<EventBeginNewMatch>("begin_new_match", OnBeginNewMatch);
 
-        AddCommandListener("jointeam", OnJoinTeam, HookMode.Pre);
+        AddCommandListener("jointeam", (p, info) => _timing.Run("jointeam", () => OnJoinTeam(p, info)), HookMode.Pre);
         // Ready-up is automatic. The command only tells players so.
         AddCommand("css_ready", "Explains that the match starts on its own", (p, info) => Reply(p, info, _ => _match!.ReadyHint()));
         AddCommand("rushsite_status", "Print match status", OnStatusCommand);
@@ -81,22 +94,69 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         // Our rush_001 script answers each room set with one of these. Server console only.
         AddCommand("rushsite_rooms_applied", "Sent by the rush_001 script after it applied the rooms", (p, info) =>
         {
-            if (p is null) _match?.OnRushRoomsApplied(info.ArgString.Trim().Trim('"'));
+            if (p is null) _timing.Run("rushsite_rooms_applied", () => _match?.OnRushRoomsApplied(info.ArgString.Trim().Trim('"')));
         });
         AddCommand("rushsite_rooms_rejected", "Sent by the rush_001 script when it refused the rooms", (p, info) =>
         {
-            if (p is null) _match?.OnRushRoomsRejected(info.ArgString.Trim().Trim('"'));
+            if (p is null) _timing.Run("rushsite_rooms_rejected", () => _match?.OnRushRoomsRejected(info.ArgString.Trim().Trim('"')));
         });
         AddCommand("rushsite_rush_rooms_send", "Send this map's Rush rooms to the script again (warmup only)", OnRushRoomsSendCommand);
         AddCommand("rushsite_reload", "Reload match.json if no match is running", OnReloadCommand);
 
-        AddTimer(1.0f, () =>
+        AddTimer(1.0f, () => _timing.Run("tick", () =>
         {
             if (_match is null) EnsureMatch();
             _match?.Tick();
-        }, TimerFlags.REPEAT);
+        }), TimerFlags.REPEAT);
 
         if (hotReload) EnsureMatch();
+    }
+
+    private void On<T>(string name, GameEventHandler<T> handler) where T : GameEvent =>
+        RegisterEventHandler<T>((ev, info) => _timing.Run(name, () => handler(ev, info)));
+
+    // Compiles the plugin's own methods now, on load, instead of on first use during a match.
+    // Runs on the game thread because JIT can run static constructors of CounterStrikeSharp types.
+    private void PrepareCode()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var n = Warmup.PrepareAssembly(typeof(RushsiteMatchPlugin).Assembly);
+        Logger.LogInformation("warm-up: compiled {Count} plugin methods in {Ms} ms", n, sw.ElapsedMilliseconds);
+        // Core has no game types, so it compiles on a background thread.
+        Task.Run(() =>
+        {
+            try
+            {
+                var bg = System.Diagnostics.Stopwatch.StartNew();
+                var count = Warmup.PrepareAssembly(typeof(MatchController).Assembly);
+                Logger.LogInformation("warm-up: compiled {Count} core methods in {Ms} ms off the game thread", count, bg.ElapsedMilliseconds);
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning("warm-up of core methods failed: {Message}", e.Message);
+            }
+        });
+    }
+
+    // Plays one match against a do-nothing game server off the game thread, with a fresh copy of match.json.
+    // The lineup, countdown, chat, serializer and state paths are then warm before any player joins.
+    private void WarmMatchPaths(string path, MatchSettings settings)
+    {
+        if (_warmedUp) return;
+        _warmedUp = true;
+        Task.Run(() =>
+        {
+            try
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var events = Warmup.SimulateMatch(MatchConfigLoader.LoadFile(path), settings);
+                Logger.LogInformation("warm-up: simulated a match ({Events}) in {Ms} ms off the game thread", string.Join(",", events), sw.ElapsedMilliseconds);
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning("warm-up match simulation failed: {Message}", e.Message);
+            }
+        });
     }
 
     private void WarnIfHotReloadEnabled()
@@ -114,6 +174,8 @@ public sealed class RushsiteMatchPlugin : BasePlugin
 
     public override void Unload(bool hotReload)
     {
+        if (_store is not null && !_store.Flush(TimeSpan.FromSeconds(2)))
+            Logger.LogWarning("match state write still running at unload");
         var hooks = _webhooks;
         _webhooks = null;
         if (hooks is null) return;
@@ -186,12 +248,15 @@ public sealed class RushsiteMatchPlugin : BasePlugin
             RushRooms = RushRooms.Value,
         };
         var uploader = new HttpDemoUploader(msg => Logger.LogInformation("{Message}", msg));
-        var store = new FileMatchStateStore(FileMatchStateStore.PathNextTo(path), msg => Logger.LogWarning("{Message}", msg));
+        var fileStore = new FileMatchStateStore(FileMatchStateStore.PathNextTo(path), msg => Logger.LogWarning("{Message}", msg));
+        var store = new BackgroundMatchStateStore(fileStore, msg => Logger.LogWarning("{Message}", msg));
+        _store = store;
         var saved = store.Load();
         _match = new MatchController(cfg, settings, _game!, _webhooks, new SystemClock(), uploader, store);
+        WarmMatchPaths(path, settings);
         if (FileMatchStateStore.ShouldRestore(saved, cfg, _hotReload))
         {
-            Logger.LogWarning("plugin reloaded during match {MatchId}. Restoring state from {Path}.", cfg.MatchId, store.Path);
+            Logger.LogWarning("plugin reloaded during match {MatchId}. Restoring state from {Path}.", cfg.MatchId, fileStore.Path);
             _match.Restore(saved!);
         }
         else
@@ -265,12 +330,12 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         var id = Sid(ev.Userid);
         if (id is null) return HookResult.Continue;
         // The map and the game hand out their items during the spawn. Apply the loadout after them.
-        AddTimer(0.2f, () =>
+        AddTimer(0.2f, () => _timing.Run("spawn_loadout", () =>
         {
             var p = CssGameServer.HumanPlayers().FirstOrDefault(x => x.SteamID.ToString() == id);
             if (p is null || !p.PawnIsAlive) return;
             _match?.OnPlayerSpawn(id, SideExtensions.FromTeamNum(p.TeamNum));
-        }, TimerFlags.STOP_ON_MAPCHANGE);
+        }), TimerFlags.STOP_ON_MAPCHANGE);
         return HookResult.Continue;
     }
 
@@ -291,7 +356,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     private HookResult OnRoundFreezeEnd(EventRoundFreezeEnd ev, GameEventInfo info)
     {
         // Rush moves spawns during the round start. Read positions on the next frame.
-        Server.NextFrame(() => _match?.OnRoundFreezeEnd(CssGameServer.IsWarmup()));
+        _game!.NextFrame("round_freeze_end", () => _match?.OnRoundFreezeEnd(CssGameServer.IsWarmup()));
         return HookResult.Continue;
     }
 
