@@ -29,8 +29,9 @@ const STEPS: readonly VetoStep[] = [
   { action: "pick", team: "A", pool: "mid" },
   { action: "pick", team: "B", pool: "mid" },
 ];
-// Mid picks fill these slots in order: next to the start room first, alternating sides, then the outer rooms
-const MID_PICK_SLOTS = [2, 4, 1, 5] as const;
+// A team's mid picks go on its attacking side, next to the start room first, then the outer room.
+// Team A plays CT and attacks toward the T castle (slot 0), Team B plays T and attacks toward the CT castle
+const ATTACK_SLOTS: Record<VetoTeam, readonly number[]> = { A: [2, 1], B: [4, 5] };
 const START_SLOT = 3;
 const AUTO_MS = 1200;
 const SEED = 7;
@@ -63,7 +64,7 @@ function replay(choices: readonly number[]): Veto {
   const marks = new Map<RushRoom["id"], RoomMark>();
   let latestSlot: number | null = null;
   let result = "";
-  let picks = 0;
+  const picks: Record<VetoTeam, number> = { A: 0, B: 0 };
   choices.forEach((id, i) => {
     const step = STEPS[i]!;
     const room = POOLS[step.pool].find((r) => r.id === id);
@@ -74,7 +75,7 @@ function replay(choices: readonly number[]): Veto {
       marks.set(id, { state: "banned", team: step.team });
       result = `${team} banned ${room.displayName}.`;
     } else {
-      const slot = MID_PICK_SLOTS[picks++] ?? null;
+      const slot = ATTACK_SLOTS[step.team][picks[step.team]++] ?? null;
       marks.set(id, { state: "picked", team: step.team, ...(slot !== null ? { slot } : {}) });
       if (slot !== null) rooms[slot] = room.id as number;
       latestSlot = slot;
@@ -143,7 +144,7 @@ export function RushRoomVetoPreview() {
       <p className={styles.note}>
         <span className={styles.proto}>Prototype</span>
         Format not decided yet. Start room: 3 bans, the room left is played in slot 3. Mid rooms: ban, ban, pick, pick, ban, ban, pick, pick.
-        Picks fill slots 2, 4, 1, 5 in that order. Castles are fixed.
+        Each pick goes on the picking team's attacking side, next to the start room first: Team A (CT) fills slots 2 then 1, Team B (T) fills 4 then 5. Castles are fixed.
       </p>
 
       <RushRoomTrack title="Rooms this match" rooms={veto.rooms} rounds={[]} teams={TRACK_TEAMS} live={false} building={{ latestSlot: veto.latestSlot }} />
