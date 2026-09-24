@@ -24,7 +24,7 @@ export function NextCups() {
           Next cups
         </h2>
         <Link href="/tournaments" className={styles.more}>
-          All tournaments
+          All cups
         </Link>
       </div>
       {data.status === "error" && (

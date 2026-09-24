@@ -213,9 +213,9 @@ export function TournamentDetailView({ id }: { id: string }) {
     const notFound = data.error instanceof ApiError && data.error.status === 404;
     return (
       <div className="container page">
-        <Card title={notFound ? "Tournament not found" : "Could not load tournament"}>
+        <Card title={notFound ? "Cup not found" : "Could not load cup"}>
           <p className="muted">
-            <Link href="/tournaments">Back to tournaments</Link>
+            <Link href="/tournaments">Back to cups</Link>
           </p>
         </Card>
       </div>
@@ -271,7 +271,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
     <div className="container page">
       <nav aria-label="Breadcrumb">
         <Link href="/tournaments" className={styles.back}>
-          Tournaments
+          Cups
         </Link>
       </nav>
       <header className="page-header">
