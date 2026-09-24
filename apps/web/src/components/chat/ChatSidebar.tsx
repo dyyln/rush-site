@@ -41,8 +41,7 @@ function CloseIcon() {
   );
 }
 
-// Global chat in a sidebar. Open by default on desktop, closed on mobile.
-// Play shows chat in its own side panel, so the sidebar steps aside there
+// Global chat in a sidebar on every page, so every page keeps the same width. Open by default on desktop, closed on mobile
 export function ChatSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -53,7 +52,7 @@ export function ChatSidebar() {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const headingId = useId();
-  const hidden = (pathname?.startsWith("/banned") ?? false) || pathname === "/play";
+  const hidden = pathname?.startsWith("/banned") ?? false;
 
   // Desktop remembers the last choice. Mobile always starts closed
   useEffect(() => {

@@ -36,6 +36,8 @@ body {
    properties, older WebKit falls back to the pseudo-elements */
 html {
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  /* Room for the scrollbar on every page, so short and long pages line up */
+  scrollbar-gutter: stable;
   /* Focus and anchor jumps stop above the fixed dock */
   scroll-padding-bottom: calc(var(--dock-h) + var(--space-3));
 }

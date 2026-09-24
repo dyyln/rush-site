@@ -86,7 +86,7 @@ type ChatBodyProps = {
   className?: string;
 };
 
-// Global chat: message list and composer. The side panel and the Play rail both show it
+// Global chat: message list and composer, shown in the chat sidebar
 export function ChatBody({ open, onUnread, inputRef: givenInput, className }: ChatBodyProps) {
   const { user, loading: sessionLoading } = useSession();
   const [messages, setMessages] = useState<ChatMessage[]>([]);

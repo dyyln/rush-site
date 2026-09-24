@@ -352,7 +352,7 @@
   font-size: var(--text-lg);
 }
 
-/* Friends and chat */
+/* Friends */
 .rail {
   display: flex;
   flex-direction: column;
@@ -365,54 +365,17 @@
   .rail {
     position: sticky;
     top: var(--space-4);
-    height: calc(100dvh - var(--dock-h) - 2 * var(--space-4));
-    max-height: 760px;
+    max-height: calc(100dvh - var(--dock-h) - 2 * var(--space-4));
+    overflow-y: auto;
   }
 }
-.railTabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex: none;
-  border-bottom: 1px solid var(--color-border);
-}
-.railTabs > button {
-  min-height: var(--target-min);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--color-text-muted);
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.railTabs > button[aria-selected="true"] {
-  border-bottom-color: var(--color-accent);
-  color: var(--color-text);
-}
-.railTabs > button:focus-visible {
-  outline: none;
-  box-shadow: inset var(--focus-ring);
-}
-.railPanel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-}
-/* The friends card and chat sit flat inside the rail */
-.railPanel > :global(.glass) {
+/* The friends card sits flat inside the rail */
+.rail > :global(.glass) {
   border: 0;
   background: none;
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-}
-.chat {
-  min-height: 360px;
 }
 .howTo {
   display: grid;

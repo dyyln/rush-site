@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, TIERS, trustAtLeast, type Mode } from "@rushsite/shared";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
@@ -31,12 +31,11 @@ import { cancelCopy, describeError } from "@/lib/errors";
 import { useBackdrop } from "@/lib/useBackdrop";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import { CooldownLine } from "./CooldownLine";
-import { PlayChat } from "./PlayChat";
 import styles from "./play.module.css";
 
 
-// Play: the modes as picture tiles. The dock at the bottom of every page starts the queue for the picked ones,
-// and the party sits in the top bar
+// Play: the modes as picture tiles and friends on the right. The dock at the bottom of every page starts the queue
+// for the picked ones, and the party sits in the top bar
 export function PlayView() {
   const { user, loading } = useSession();
   const router = useRouter();
@@ -62,7 +61,6 @@ export function PlayView() {
   const me = profile.data ?? null;
   const service = useServiceStatus();
   const offered = offeredModes(service);
-  const [railTab, setRailTab] = useState<"friends" | "chat">("friends");
 
   const queuedModes = play.queue.modes.map((m) => m.mode);
   const queued = play.queue.state === "queued" && queuedModes.length > 0;
@@ -188,21 +186,9 @@ export function PlayView() {
           {me && <YourStats profile={me} />}
         </div>
 
-        <aside className={cx("glass", styles.rail)} aria-label={user ? "Friends and chat" : "How it works"}>
+        <aside className={cx("glass", styles.rail)} aria-label={user ? "Friends" : "How it works"}>
           {user ? (
-            <>
-              <div className={styles.railTabs} role="tablist" aria-label="Side panel">
-                <button type="button" role="tab" id="rail-friends" aria-controls="rail-panel" aria-selected={railTab === "friends"} onClick={() => setRailTab("friends")}>
-                  Friends
-                </button>
-                <button type="button" role="tab" id="rail-chat" aria-controls="rail-panel" aria-selected={railTab === "chat"} onClick={() => setRailTab("chat")}>
-                  Chat
-                </button>
-              </div>
-              <div id="rail-panel" role="tabpanel" aria-labelledby={`rail-${railTab}`} className={styles.railPanel}>
-                {railTab === "friends" ? <FriendsCard onParty={setGlobalParty} canJoinQueue={partySize === 1 && !queued && !active} /> : <PlayChat />}
-              </div>
-            </>
+            <FriendsCard onParty={setGlobalParty} canJoinQueue={partySize === 1 && !queued && !active} />
           ) : (
             <Card title="How it works" tone="flat">
               <ol className={styles.howTo}>
