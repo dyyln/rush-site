@@ -193,6 +193,14 @@ API_URL=https://$API_DOMAIN WEB_URL=https://$SITE_DOMAIN AGENT_URLS=http://local
 
 ## Updates
 
-- Web stack: `git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+- Web stack: deploys itself. `rushsite-autodeploy.timer` checks origin every minute for the branch checked out in `/srv/rushsite`, builds, and swaps the containers. A failed build or an unhealthy container leaves the previous version running and skips that commit until a newer push. Watch it with `journalctl -u rushsite-autodeploy -f`. Install once as root:
+
+  ```bash
+  cp /srv/rushsite/infra/systemd/rushsite-autodeploy.{service,timer} /etc/systemd/system/
+  install -o deploy -g deploy -m 755 /srv/rushsite/infra/scripts/autodeploy.sh /home/deploy/bin/rushsite-autodeploy
+  systemctl daemon-reload && systemctl enable --now rushsite-autodeploy.timer
+  ```
+
+  By hand: `git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
 - CS2: the agent handles it. It stops new allocations, waits for running matches to end, runs SteamCMD, then reopens.
 - Agent: replace the binary and `systemctl restart rushsite-agent`. `KillMode=process` leaves running CS2 servers alone.

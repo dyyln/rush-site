@@ -28,7 +28,7 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL}
       API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
       # Web and api sit on sibling subdomains so the session cookie needs a parent domain.
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN, for example .rushsite.example}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN, for example .duelrush.site}
     # Stays on loopback so the CS2 plugin on the host can post webhooks locally.
     ports: !override ["127.0.0.1:3001:3001"]
     logging: &logging

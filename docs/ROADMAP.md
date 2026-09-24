@@ -160,10 +160,10 @@ Dep: everything above. Six testers with real Steam accounts. Two admins in `ADMI
 
 ### 2.1 Launch readiness
 
-- [ ] **S. Decide the name, AimRift or DuelPoint.**
+- [x] **S. Decide the name.** DuelRush, at duelrush.site.
   - Search EUIPO and UKIPO in classes 9, 41 and 42.
-  - Check the .gg and .com domains and the Discord, X, YouTube and TikTok handles.
-  - Set the brand in `packages/shared/src/config/brand.ts`. Page titles still read "rushsite" (UX, Landing S3).
+  - Still to do: the Discord, X, YouTube and TikTok handles.
+  - Brand set in `packages/shared/src/config/brand.ts`, so page titles, the manifest and the plugin chat prefix read DuelRush.
   - Keep CS, Counter-Strike and Valve out of the name and logo.
 - [ ] **M. Legal pages** (mostly writing, plus a solicitor review for about €500 to €1,500):
   - Terms of service, including a minimum age of 16 to avoid parental consent across the EU

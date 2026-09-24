@@ -1,0 +1,17 @@
+# Pulls and redeploys the site when the checked out branch moves. Started by rushsite-autodeploy.timer.
+# Copy both units to /etc/systemd/system/, copy infra/scripts/autodeploy.sh to
+# /home/deploy/bin/rushsite-autodeploy, and enable the timer. The script keeps that copy current.
+[Unit]
+Description=rushsite autodeploy
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+Environment=REPO_DIR=/srv/rushsite
+ExecStart=/home/deploy/bin/rushsite-autodeploy
+# A cold build on a small VM takes several minutes.
+TimeoutStartSec=30min
+Nice=10

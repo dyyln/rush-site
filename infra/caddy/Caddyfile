@@ -7,6 +7,10 @@
 	reverse_proxy web:3000
 }
 
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
 # API and WebSocket at /ws. Caddy proxies upgrades without extra config.
 {$API_DOMAIN} {
 	encode zstd gzip

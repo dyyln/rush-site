@@ -48,11 +48,11 @@ public class ChatTests
     }
 
     [Fact]
-    public void PrefixFallsBackToTheCodename()
+    public void PrefixFallsBackToTheBrand()
     {
         var msg = new MatchMessages(Aim1v1());
-        Assert.Equal("rushsite", msg.BrandName);
-        Assert.Equal(" \x0E[rushsite]\x01", msg.Prefix);
+        Assert.Equal("DuelRush", msg.BrandName);
+        Assert.Equal(" \x0E[DuelRush]\x01", msg.Prefix);
         Assert.Null(msg.MatchUrl);
         Assert.Null(msg.LinkLine());
     }
@@ -87,7 +87,7 @@ public class ChatTests
         Assert.Equal("evil", MatchMessages.CleanText("\u0002ev\u0007il\n", 32));
         Assert.Equal("abc", MatchMessages.CleanText("abcdef", 3));
         var cfg = MatchConfigLoader.Parse(Json().Replace("\"winCondition\"", "\"brand\": { \"name\": \"  \" },\"winCondition\""));
-        Assert.Equal("rushsite", new MatchMessages(cfg).BrandName);
+        Assert.Equal("DuelRush", new MatchMessages(cfg).BrandName);
     }
 
     [Theory]
@@ -133,10 +133,10 @@ public class ChatTests
         var m = New(Aim1v1(), new MatchSettings { StartCountdown = TimeSpan.FromSeconds(10) });
         Join(m, A1, Side.CT, "Alice");
         Join(m, B1, Side.T, "Bob");
-        Assert.Contains(" [rushsite] All players are in. The match starts in 10 seconds.", _game.Chat);
+        Assert.Contains(" [DuelRush] All players are in. The match starts in 10 seconds.", _game.Chat);
         Tick(m, 9);
         var ticks = _game.Chat.Where(c => c.Contains("The match starts in ") && !c.Contains("seconds")).ToList();
-        Assert.Equal(new[] { 5, 4, 3, 2, 1 }.Select(n => $" [rushsite] The match starts in {n}."), ticks);
+        Assert.Equal(new[] { 5, 4, 3, 2, 1 }.Select(n => $" [DuelRush] The match starts in {n}."), ticks);
         Assert.Equal(Enumerable.Range(1, 10).Reverse().Select(n => $"The match starts in {n}"), _game.Center);
         Tick(m, 1);
         Assert.Equal(MatchPhase.Live, m.Phase);
@@ -175,18 +175,18 @@ public class ChatTests
         _game.Names.Remove(B1);
         m.OnPlayerDisconnected(B1, 1, "Bob\x07");
         Assert.Contains("mp_pause_match", _game.Commands);
-        Assert.Contains(" [rushsite] Bob disconnected. 3:00 to return or they forfeit. The match pauses at the next freeze time.", _game.Chat);
+        Assert.Contains(" [DuelRush] Bob disconnected. 3:00 to return or they forfeit. The match pauses at the next freeze time.", _game.Chat);
         Assert.Contains("Bob disconnected. 3:00 to return", _game.Center);
         Assert.Contains(_game.RawChat, c => c.Contains("\x0F" + "Bob disconnected.\x01"));
 
         _game.Connected.RemoveAll(p => p.SteamId == B1);
         Tick(m, 175);
         var away = _game.Chat.Where(c => c.Contains("has ")).ToList();
-        Assert.Equal(new[] { "2:00", "1:00", "0:30", "0:10" }.Select(t => $" [rushsite] Bob has {t} left to return or they forfeit."), away);
+        Assert.Equal(new[] { "2:00", "1:00", "0:30", "0:10" }.Select(t => $" [DuelRush] Bob has {t} left to return or they forfeit."), away);
         Assert.Equal(MatchPhase.Live, m.Phase);
 
         Join(m, B1, Side.T);
-        Assert.Contains(" [rushsite] Bob is back. All players are in. Unpausing.", _game.Chat);
+        Assert.Contains(" [DuelRush] Bob is back. All players are in. Unpausing.", _game.Chat);
         Assert.Contains("mp_unpause_match", _game.Commands);
         var count = _game.Chat.Count;
         Tick(m, 30);
@@ -203,7 +203,7 @@ public class ChatTests
         _game.Names[B3] = "Cara";
         m.OnPlayerDisconnected(B3);
         // Rush never pauses. The forfeit timer still applies.
-        Assert.Contains(" [rushsite] Cara disconnected. 1:30 to return or they forfeit.", _game.Chat);
+        Assert.Contains(" [DuelRush] Cara disconnected. 1:30 to return or they forfeit.", _game.Chat);
         Assert.DoesNotContain("mp_pause_match", _game.Commands);
     }
 

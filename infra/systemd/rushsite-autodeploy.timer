@@ -1,0 +1,11 @@
+# Checks origin once a minute. A run that is still building makes the next tick wait.
+[Unit]
+Description=rushsite autodeploy every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

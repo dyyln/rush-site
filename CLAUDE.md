@@ -1,7 +1,7 @@
 # Project brief: rushsite
 
 > Codename: **rushsite**. Used for the repo, packages and env prefixes.
-> The public brand (AimRift vs DuelPoint) is undecided. It lives in one config value and nowhere else.
+> The public brand is **DuelRush**, at **duelrush.site**. The name lives in one config value (`packages/shared/src/config/brand.ts`) and nowhere else.
 
 ## What we're building
 
@@ -136,7 +136,6 @@ Deferred, but the schema should leave room. Decisions already made:
 
 ## Open questions
 
-- Final name and domain (AimRift vs DuelPoint)
 - Proving Rush end to end on a community server, and whether overriding the map script can control the room draw
 - CounterStrikeSharp is broken on the current CS2 build (fix PRs #1432, #1433 open). Pin a working build or wait for a release
 - demoparser2 cannot yet parse rush_001 demos

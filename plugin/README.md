@@ -268,7 +268,7 @@ Relative paths resolve against `game/csgo`. If `RUSHSITE_MATCH_ID` is set and di
 - `map` is optional. It is the launch map, and each `series.maps` entry has the same shape: `{ id, displayName?, workshopId?, mapName?, loadout? }`. Each needs a `workshopId` of digits or a `mapName` of letters, digits and `_`.
 - `loadout` is optional: `{ primary?: { ct?, t? }, secondary?: { ct?, t? }, armor?: "none" | "kevlar" | "kevlar_helmet" }`. Weapons are `weapon_` engine names. A missing side leaves that slot empty, and armor defaults to kevlar and helmet.
 - `series` is optional: `{ bestOf, maps, startMapNumber, wins, demoUploads }`. `bestOf` is odd, `maps` and `demoUploads` have `bestOf` entries, `startMapNumber` is in range, and `wins` uses team names and does not already decide the series.
-- `brand` is optional: `{ name?, siteUrl? }`. `name` is the chat prefix, `[rushsite]` when missing. `siteUrl` is the web root for the match link printed at match end. A `siteUrl` that is not an absolute http(s) URL is ignored and no link is printed. Neither field fails the load.
+- `brand` is optional: `{ name?, siteUrl? }`. `name` is the chat prefix, `[DuelRush]` when missing. `siteUrl` is the web root for the match link printed at match end. A `siteUrl` that is not an absolute http(s) URL is ignored and no link is printed. Neither field fails the load.
 - `slug` is optional. The match link is `<siteUrl>/matches/<slug>`, or `<siteUrl>/matches/<matchId>` without it.
 - A team `displayName`, when set, is used in chat. Otherwise chat says `Team <name>`.
 

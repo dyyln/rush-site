@@ -214,7 +214,7 @@ export function PlayMockup() {
                 {menu === "invite" && (
                   <span className={styles.popover} role="dialog" aria-label="Invite">
                     <strong className={styles.popTitle}>Invite to party</strong>
-                    <span className={cx(styles.link, "mono")}>rushsite.gg/invite/k3v9-q2</span>
+                    <span className={cx(styles.link, "mono")}>duelrush.site/invite/k3v9-q2</span>
                     <span className={styles.popRow}>
                       <button type="button" className={styles.smallBtn}>
                         Copy link
