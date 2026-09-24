@@ -174,25 +174,12 @@
   font-weight: 700;
 }
 
-/* Countdown ring on the hero's right while sign ups are open */
+/* Start countdown on the hero's right while sign ups are open, a bigger StepClock */
 .countdown {
-  --cup-ring-size: 148px;
+  min-width: 200px;
 }
-.ringLabel {
-  font-family: var(--font-display);
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  margin-bottom: var(--space-1);
-}
-.ringTime {
-  font-size: calc(var(--cup-ring-size) * 0.2);
-  font-weight: 500;
-  color: var(--color-text);
-}
-.ringTimeLong {
-  font-size: calc(var(--cup-ring-size) * 0.14);
+.countdown :global(.mono) {
+  font-size: calc(var(--text-3xl) * 1.3);
 }
 
 /* Section headings sit on the scene, so they are full strength */
@@ -283,6 +270,10 @@
     text-align: left;
   }
   .countdown {
-    --cup-ring-size: 124px;
+    min-width: 0;
+    width: 100%;
+  }
+  .countdown > div {
+    align-items: flex-start;
   }
 }

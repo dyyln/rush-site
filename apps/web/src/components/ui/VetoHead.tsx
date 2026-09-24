@@ -50,7 +50,13 @@ export function VetoHead({ id, eyebrow, turn, next, headline, sub, notes, stepDe
   );
 }
 
-// Seconds left in big numbers over a bar that drains with them. Long waits read as m:ss
+// Seconds left in big numbers over a bar that drains with them. Long waits read as m:ss, an hour or more as h:mm:ss
+function clockText(sec: number): string {
+  const ss = String(sec % 60).padStart(2, "0");
+  if (sec < 3600) return `${Math.floor(sec / 60)}:${ss}`;
+  return `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}:${ss}`;
+}
+
 export function StepClock({
   until,
   totalSec,
@@ -80,9 +86,7 @@ export function StepClock({
       data-mine={mine || undefined}
       aria-hidden="true"
     >
-      <span className={cx(styles.clockValue, "mono")}>
-        {sec === null ? "--" : totalSec > 99 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` : sec}
-      </span>
+      <span className={cx(styles.clockValue, "mono")}>{sec === null ? "--" : totalSec > 99 ? clockText(sec) : sec}</span>
       <span className={styles.clockLabel}>{totalSec > 99 && label === "sec left" ? "left" : label}</span>
       <span className={styles.clockBar}>
         <span style={{ transform: `scaleX(${share})` }} />
