@@ -182,6 +182,9 @@ export type UserSearchHit = UserCard & { lastLoginAt: string; trustLevel: TrustL
 
 export type Health = { ok: boolean; latencyMs: number | null; error?: string };
 
+// The commit the live API image was built from. Null outside a deployed build.
+export type BuildInfo = { sha: string | null; subject: string | null; builtAt: string | null };
+
 export type OverviewView = {
   generatedAt: string;
   queue: { mode: Mode; tickets: number; players: number; longestWaitSec: number }[];

@@ -76,6 +76,44 @@
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
+.build {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+.buildLabel {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.buildSha {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+.buildSha:hover {
+  color: var(--color-accent-hover);
+}
+.buildSubject,
+.buildTime {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.buildSubject {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .live {
   display: inline-flex;
   align-items: center;

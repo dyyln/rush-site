@@ -113,6 +113,11 @@ services:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
+      # Set by infra/scripts/autodeploy.sh. Empty in dev.
+      args:
+        BUILD_SHA: ${BUILD_SHA:-}
+        BUILD_SUBJECT: ${BUILD_SUBJECT:-}
+        BUILD_TIME: ${BUILD_TIME:-}
     image: rushsite/api:${IMAGE_TAG:-dev}
     restart: unless-stopped
     environment: *api-env

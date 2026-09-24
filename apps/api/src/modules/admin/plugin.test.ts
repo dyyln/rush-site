@@ -200,6 +200,7 @@ afterEach(async () => {
 })
 
 const GETS = [
+  "/admin/build",
   "/admin/overview",
   "/admin/queue",
   "/admin/matches",

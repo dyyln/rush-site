@@ -49,6 +49,11 @@ COPY --from=build /out ./
 RUN chmod -R a+rX /corepack && chown -R node:node /app
 USER node
 WORKDIR /app/apps/api
+# Commit stamp shown in /admin. Last so a new commit only changes this layer.
+ARG BUILD_SHA=
+ARG BUILD_SUBJECT=
+ARG BUILD_TIME=
+ENV BUILD_SHA=$BUILD_SHA BUILD_SUBJECT=$BUILD_SUBJECT BUILD_TIME=$BUILD_TIME
 EXPOSE 3001
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \
   CMD wget -qO- http://127.0.0.1:3001/health >/dev/null || exit 1

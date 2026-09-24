@@ -11,6 +11,7 @@ import type {
   AdminCandidateView,
   AdminListView,
   AdminView,
+  BuildInfo,
   EventView,
   HostView,
   MatchDetailView,
@@ -51,6 +52,15 @@ async function mocked<T>(fn: () => T): Promise<T> {
 const action = async (fn: () => ActionResult["audit"]): Promise<ActionResult> => ({ ok: true, audit: await mocked(fn) });
 
 export const adminApi = {
+  build(): Promise<BuildInfo> {
+    if (isMock)
+      return mocked(() => ({
+        sha: "652cedf1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7",
+        subject: "Backdrop parallax toned down: 5px at most instead of 12px, and a slower follow",
+        builtAt: new Date(Date.now() - 42 * 60_000).toISOString(),
+      }));
+    return api.get("/admin/build");
+  },
   overview(): Promise<OverviewView> {
     if (isMock) return mocked(() => mockAdmin.overview());
     return api.get("/admin/overview");

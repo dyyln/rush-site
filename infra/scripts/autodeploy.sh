@@ -56,6 +56,10 @@ main() {
     docker image inspect "rushsite/$img:$tag" >/dev/null 2>&1 && docker tag "rushsite/$img:$tag" "rushsite/$img:prev"
   done
 
+  # Stamped into the api image and shown in /admin
+  BUILD_SHA="$new" BUILD_SUBJECT="$(git log -1 --format=%s "$new")" BUILD_TIME="$(date -u +%FT%TZ)"
+  export BUILD_SHA BUILD_SUBJECT BUILD_TIME
+
   if ! docker compose build api web; then
     echo "build failed for ${new:0:7}, site left on ${old:0:7}"
     git reset -q --hard "$old"

@@ -1,6 +1,7 @@
 import { MODES, SteamId64Schema, TrustLevelSchema, UuidSchema } from "@rushsite/shared"
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { z } from "zod"
+import { buildInfo } from "../../build.js"
 import { fallbackCard, iso, type AdminStore } from "./store.js"
 import type {
   AdminPluginOptions,
@@ -176,6 +177,9 @@ export function registerRoutes(
   }
 
   const activeMatches = () => store.listMatches(ACTIVE_STATUSES, ACTIVE_LIMIT)
+
+  // Which commit is live, for the admin sidebar
+  app.get("/admin/build", async () => buildInfo())
 
   app.get("/admin/overview", async (): Promise<OverviewView> => {
     const at = now()
