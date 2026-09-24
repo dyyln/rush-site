@@ -310,7 +310,7 @@
 }
 @media (min-width: 1100px) {
   .statRow {
-    grid-template-columns: repeat(6, auto);
+    grid-template-columns: repeat(7, auto);
     justify-content: space-between;
   }
 }
@@ -361,6 +361,11 @@
 }
 .formDots {
   align-items: center;
+}
+.favouriteKills {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
 }
 .up {
   color: var(--color-win);

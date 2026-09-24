@@ -20,7 +20,7 @@ import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { api, ApiError } from "@/lib/api";
-import { formatStat, signed, winRate } from "@/lib/format";
+import { formatStat, winRate } from "@/lib/format";
 import { MODE_ART, MODE_COPY, modeLabel } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
 import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, BadgeKind, CupCadence, ProfileBadge } from "@/lib/types";
@@ -215,27 +215,20 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
 }
 
 function ModeDetail({ stats, recent, weapon }: { stats: ModeStats; recent: MatchSummary[]; weapon: FavouriteWeapon | null }) {
-  const last = stats.history.at(-1)?.rating ?? stats.rating;
-  const first = stats.history[0]?.rating ?? stats.rating;
-  const delta = last - first;
   // Last five results in this mode, oldest on the left
   const recentForm = recent.slice(0, 5).reverse();
   return (
     <div className="stack">
       {/* Straight on the page, so every line is full-strength text */}
       <dl className={styles.statRow}>
-        <Stat
-          label="Rating"
-          value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />}
-          sub={`${signed(delta)} over ${stats.history.length} matches`}
-        />
+        <Stat label="Rating" value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />} />
+        <Stat label="Matches" value={stats.matches} />
         <Stat label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
         <Stat label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
-        <Stat label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
+        <Stat label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} />
         <Stat
           label="Form"
           value={recentForm.length > 0 ? <FormDots results={recentForm.map((m) => ({ id: m.matchId, result: m.result }))} className={styles.formDots} /> : "--"}
-          sub={recentForm.length > 0 ? `Last ${recentForm.length}` : undefined}
         />
         {weapon && (
           <Stat
@@ -244,9 +237,9 @@ function ModeDetail({ stats, recent, weapon }: { stats: ModeStats; recent: Match
               <span className={styles.favourite}>
                 <WeaponIcon name={weapon.weapon} size={28} className={styles.favouriteIcon} />
                 {weaponLabel(weapon.weapon)}
+                <span className={styles.favouriteKills}>{weapon.kills} kills</span>
               </span>
             }
-            sub={`${weapon.kills} kills, all modes`}
           />
         )}
       </dl>
