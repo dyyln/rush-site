@@ -47,8 +47,19 @@
   cursor: pointer;
   position: relative;
 }
-.hit:hover .seg {
-  filter: brightness(1.2);
+.hit:hover .seg,
+.hit[data-shown] .seg {
+  filter: brightness(1.25);
+}
+.hit[data-shown]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-text-muted);
 }
 .hit[data-selected]::after {
   content: "";
@@ -80,38 +91,6 @@
   color: var(--color-text-muted);
   white-space: nowrap;
   pointer-events: none;
-}
-.panelWrap:empty {
-  display: none;
-}
-.panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-}
-.caret {
-  position: absolute;
-  top: -7px;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  background: var(--color-surface-2);
-  border-left: 1px solid var(--color-border);
-  border-top: 1px solid var(--color-border);
-  transform: rotate(45deg);
-}
-.panelHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.nav {
-  display: flex;
-  gap: var(--space-1);
-  flex: none;
 }
 .roundTitle {
   display: flex;
@@ -153,10 +132,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-.iconBtn.iconBtn {
-  padding: 0;
-  gap: 0;
 }
 
 /* Rush graph under the segments. One cell per round, lined up with its segment */
