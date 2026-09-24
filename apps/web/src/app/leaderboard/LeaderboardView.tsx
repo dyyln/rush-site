@@ -98,7 +98,7 @@ function buildColumns(opts: { podium: boolean; friendIds: Set<string>; jumpedId:
             <RatingText value={r.rating} className="mono muted" />
           </span>
         ) : (
-          <TierChip tier={r.tier} rating={r.rating} size="sm" />
+          <TierChip tier={r.tier} rating={r.rating} rank={r.rank} size="sm" />
         ),
       align: "right",
       skeleton: "chip",

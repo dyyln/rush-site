@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
-import { CHAT_GLOBAL_CHANNEL, CHAT_MAX_LENGTH, TIERS, type ChatMessage, type ChatMuteStatus } from "@rushsite/shared";
+import { CHAT_GLOBAL_CHANNEL, CHAT_MAX_LENGTH, TIERS, type ChatMessage, type ChatMuteStatus, type TierId } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { SignInLink } from "@/components/ui/SignInLink";
+import { TierEmblem } from "@/components/ui/TierEmblem";
 import { useSession } from "@/lib/session";
 import { useVisibleInterval } from "@/lib/useVisibleInterval";
 import { getRealtime } from "@/lib/ws";
@@ -53,9 +54,7 @@ function MessageRow({ message: m, canModerate, onModerate }: { message: ChatMess
           {m.author.admin && <Badge tone="accent">Admin</Badge>}
           {tier && (
             <span className={styles.tier} data-tier={m.author.tier} title={`${tier} tier`}>
-              <svg viewBox="0 0 10 10" aria-hidden="true">
-                <path d="M5 0l5 5-5 5-5-5z" fill="currentColor" />
-              </svg>
+              <TierEmblem tier={m.author.tier as TierId} size={14} />
               <span className="visually-hidden">{tier} tier</span>
             </span>
           )}

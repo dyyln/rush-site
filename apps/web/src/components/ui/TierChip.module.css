@@ -20,9 +20,19 @@
   gap: var(--space-1);
 }
 .mark {
-  width: 8px;
-  height: 8px;
+  flex: none;
+  width: 16px;
+  height: 16px;
   align-self: center;
+  margin: -2px 0;
+}
+.sm .mark {
+  width: 13px;
+  height: 13px;
+}
+.place {
+  font-weight: 600;
+  letter-spacing: 0;
 }
 .rating {
   font-size: 0.8em;

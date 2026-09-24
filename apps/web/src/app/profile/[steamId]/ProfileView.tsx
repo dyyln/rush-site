@@ -142,7 +142,7 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
         <span className="eyebrow">{MODE_COPY[mode].label}</span>
       </span>
       <span className={styles.ratingValue}>
-        {stats && stats.matches > 0 ? <TierChip tier={stats.tier} rating={stats.rating} /> : <TierChip unranked />}
+        {stats && stats.matches > 0 ? <TierChip tier={stats.tier} rating={stats.rating} rank={stats.leaderboardRank} /> : <TierChip unranked />}
       </span>
       <span className={styles.ratingSub}>
         {stats && stats.matches > 0 ? (stats.leaderboardRank ? `Rank #${stats.leaderboardRank}` : "Unplaced") : "\u00a0"}

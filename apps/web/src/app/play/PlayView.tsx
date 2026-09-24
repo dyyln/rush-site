@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode } from "@rushsite/shared";
+import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, TIERS, trustAtLeast, type Mode } from "@rushsite/shared";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { readFlag, writeFlag } from "@/components/profile/flags";
@@ -329,8 +329,9 @@ function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
   }
   return (
     <span className={styles.standing}>
-      <TierChip tier={s.tier} rating={s.rating} size="sm" link={false} />
-      {s.leaderboardRank && <span className="mono">#{s.leaderboardRank}</span>}
+      <TierChip tier={s.tier} rating={s.rating} rank={s.leaderboardRank} size="sm" link={false} />
+      {/* The top tier's chip already shows the place */}
+      {s.leaderboardRank && s.tier !== TIERS[TIERS.length - 1]!.id && <span className="mono">#{s.leaderboardRank}</span>}
     </span>
   );
 }

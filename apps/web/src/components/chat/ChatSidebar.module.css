@@ -151,8 +151,8 @@
 
 .tier {
   display: inline-flex;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   color: var(--tier-iron);
 }
 .tier[data-tier="bronze"] {
