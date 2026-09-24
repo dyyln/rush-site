@@ -1,0 +1,73 @@
+/* Sizes mirror the match room so the real page lands in place */
+.chip {
+  border-radius: var(--radius-sm);
+}
+.button {
+  border-radius: var(--radius-md);
+}
+/* Stands in for the map art: a dark panel the shade darkens further */
+.art {
+  background: var(--color-surface-2);
+}
+/* One line of the hero title: its clamp times its line height */
+.title {
+  height: calc(clamp(1.75rem, 4vw, 2.75rem) * 1.05);
+  border-radius: var(--radius-sm);
+}
+.meta {
+  min-height: 1.3125rem;
+  font-size: var(--text-sm);
+}
+.heading {
+  margin-block: 0.2rem;
+}
+
+/* A team name line in the score strip */
+.teamName {
+  min-height: 1.5em;
+}
+
+/* Tab row and tab panel, spaced like the post-match tabs */
+.below {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* The post-match tab row: 44px tabs over a hairline */
+.tabs {
+  display: flex;
+  gap: var(--space-6);
+  border-bottom: 1px solid rgb(255 255 255 / 0.16);
+}
+.tab {
+  display: inline-flex;
+  align-items: flex-end;
+  min-height: var(--target-min);
+  margin-bottom: -1px;
+  padding-bottom: var(--space-2);
+}
+
+/* Table rows at the scoreboard's heights: 42px header, 52px player rows */
+.tableHead,
+.tableRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+}
+.tableHead {
+  height: 42px;
+  border-bottom: 1px solid var(--color-border);
+}
+.tableRow {
+  height: 52px;
+}
+.tableRow + .tableRow {
+  border-top: 1px solid var(--color-border);
+}
+.stats {
+  display: flex;
+  gap: var(--space-4);
+  margin-left: auto;
+}
