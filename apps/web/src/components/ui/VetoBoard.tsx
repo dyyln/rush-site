@@ -7,6 +7,7 @@ import { VetoSummary } from "@/components/play/VetoSummary";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { MapCard, type MapCardState, type MapCardVoter } from "./MapCard";
 import { Timer } from "./Timer";
+import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "./VetoTurn";
 import { cx } from "./cx";
 import styles from "./VetoBoard.module.css";
 
@@ -33,7 +34,9 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
   const voteCounts = new Map<string, number>();
   Object.values(state.votes).forEach((m) => voteCounts.set(m, (voteCounts.get(m) ?? 0) + 1));
   const actingTeam = step ? state.teams[step.team] : null;
-  const pending = actingTeam ? actingTeam.steamIds.filter((id) => !(id in state.votes)) : [];
+  const turn = vetoTurn(state, myTeam, mySteamId);
+  const next = nextIsMine(state, myTeam);
+  const waiting = turn === "voted" ? waitingOn(state, mySteamId, names) : null;
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote && frozenSec === undefined);
   const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
 
@@ -79,17 +82,19 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
 
   return (
     <section className={styles.board} aria-labelledby="veto-heading">
-      <header className={styles.header}>
+      <header className={cx(styles.header, !state.done && turnClass.band)} data-turn={turn}>
         <div>
           <p className="eyebrow">
             Map veto{step ? `, step ${state.stepIndex + 1} of ${state.steps.length}` : ""}
           </p>
+          <VetoTurnChip turn={turn} next={next} />
           <h2 id="veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
             {headline}
           </h2>
           <p className={styles.sub} aria-live="polite">
             {sub}
           </p>
+          {waiting && <p className={styles.sub}>{waiting}.</p>}
           {lastAuto && !state.done && (
             <p className={styles.sub} role="status">
               Time ran out. {mapName(mode, lastAuto.mapId)} was auto-{lastAuto.action === "ban" ? "banned" : "picked"}.
@@ -110,7 +115,8 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
           return (
             <li
               key={i}
-              className={cx("glass", styles.step, done && styles.stepDone, current && styles.stepCurrent, s.team === myTeam ? styles.stepUs : styles.stepThem)}
+              className={cx("glass", styles.step, turnClass.step, done && styles.stepDone, current && styles.stepCurrent, s.team === myTeam ? styles.stepUs : styles.stepThem)}
+              data-owner={s.team === myTeam ? "own" : "enemy"}
               aria-current={current ? "step" : undefined}
             >
               <span className={styles.stepAction}>{s.action}</span>
@@ -121,7 +127,7 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
         })}
       </ol>
 
-      <ul className={styles.grid} role="list">
+      <ul className={cx(styles.grid, turnClass.grid)} data-turn={turn} role="list">
         {state.pool.map((mapId) => {
           const cs = cardState(mapId);
           const selectable = myTurn && cs.state === "available" && !!onVote;
@@ -146,11 +152,6 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
         })}
       </ul>
 
-      {actingTeam && pending.length > 0 && (
-        <p className={styles.pending}>
-          Waiting on {pending.map((id) => (id === mySteamId ? "you" : names[id] ?? "a player")).join(", ")}
-        </p>
-      )}
     </section>
   );
 }

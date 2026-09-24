@@ -16,6 +16,7 @@ import {
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
+import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
 import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
@@ -69,7 +70,9 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
   const phases = state.phases ?? [];
   const phaseAt = (i: number) => phases[state.steps[i]?.phase ?? -1];
   const actingTeam = step ? state.teams[step.team] : null;
-  const pending = actingTeam ? actingTeam.steamIds.filter((id) => !(id in state.votes)) : [];
+  const turn = vetoTurn(state, myTeam, mySteamId);
+  const next = nextIsMine(state, myTeam);
+  const waiting = turn === "voted" ? waitingOn(state, mySteamId, names) : null;
   const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
   const counts = new Map<string, number>();
   Object.values(state.votes).forEach((r) => counts.set(r, (counts.get(r) ?? 0) + 1));
@@ -113,11 +116,12 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
 
   return (
     <section className={styles.board} aria-labelledby="series-room-veto-heading">
-      <header className={styles.header}>
+      <header className={cx(styles.header, !state.done && turnClass.band)} data-turn={turn}>
         <div>
           <p className="eyebrow">
             Room pick{cur ? `, map ${cur.mapNumber}, step ${mapSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${mapSteps.length}` : ""}
           </p>
+          <VetoTurnChip turn={turn} next={next} />
           <h2 id="series-room-veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
             {headline}
           </h2>
@@ -183,7 +187,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
             const h = state.history[i];
             const kind = phaseAt(i)?.kind ?? "mid";
             return (
-              <li key={i} className={cx(styles.step, doneStep && styles.stepDone, currentStep && styles.stepCurrent)} data-side={sideOf(s.team)} aria-current={currentStep ? "step" : undefined}>
+              <li key={i} className={cx(styles.step, turnClass.step, doneStep && styles.stepDone, currentStep && styles.stepCurrent)} data-side={sideOf(s.team)} data-owner={sideOf(s.team)} aria-current={currentStep ? "step" : undefined}>
                 <span className={styles.stepAction}>{STEP_LABEL[kind]}</span>
                 <span className={styles.stepTeam}>{myTeam === null ? state.teams[s.team].id : s.team === myTeam ? "You" : "Opp"}</span>
                 {h && <span className="visually-hidden">{keyLabel(h.mapId)}</span>}
@@ -194,7 +198,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
       )}
 
       {cur?.kind === "side" && (
-        <div className={own.sides} role="group" aria-label={`Side for map ${cur.mapNumber}`}>
+        <div className={cx(own.sides, turnClass.grid)} data-turn={turn} role="group" aria-label={`Side for map ${cur.mapNumber}`}>
           {(["ct", "t"] as const).map((play) => {
             const key = sideKey(cur.mapNumber, play);
             const voters = votersFor(key);
@@ -231,7 +235,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
       )}
 
       {pool.length > 0 && (
-        <ul className={cx(styles.grid, own.grid)} role="list">
+        <ul className={cx(styles.grid, own.grid, turnClass.grid)} data-turn={turn} role="list">
           {pool.map((room) => {
             const h = state.history.find((e) => e.mapId === room);
             const onMap = h ? phaseAt(h.step)?.mapNumber : undefined;
@@ -265,9 +269,6 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
         </ul>
       )}
 
-      {step && pending.length > 0 && (
-        <p className={styles.sub}>Waiting on {pending.map((id) => (id === mySteamId ? "you" : (names[id] ?? "a player"))).join(", ")}</p>
-      )}
     </section>
   );
 }

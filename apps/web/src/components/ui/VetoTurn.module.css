@@ -1,0 +1,122 @@
+/* The veto header as a band in the acting team's colour. Your turn glows, opponents' turn is amber and calm */
+.band {
+  position: relative;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  transition: background-color var(--duration-normal) var(--ease), border-color var(--duration-normal) var(--ease),
+    box-shadow var(--duration-normal) var(--ease);
+}
+.band[data-turn="mine"] {
+  border-color: var(--color-accent);
+  border-left-color: var(--color-accent-hover);
+  background: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface-2));
+  box-shadow: 0 0 0 1px var(--color-accent), 0 0 28px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+.band[data-turn="voted"] {
+  border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  border-left-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-2));
+}
+.band[data-turn="theirs"] {
+  border-color: color-mix(in srgb, var(--team-enemy) 40%, transparent);
+  border-left-color: var(--team-enemy);
+  background: color-mix(in srgb, var(--team-enemy) 12%, var(--color-surface-2));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .band[data-turn="mine"] {
+    animation: turn-glow 1.6s var(--ease) infinite alternate;
+  }
+}
+@keyframes turn-glow {
+  from {
+    box-shadow: 0 0 0 1px var(--color-accent), 0 0 12px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 1px var(--color-accent-hover), 0 0 32px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  }
+}
+/* The timer ring follows the acting team */
+.band[data-turn="theirs"] :global(circle:last-of-type) {
+  stroke: var(--team-enemy);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+.chip[data-turn="mine"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent-hover);
+  color: var(--color-text-on-accent);
+}
+.chip[data-turn="voted"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+.chip[data-turn="theirs"] {
+  border-color: var(--team-enemy);
+  color: var(--team-enemy);
+}
+.next {
+  border-style: dashed;
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+
+/* Cards rest while the other team acts, so nothing looks clickable */
+.grid[data-turn="theirs"] > *,
+.grid[data-turn="watching"] > * {
+  opacity: 0.62;
+  filter: saturate(0.6);
+  transition: opacity var(--duration-normal) var(--ease), filter var(--duration-normal) var(--ease);
+}
+
+/* Steps in the owner's colour: yours filled purple, the opponents' outlined amber. The current one pulses.
+   Doubled class so it wins over each board's own step styles */
+.step.step[data-owner="own"] {
+  background: color-mix(in srgb, var(--team-own) 24%, var(--color-surface-2));
+  border-color: color-mix(in srgb, var(--team-own) 55%, transparent);
+  color: var(--color-text);
+}
+.step.step[data-owner="enemy"] {
+  background: transparent;
+  border-color: var(--team-enemy);
+  color: var(--color-text);
+}
+.step.step[aria-current="step"] {
+  opacity: 1;
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .step.step[aria-current="step"] {
+    animation: step-pulse 1.2s var(--ease) infinite alternate;
+  }
+}
+@keyframes step-pulse {
+  from {
+    outline-color: color-mix(in srgb, var(--color-text) 35%, transparent);
+  }
+  to {
+    outline-color: var(--color-text);
+  }
+}
