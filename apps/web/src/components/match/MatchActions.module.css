@@ -12,72 +12,52 @@
     width: 100%;
   }
 }
-.hint {
-  flex: 1 1 100%;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.popWrap {
-  display: inline-flex;
-}
-.popover {
-  position: fixed;
-  z-index: var(--z-modal);
-  width: min(360px, calc(100vw - 32px));
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--glass-strong);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--card-radius);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
-}
-/* Focus lands on the panel itself when it opens, its controls keep their rings */
-.popover:focus {
-  outline: none;
-}
-.popTitle {
-  font-size: var(--text-md);
-}
-.steps {
-  margin: 0;
-  padding-left: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-}
-.steps code {
-  font-size: var(--text-xs);
-  overflow-wrap: anywhere;
-}
-.command {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-left: var(--space-3);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-.command code {
-  flex: 1;
-  min-width: 0;
-  padding: var(--space-2) 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-sm);
-  user-select: all;
-}
-.copyBtn.copyBtn {
-  padding: 0;
-  gap: 0;
-  flex: none;
-}
-.note {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
 .actions svg {
   flex: none;
+}
+
+/* Why an action is unavailable, shown on hover and keyboard focus. The button stays focusable
+   (aria-disabled) so keyboard users can reach the reason too */
+.tipWrap {
+  position: relative;
+  display: inline-flex;
+}
+.tipWrap > button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.tip {
+  position: absolute;
+  z-index: var(--z-toast);
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: var(--space-2) var(--space-3);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease),
+    visibility 0s linear var(--duration-fast);
+}
+.tipWrap:hover > .tip,
+.tipWrap:focus-within > .tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease),
+    visibility 0s;
 }

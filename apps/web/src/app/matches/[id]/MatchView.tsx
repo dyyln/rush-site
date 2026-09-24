@@ -7,7 +7,6 @@ import { RUSH_ROOM_VETO, connectDeadlineOf, isRushMode, roomSlots, type MatchMap
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
@@ -114,7 +113,6 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
   const names = useMemo(() => Object.fromEntries(base.teams.flatMap((t) => t.players.map((p) => [p.steamId, p.displayName]))), [base.teams]);
   const [a, b] = m.teams;
   const teamInfo = a && b ? ([0, 1] as const).map((i) => ({ name: m.teams[i]!.name, label: m.teams[i]!.displayName ?? m.teams[i]!.name, side: sideOf(i) })) : null;
-  const roomUrl = typeof window === "undefined" ? "" : `${window.location.origin}/matches/${m.slug ?? m.id}`;
   // Scores and stats once the server is up or rounds are in
   const scored = SCORED.includes(stage) || m.rounds.length > 0 || finished;
 
@@ -137,7 +135,6 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
                 {!series && <DemoActions matchId={m.id} demo={m.demo} />}
               </>
             )}
-            {roomUrl && <CopyButton text={roomUrl}>Copy room link</CopyButton>}
             <ShareButton matchId={m.slug ?? m.id} />
             {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
           </div>
