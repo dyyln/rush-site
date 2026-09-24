@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding-block: var(--space-2) var(--space-7);
+  padding-block: var(--space-2) var(--space-8);
 }
 .back {
   display: inline-flex;
