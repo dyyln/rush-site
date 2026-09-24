@@ -146,7 +146,13 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
           const current = cur?.mapNumber === mp.mapNumber;
           const done = state.done || (!!cur && mp.mapNumber < cur.mapNumber);
           // The left team is team 0. It plays CT when the CT castle is drawn on the left, as on the match page
-          const flip = mp.ctTeam === 0;
+          // Until a map's sides are set its castles are open. While a team picks, the side hovered or voted draws them grey
+          const sideStep = current && cur?.kind === "side";
+          const shown = sideStep ? (previewRoom ?? myVote ?? null) : null;
+          const shownPlay = shown ? sideOfKey(shown) : null;
+          const previewCt: TeamIndex | null = shownPlay && cur ? (shownPlay === "ct" ? cur.team : other(cur.team)) : null;
+          const castles = mp.ctTeam !== null ? "set" : previewCt !== null ? "preview" : sideStep ? "choosing" : "unset";
+          const flip = (mp.ctTeam ?? previewCt) === 0;
           const playOf = (t: TeamIndex): Play | null => (mp.ctTeam === null ? null : mp.ctTeam === t ? "ct" : "t");
           return (
             <li key={mp.mapNumber} className={cx(own.map, current && own.mapCurrent, done && own.mapDone)} aria-current={current ? "step" : undefined}>
@@ -175,7 +181,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   {done && <span className="visually-hidden">, done</span>}
                 </span>
               </div>
-              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? (previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)) : null} flip={flip} compact />
+              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? (previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)) : null} flip={flip} castles={castles} compact />
             </li>
           );
         })}
@@ -215,6 +221,10 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                 className={cx("glass", own.side, selectable && own.sideActive, voted && own.sideVoted)}
                 data-play={play}
                 onClick={selectable ? () => onVote?.(key) : undefined}
+                onMouseEnter={selectable ? () => previewOf(key)(true) : undefined}
+                onMouseLeave={selectable ? () => previewOf(key)(false) : undefined}
+                onFocus={selectable ? () => previewOf(key)(true) : undefined}
+                onBlur={selectable ? () => previewOf(key)(false) : undefined}
                 disabled={!selectable}
                 aria-pressed={voted}
                 aria-label={label}
