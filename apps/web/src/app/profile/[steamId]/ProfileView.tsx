@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { RANKED_MODES as MODES, isRushMode, type Mode } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
@@ -17,7 +16,6 @@ import { BestMaps } from "@/components/profile/BestMaps";
 import { CupBadges } from "@/components/profile/CupBadges";
 import { BadgeEmblem, cadenceFromName } from "@/components/profile/BadgeEmblem";
 import { FormDots } from "@/components/ui/FormDots";
-import { StatTile } from "@/components/ui/StatTile";
 import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
@@ -25,21 +23,14 @@ import { api, ApiError } from "@/lib/api";
 import { formatStat, signed, winRate } from "@/lib/format";
 import { MODE_ART, MODE_COPY, modeLabel } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
-import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, TrustLevel, BadgeKind, CupCadence, ProfileBadge } from "@/lib/types";
+import type { FavouriteWeapon, MatchSummary, ModeStats, Profile, Streak, BadgeKind, CupCadence, ProfileBadge } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSession } from "@/lib/session";
-import { TrustChip } from "@/components/trust/TrustChip";
 import { MyReports } from "@/components/review/MyReports";
 import { WeaponIcon, weaponLabel } from "@/components/icons";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { MatchHistory } from "./MatchHistory";
 import styles from "./profile.module.css";
-
-const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
-  new: { label: "New", tone: "neutral" },
-  verified: { label: "Verified", tone: "info" },
-  trusted: { label: "Trusted", tone: "win" },
-};
 
 export function ProfileView({ steamId }: { steamId: string }) {
   const data = useAsync(() => api.profile(steamId), [steamId]);
@@ -72,7 +63,6 @@ function ProfileBody({ profile }: { profile: Profile }) {
   const [mode, setMode] = useState<Mode>(best);
   const stats = profile.modes.find((m) => m.mode === mode);
   const { user: viewer } = useSession();
-  const trust = TRUST[profile.user.trustLevel];
   const own = !!viewer && viewer.steamId === profile.user.steamId;
   useBackdrop(mode);
 
@@ -95,30 +85,51 @@ function ProfileBody({ profile }: { profile: Profile }) {
         <div className={styles.heroMain}>
           <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
           <div className={styles.heroText}>
-            <h1 className={styles.name}>{profile.user.displayName}</h1>
-            <div className={styles.chips}>
-              {viewer?.trust && own ? <TrustChip trust={viewer.trust} /> : <Badge tone={trust.tone}>{trust.label}</Badge>}
-              <Badge>{profile.user.region.toUpperCase()}</Badge>
-              <a className={styles.steam} href={`https://steamcommunity.com/profiles/${profile.user.steamId}`} target="_blank" rel="noreferrer">
-                Steam profile
+            <div className={styles.nameRow}>
+              <h1 className={styles.name}>{profile.user.displayName}</h1>
+              <a
+                className={styles.steam}
+                href={`https://steamcommunity.com/profiles/${profile.user.steamId}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Steam profile"
+              >
+                <SteamLogo />
+                <span className="visually-hidden">{profile.user.displayName} on Steam (opens in a new tab)</span>
               </a>
             </div>
-            {(profile.recentMatches.length > 0 || profile.favouriteWeapon) && (
-              <div className={styles.heroMeta}>
-                {profile.recentMatches.length > 0 && <RecentForm matches={profile.recentMatches} />}
-                {profile.favouriteWeapon && <Favourite weapon={profile.favouriteWeapon} />}
+            {!own && (
+              <div className={styles.heroActions}>
+                <FriendButton target={profile.user} iconClassName={styles.iconAction} />
+                <ChallengeButton
+                  target={profile.user}
+                  trigger={(open) => (
+                    <button type="button" className={styles.iconAction} onClick={open} aria-haspopup="dialog" title={`Challenge ${profile.user.displayName}`}>
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 3l9.5 9.5M17 3l-9.5 9.5" />
+                        <path d="M10.5 14.5l2 2M14.5 10.5l2 2M15.5 15.5l2 2" />
+                        <path d="M9.5 14.5l-2 2M5.5 10.5l-2 2M4.5 15.5l-2 2" />
+                      </svg>
+                      <span className="visually-hidden">Challenge {profile.user.displayName}</span>
+                    </button>
+                  )}
+                />
               </div>
             )}
           </div>
-          {(profile.badges.length > 0 || !own) && (
+          {profile.badges.length > 0 && (
             <div className={styles.heroSide}>
-              {profile.badges.length > 0 && <TrophyShelf badges={profile.badges} />}
-              {!own && (
-                <div className={styles.heroActions}>
-                  <FriendButton target={profile.user} />
-                  <ChallengeButton target={profile.user} />
-                </div>
-              )}
+              <TrophyShelf badges={profile.badges} />
             </div>
           )}
         </div>
@@ -147,7 +158,11 @@ function ProfileBody({ profile }: { profile: Profile }) {
             <h2 id="mode-heading" className="visually-hidden">
               {modeLabel(mode)}
             </h2>
-            {stats ? <ModeDetail stats={stats} /> : <p className={cx("glass", styles.empty)}>No matches in {modeLabel(mode)} yet.</p>}
+            {stats ? (
+              <ModeDetail stats={stats} recent={profile.recentMatches.filter((m) => m.mode === mode)} weapon={profile.favouriteWeapon ?? null} />
+            ) : (
+              <p className={cx("glass", styles.empty)}>No matches in {modeLabel(mode)} yet.</p>
+            )}
           </section>
         </>
       )}
@@ -199,23 +214,42 @@ function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: Mod
   );
 }
 
-function ModeDetail({ stats }: { stats: ModeStats }) {
+function ModeDetail({ stats, recent, weapon }: { stats: ModeStats; recent: MatchSummary[]; weapon: FavouriteWeapon | null }) {
   const last = stats.history.at(-1)?.rating ?? stats.rating;
   const first = stats.history[0]?.rating ?? stats.rating;
   const delta = last - first;
+  // Last five results in this mode, oldest on the left
+  const recentForm = recent.slice(0, 5).reverse();
   return (
     <div className="stack">
-      <div className={styles.tiles}>
-        <StatTile
+      {/* Straight on the page, so every line is full-strength text */}
+      <dl className={styles.statRow}>
+        <Stat
           label="Rating"
           value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />}
           sub={`${signed(delta)} over ${stats.history.length} matches`}
-          trend={delta > 0 ? "up" : delta < 0 ? "down" : "flat"}
         />
-        <StatTile label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
-        <StatTile label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
-        <StatTile label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
-      </div>
+        <Stat label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
+        <Stat label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
+        <Stat label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} sub={`${stats.matches} matches`} />
+        <Stat
+          label="Form"
+          value={recentForm.length > 0 ? <FormDots results={recentForm.map((m) => ({ id: m.matchId, result: m.result }))} className={styles.formDots} /> : "--"}
+          sub={recentForm.length > 0 ? `Last ${recentForm.length}` : undefined}
+        />
+        {weapon && (
+          <Stat
+            label="Favourite"
+            value={
+              <span className={styles.favourite}>
+                <WeaponIcon name={weapon.weapon} size={28} className={styles.favouriteIcon} />
+                {weaponLabel(weapon.weapon)}
+              </span>
+            }
+            sub={`${weapon.kills} kills, all modes`}
+          />
+        )}
+      </dl>
       <div className="grid-2">
         <Card title="Rating history">
           <RatingChart key={stats.mode} points={stats.history} label={`${MODE_COPY[stats.mode].label} rating history`} />
@@ -271,26 +305,24 @@ function TrophyShelf({ badges }: { badges: ProfileBadge[] }) {
   );
 }
 
-// Last five results, oldest on the left
-function RecentForm({ matches }: { matches: MatchSummary[] }) {
-  const last = matches.slice(0, 5).reverse();
+function SteamLogo() {
   return (
-    <span className={styles.form}>
-      <span className="eyebrow">Form</span>
-      <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} />
-    </span>
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"
+      />
+    </svg>
   );
 }
 
-function Favourite({ weapon }: { weapon: FavouriteWeapon }) {
-  const name = weaponLabel(weapon.weapon);
+function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
   return (
-    <span className={styles.favourite}>
-      <span className="eyebrow">Favourite</span>
-      <WeaponIcon name={weapon.weapon} size={20} className={styles.favouriteIcon} />
-      <span>{name}</span>
-      <span className="muted mono">{weapon.kills} kills</span>
-    </span>
+    <div className={styles.stat}>
+      <dt>{label}</dt>
+      <dd className={cx(styles.statValue, "mono")}>{value}</dd>
+      {sub && <dd className={styles.statSub}>{sub}</dd>}
+    </div>
   );
 }
 
