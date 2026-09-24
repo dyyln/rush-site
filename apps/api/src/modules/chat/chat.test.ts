@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, CHAT_RATE, type ChatHistoryResponse, type ChatMessage } from "@rushsite/shared"
+import { CHAT_LIMITS, CHAT_MAX_LENGTH, CHAT_RATE, CHAT_SLOW_MODE_FLAG, type ChatHistoryResponse, type ChatMessage } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import type { InjectOptions } from "fastify"
 import { afterEach, describe, expect, it } from "vitest"
@@ -74,23 +74,109 @@ describe("chat", () => {
     expect((await as(null, "GET", "/chat/messages?channel=match:abc")).statusCode).toBe(404)
   })
 
-  it("limits posts per user and frees them in the next window", async () => {
+  it("limits posts per user and escalates the cooldown on repeats", async () => {
     const { as } = await setup()
     const [a, b] = await makeUsers(h.db, 2)
+    const [first, second] = CHAT_LIMITS.cooldownStepsSec
     // Start of a window so the whole burst lands in one
-    h.clock.t = Math.ceil(h.clock.t / (CHAT_RATE.windowSec * 1000)) * CHAT_RATE.windowSec * 1000
+    const alignWindow = () => {
+      const w = CHAT_RATE.windowSec * 1000
+      h.clock.t = Math.ceil(h.clock.t / w) * w
+    }
+    alignWindow()
     const post = (id: string, body: string) => as(id, "POST", "/chat/messages", { body })
+    const lines = ["gl hf", "nice shot", "rush tonight", "who wants 2v2", "aim map pick", "brb", "ready up", "good veto", "close one", "rematch"]
+    let n = 0
+    const burst = async () => {
+      for (let i = 0; i < CHAT_RATE.max; i++) expect((await post(a!, lines[n++]!)).statusCode).toBe(201)
+    }
 
-    for (let i = 0; i < CHAT_RATE.max; i++) expect((await post(a!, `m${i}`)).statusCode).toBe(201)
+    await burst()
     const limited = await post(a!, "one more")
     expect(limited.statusCode).toBe(429)
-    expect(limited.json()).toMatchObject({ error: "chat_rate_limited", details: { retryAfterSec: CHAT_RATE.windowSec } })
+    expect(limited.json()).toMatchObject({ error: "chat_rate_limited", details: { retryAfterSec: first } })
     // Other users have their own budget
     expect((await post(b!, "hello")).statusCode).toBe(201)
 
+    // The cooldown outlasts the rate window
     h.clock.advance(CHAT_RATE.windowSec * 1000)
-    expect((await post(a!, "back")).statusCode).toBe(201)
-    expect(h.notifier.ofType("chat_message")).toHaveLength(CHAT_RATE.max + 2)
+    expect((await post(a!, "still waiting")).json()).toMatchObject({ error: "chat_rate_limited", details: { retryAfterSec: first! - CHAT_RATE.windowSec } })
+    h.clock.advance(first! * 1000)
+    alignWindow()
+    await burst()
+    // A second offence waits longer
+    expect((await post(a!, "again")).json()).toMatchObject({ error: "chat_rate_limited", details: { retryAfterSec: second } })
+  })
+
+  it("refuses the same or nearly the same text inside the duplicate window", async () => {
+    const { as } = await setup()
+    const [a] = await makeUsers(h.db, 1)
+    const post = (body: string) => as(a!, "POST", "/chat/messages", { body })
+    expect((await post("anyone for rush")).statusCode).toBe(201)
+    h.clock.advance(5_000)
+    const dup = await post("Anyone for RUSH!!")
+    expect(dup.statusCode).toBe(429)
+    expect(dup.json()).toMatchObject({ error: "chat_duplicate", details: { retryAfterSec: CHAT_LIMITS.duplicateWindowSec - 5 } })
+    expect((await post("anyone for rushh pls")).json()).toMatchObject({ error: "chat_duplicate" })
+    expect((await post("gg that was close")).statusCode).toBe(201)
+    h.clock.advance(CHAT_LIMITS.duplicateWindowSec * 1000)
+    expect((await post("anyone for rush")).statusCode).toBe(201)
+  })
+
+  it("masks profanity, keeps the original for admins, and logs refused messages", async () => {
+    const { as, history } = await setup(true)
+    const [a] = await makeUsers(h.db, 1)
+    const masked = await as(a!, "POST", "/chat/messages", { body: "that round was sh1t" })
+    expect(masked.statusCode).toBe(201)
+    expect((masked.json() as { message: ChatMessage }).message).not.toHaveProperty("originalBody")
+    expect((masked.json() as { message: ChatMessage }).message.body).toBe("that round was s***")
+
+    expect((await history()).messages[0]).not.toHaveProperty("originalBody")
+    expect((await history(a!)).messages[0]).not.toHaveProperty("originalBody")
+    expect((await history(ADMIN)).messages[0]).toMatchObject({ body: "that round was s***", originalBody: "that round was sh1t" })
+
+    const refused = await as(a!, "POST", "/chat/messages", { body: "free skins at https://steamcommunlty.com/gift" })
+    expect(refused.statusCode).toBe(400)
+    expect(refused.json()).toMatchObject({ error: "chat_scam_link" })
+    expect((await as(a!, "POST", "/chat/messages", { body: "you r3tard" })).json()).toMatchObject({ error: "chat_blocked_language" })
+    expect((await history()).messages).toHaveLength(1)
+
+    const audit = await h.db.select().from(adminAudit).where(eq(adminAudit.target, a!))
+    expect(audit.map((r) => [r.adminSteamId, r.action])).toEqual([
+      ["system", "chat.refused"],
+      ["system", "chat.refused"],
+    ])
+    expect(audit.map((r) => (r.payload as { code: string }).code).sort()).toEqual(["chat_blocked_language", "chat_scam_link"])
+    const events = h.notifier.ofType("admin_event").filter((e) => e.audience.kind === "admins")
+    expect(events.map((e) => (e.msg.payload as { payload: { action: string } }).payload.action)).toEqual(["chat_refused", "chat_refused"])
+
+    // Admin deletes audit the original text
+    const id = (masked.json() as { message: ChatMessage }).message.id
+    await as(ADMIN, "DELETE", `/admin/chat/messages/${id}`)
+    const [del] = await h.db.select().from(adminAudit).where(eq(adminAudit.action, "chat.delete"))
+    expect(del?.payload).toMatchObject({ body: "that round was sh1t" })
+  })
+
+  it("applies the global slow mode from the flag to everyone but admins", async () => {
+    const { as, history } = await setup(true)
+    const [a] = await makeUsers(h.db, 1)
+    await as(ADMIN, "PUT", `/admin/flags/${CHAT_SLOW_MODE_FLAG}`, { enabled: true, value: { seconds: 20 } })
+    expect((await history()).slowModeSec).toBe(20)
+
+    expect((await as(a!, "POST", "/chat/messages", { body: "first" })).statusCode).toBe(201)
+    h.clock.advance(5_000)
+    expect((await as(a!, "POST", "/chat/messages", { body: "second" })).json()).toMatchObject({
+      error: "chat_slow_mode",
+      details: { retryAfterSec: 15 },
+    })
+    expect((await as(ADMIN, "POST", "/chat/messages", { body: "admins skip it" })).statusCode).toBe(201)
+    expect((await as(ADMIN, "POST", "/chat/messages", { body: "right away" })).statusCode).toBe(201)
+    h.clock.advance(15_000)
+    expect((await as(a!, "POST", "/chat/messages", { body: "second" })).statusCode).toBe(201)
+
+    await as(ADMIN, "PUT", `/admin/flags/${CHAT_SLOW_MODE_FLAG}`, { enabled: false })
+    expect((await history()).slowModeSec).toBeUndefined()
+    expect((await as(a!, "POST", "/chat/messages", { body: "third" })).statusCode).toBe(201)
   })
 
   it("blocks banned and muted users", async () => {

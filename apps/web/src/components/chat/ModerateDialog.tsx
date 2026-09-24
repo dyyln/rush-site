@@ -61,6 +61,11 @@ export function ModerateDialog({
       {message && (
         <div className={styles.modBody}>
           <blockquote className={styles.quote}>{message.body}</blockquote>
+          {message.originalBody && (
+            <p className={styles.note}>
+              Masked by the filter. Original: <span className={styles.original}>{message.originalBody}</span>
+            </p>
+          )}
           <Button
             variant="danger"
             loading={busy === "delete"}

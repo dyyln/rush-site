@@ -1,5 +1,5 @@
 import { createFaceitClient } from "@rushsite/faceit"
-import { BRAND_NAME, type ServerDriver } from "@rushsite/shared"
+import { BRAND_NAME, CHAT_SLOW_MODE_FLAG, type ServerDriver } from "@rushsite/shared"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
@@ -9,7 +9,7 @@ import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
 import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
-import { ChatService } from "./modules/chat/service.js"
+import { ChatService, slowModeSeconds } from "./modules/chat/service.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
 import { AnnouncementService, FlagService } from "./modules/flags/service.js"
@@ -217,7 +217,14 @@ export function buildContext(deps: ContextDeps): AppContext {
     snapshots,
     flags,
     announcements: new AnnouncementService(db, now),
-    chat: new ChatService({ db, redis, notifier, isAdmin: (id) => admins.isAdmin(id), now }),
+    chat: new ChatService({
+      db,
+      redis,
+      notifier,
+      isAdmin: (id) => admins.isAdmin(id),
+      now,
+      slowModeSec: async () => slowModeSeconds(await flags.get(CHAT_SLOW_MODE_FLAG)),
+    }),
     maps,
   }
 }

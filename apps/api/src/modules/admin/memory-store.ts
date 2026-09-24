@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
-import type { AdminStore, Counts, NewAudit, UserRecord } from "./store.js"
-import type { AuditEntry, MatchDetailView, MatchSummaryView, UserCard } from "./types.js"
+import type { AdminStore, ClearedCooldown, Counts, NewAudit, UserRecord } from "./store.js"
+import type { ActiveMatchRef, AuditEntry, MatchDetailView, MatchSummaryView, UserCard, UserSearchHit } from "./types.js"
 
 // In-memory store for tests. Seed the public fields directly.
 export class MemoryAdminStore implements AdminStore {
@@ -72,6 +72,46 @@ export class MemoryAdminStore implements AdminStore {
 
   async getUser(steamId: string): Promise<UserRecord | null> {
     return this.users.get(steamId) ?? null
+  }
+
+  async searchUsers(q: string, limit: number, now: Date): Promise<UserSearchHit[]> {
+    const lower = q.toLowerCase()
+    const rank = (r: UserRecord) => {
+      const name = r.user.displayName.toLowerCase()
+      if (name === lower || r.user.steamId === q) return 0
+      if (name.startsWith(lower)) return 1
+      if (q.length >= 3 && name.includes(lower)) return 2
+      if (/^\d{3,17}$/.test(q) && r.user.steamId.startsWith(q)) return 2
+      return -1
+    }
+    return [...this.users.values()]
+      .map((r) => ({ r, n: rank(r) }))
+      .filter((x) => x.n >= 0)
+      .sort((a, b) => a.n - b.n || b.r.user.lastLoginAt.localeCompare(a.r.user.lastLoginAt) || a.r.user.steamId.localeCompare(b.r.user.steamId))
+      .slice(0, limit)
+      .map(({ r }) => ({
+        steamId: r.user.steamId,
+        displayName: r.user.displayName,
+        avatarUrl: r.user.avatarUrl,
+        lastLoginAt: r.user.lastLoginAt,
+        trustLevel: r.trust?.level ?? null,
+        banned: r.bans.some((b) => !b.revokedAt && (!b.expiresAt || Date.parse(b.expiresAt) > now.getTime())),
+      }))
+  }
+
+  async activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null> {
+    const m = this.matches
+      .filter((x) => statuses.includes(x.status) && x.teams.some((t) => t.players.some((p) => p.steamId === steamId)))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    return m ? { id: m.id, slug: null, mode: m.mode, status: m.status, createdAt: m.createdAt } : null
+  }
+
+  async clearCooldowns(steamId: string, now: Date): Promise<ClearedCooldown[]> {
+    const u = this.users.get(steamId)
+    if (!u) return []
+    const running = u.cooldowns.filter((c) => Date.parse(c.endsAt) > now.getTime())
+    u.cooldowns = u.cooldowns.filter((c) => !running.includes(c))
+    return running
   }
 
   async writeAudit(entry: NewAudit): Promise<AuditEntry> {

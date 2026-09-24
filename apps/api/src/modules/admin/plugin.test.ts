@@ -129,6 +129,7 @@ async function harness() {
     setTrustLevel: [] as [string, TrustLevel][],
     ban: [] as [string, string, Date | null | undefined][],
     unban: [] as string[],
+    notified: [] as string[],
     emitted: [] as [AdminEventKind, unknown][],
   }
   const state = { banned: new Set<string>(), redisDown: false }
@@ -172,6 +173,9 @@ async function harness() {
     },
     recentEvents: async (limit) => events.slice(0, limit),
     emitAdmin: (kind, payload) => calls.emitted.push([kind, payload]),
+    notifyQueueStatus: async (id) => {
+      calls.notified.push(id)
+    },
   })
   await app.ready()
 
@@ -202,6 +206,7 @@ const GETS = [
   `/admin/matches/${MATCH}`,
   "/admin/hosts",
   `/admin/users/${PLAYER}`,
+  "/admin/users?q=vex",
   "/admin/events",
 ]
 const POSTS: [string, unknown][] = [
@@ -210,6 +215,7 @@ const POSTS: [string, unknown][] = [
   [`/admin/users/${PLAYER}/ban`, { reason: "test" }],
   [`/admin/users/${PLAYER}/unban`, {}],
   [`/admin/users/${PLAYER}/trust`, { level: "trusted" }],
+  [`/admin/users/${PLAYER}/cooldown/clear`, {}],
 ]
 
 describe("auth gating", () => {
@@ -466,5 +472,61 @@ describe("mutating routes", () => {
     h.store.failAudit = true
     const res = await h.admin.post(`/admin/users/${PLAYER}/trust`, { level: "trusted" })
     expect(res.statusCode).toBe(500)
+  })
+
+  it("clears a cooldown, audits it and pushes the queue status", async () => {
+    h = await harness()
+    expect((await h.admin.post(`/admin/users/${PLAYER}/cooldown/clear`)).statusCode).toBe(409)
+    expect((await h.admin.post("/admin/users/76561198999999999/cooldown/clear")).statusCode).toBe(404)
+    expect(h.store.audit).toHaveLength(0)
+
+    const cd = { reason: "abandon", offence: 2, endsAt: new Date(T0.getTime() + 3600_000).toISOString() }
+    const expired = { reason: "decline", offence: 1, endsAt: new Date(T0.getTime() - 60_000).toISOString() }
+    h.store.users.get(PLAYER)!.cooldowns = [cd, expired]
+    const res = await h.admin.post(`/admin/users/${PLAYER}/cooldown/clear`)
+    expect(res.statusCode).toBe(200)
+    expect(h.store.audit[0]).toMatchObject({ adminSteamId: ADMIN, action: "user.cooldown_clear", target: PLAYER, payload: { cleared: [cd] } })
+    expect(h.calls.notified).toEqual([PLAYER])
+    expect(h.calls.emitted).toEqual([["user", { action: "cooldown_cleared", steamId: PLAYER, by: ADMIN }]])
+    expect((await h.admin.post(`/admin/users/${PLAYER}/cooldown/clear`)).statusCode).toBe(409)
+  })
+})
+
+describe("user search and state", () => {
+  it("searches by name, needs two characters and caps the limit", async () => {
+    h = await harness()
+    h.store.users.set("76561198000000004", userRecord("76561198000000004", "vexa_two"))
+    const res = await h.admin.get("/admin/users?q=VEX")
+    expect(res.statusCode).toBe(200)
+    expect(res.json().users.map((u: { displayName: string }) => u.displayName)).toEqual(["vexa", "vexa_two"])
+    expect(res.json().users[0]).toMatchObject({ steamId: PLAYER, trustLevel: "new", banned: false })
+    expect((await h.admin.get("/admin/users?q=vexa")).json().users[0].steamId).toBe(PLAYER)
+    expect((await h.admin.get("/admin/users?q=nobody")).json().users).toEqual([])
+    expect((await h.admin.get("/admin/users?q=v")).statusCode).toBe(400)
+    expect((await h.admin.get("/admin/users")).statusCode).toBe(400)
+    expect((await h.admin.get("/admin/users?q=vex&limit=500")).statusCode).toBe(400)
+    expect((await h.admin.get("/admin/users?q=vex&limit=1")).json().users).toHaveLength(1)
+  })
+
+  it("shows queue and match state and admin names in the log", async () => {
+    h = await harness()
+    await h.admin.post(`/admin/users/${PLAYER}/trust`, { level: "verified" })
+    const u = (await h.admin.get(`/admin/users/${PLAYER}`)).json()
+    expect(u.state.queue).toEqual({
+      ticketId: TICKET,
+      partyId: "55555555-5555-4555-8555-555555555555",
+      modes: ["aim1v1", "aim2v2"],
+      enqueuedAt: new Date(T0.getTime() - 90_000).toISOString(),
+    })
+    expect(u.state.match).toMatchObject({ id: MATCH, status: "live", mode: "aim1v1" })
+    expect(u.audit[0]).toMatchObject({ adminSteamId: ADMIN, adminName: "boss" })
+
+    // The shortcuts reuse the queue and match actions
+    expect((await h.admin.post(`/admin/queue/${u.state.queue.ticketId}/remove`, { reason: "stuck" })).statusCode).toBe(200)
+    const after = (await h.admin.get(`/admin/users/${PLAYER}`)).json()
+    expect(after.state.queue).toBeNull()
+
+    const other = (await h.admin.get(`/admin/users/${ADMIN}`)).json()
+    expect(other.state).toEqual({ queue: null, match: null })
   })
 })

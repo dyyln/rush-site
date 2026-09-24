@@ -71,8 +71,13 @@ export type ModeStats = {
 
 export type MatchSummary = {
   matchId: string;
+  // Word id for links. Null or missing on older matches
+  slug?: string | null;
   mode: Mode;
   mapId: string;
+  // Set on a best of series. The scores are then maps won
+  bestOf?: number | null;
+  maps?: string[] | null;
   playedAt: string;
   result: "win" | "loss" | "abandoned";
   scoreFor: number;
@@ -99,8 +104,12 @@ export type Profile = {
   modes: ModeStats[];
   badges: ProfileBadge[];
   recentMatches: MatchSummary[];
+  // Cursor for the next history page. Null when there is none
+  recentMatchesCursor?: string | null;
   favouriteWeapon?: FavouriteWeapon | null;
 };
+
+export type MatchHistoryPage = { matches: MatchSummary[]; nextCursor: string | null };
 
 export type LeaderboardRow = {
   rank: number;

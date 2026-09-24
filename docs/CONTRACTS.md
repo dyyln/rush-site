@@ -171,7 +171,9 @@ The api trust module owns the numeric trust scale and passes weights via `signal
 ## Admin (apps/api/src/modules/admin, apps/web/src/app/admin)
 
 Access: session steamId must be in `ADMIN_STEAM_IDS` (comma separated env). Non-admins get 404, not 403.
-REST under `/admin`: `GET /admin/overview`, `GET /admin/queue`, `GET /admin/matches?status=`, `GET /admin/matches/:id`, `GET /admin/hosts`, `GET /admin/users/:steamId`, `GET /admin/events?limit=` (recent webhooks and errors), `POST /admin/queue/:ticketId/remove`, `POST /admin/matches/:id/cancel`, `POST /admin/users/:steamId/ban`, `POST /admin/users/:steamId/unban`, `POST /admin/users/:steamId/trust`.
+REST under `/admin`: `GET /admin/overview`, `GET /admin/queue`, `GET /admin/matches?status=`, `GET /admin/matches/:id`, `GET /admin/hosts`, `GET /admin/users/:steamId`, `GET /admin/events?limit=` (recent webhooks and errors), `POST /admin/queue/:ticketId/remove`, `POST /admin/matches/:id/cancel`, `POST /admin/users/:steamId/ban`, `POST /admin/users/:steamId/unban`, `POST /admin/users/:steamId/trust`, `POST /admin/users/:steamId/cooldown/clear` (ends running cooldowns, 409 `no_cooldown` when none). `GET /admin/users?q=` is a name search (2 to 64 characters, contains match from 3, digits also match SteamID64 prefixes, max 20 rows, 30 per minute). `GET /admin/users/:steamId` also returns `state: { queue, match }` and `adminName` on audit rows.
+
+Match history: `GET /users/:steamId/matches?limit=&mode=&cursor=` returns `{ matches, nextCursor }`, newest first by (created_at, id). The cursor is opaque. The profile returns the first 20 as `recentMatches` with `recentMatchesCursor`. Rows carry `slug`, and a series has `bestOf`, the played `maps` and scores in maps won.
 WS: admins additionally receive `admin_event` messages `{ kind: queue|match|host|webhook|error|user, payload }` for live refresh. Unban does not restore rolled-back ratings.
 
 ## Server drivers (packages/shared/src/drivers.ts, implementations in apps/api and packages/dathost)

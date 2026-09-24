@@ -10,7 +10,7 @@ import { SignInLink } from "@/components/ui/SignInLink";
 import { useSession } from "@/lib/session";
 import { useVisibleInterval } from "@/lib/useVisibleInterval";
 import { getRealtime } from "@/lib/ws";
-import { chatApi, chatError, mutedFrom } from "./chatApi";
+import { chatApi, chatError, mutedFrom, refusalFrom, refusalText, type Refusal } from "./chatApi";
 import { ModerateDialog } from "./ModerateDialog";
 import styles from "./ChatSidebar.module.css";
 
@@ -134,7 +134,10 @@ export function ChatSidebar() {
   const [muted, setMuted] = useState<ChatMuteStatus | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<(Refusal & { announce: string }) | null>(null);
+  const [slowModeSec, setSlowModeSec] = useState(0);
+  // Re-renders the countdown each second
+  const [, setTick] = useState(0);
   const [unread, setUnread] = useState(0);
   const [moderating, setModerating] = useState<ChatMessage | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
@@ -177,6 +180,7 @@ export function ChatSidebar() {
       const res = await chatApi.history();
       setMessages((cur) => merge(cur, res.messages));
       setMuted(res.me?.muted ?? null);
+      setSlowModeSec(res.slowModeSec ?? 0);
       setLoadError(null);
       if (res.messages.length === 0) setOlderDone(true);
     } catch (e) {
@@ -271,10 +275,22 @@ export function ChatSidebar() {
     }
   }
 
+  // Counts a timed refusal down and clears it when the wait is over
+  const waitUntil = sendError?.until ?? null;
+  useEffect(() => {
+    if (waitUntil === null) return;
+    const timer = setInterval(() => {
+      if (Date.now() >= waitUntil) setSendError(null);
+      else setTick((n) => n + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [waitUntil]);
+  const waiting = waitUntil !== null && waitUntil > Date.now();
+
   async function send(e?: FormEvent) {
     e?.preventDefault();
     const body = draft.trim();
-    if (!body || sending) return;
+    if (!body || sending || waiting) return;
     setSending(true);
     setSendError(null);
     try {
@@ -285,7 +301,10 @@ export function ChatSidebar() {
     } catch (err) {
       const mute = mutedFrom(err);
       if (mute) setMuted(mute);
-      else setSendError(chatError(err));
+      else {
+        const r = refusalFrom(err);
+        setSendError({ ...r, announce: refusalText(r) });
+      }
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -390,13 +409,14 @@ export function ChatSidebar() {
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value);
-                  if (sendError) setSendError(null);
+                  // Timed refusals stay up so the countdown is not lost while typing
+                  if (sendError && sendError.until === null) setSendError(null);
                 }}
                 onKeyDown={onKeyDown}
                 aria-describedby={draft.length >= COUNTER_FROM ? counterId : undefined}
                 aria-invalid={sendError ? true : undefined}
               />
-              <button type="submit" className={styles.send} disabled={sending || draft.trim().length === 0}>
+              <button type="submit" className={styles.send} disabled={sending || waiting || draft.trim().length === 0}>
                 Send
               </button>
               {draft.length >= COUNTER_FROM && (
@@ -405,10 +425,17 @@ export function ChatSidebar() {
                 </span>
               )}
               {sendError && (
-                <p className={styles.sendError} role="alert">
-                  {sendError}
-                </p>
+                <>
+                  <p className={styles.sendError} data-wait={sendError.until !== null || undefined} aria-hidden="true">
+                    {refusalText(sendError)}
+                  </p>
+                  {/* Announced once. The visible line ticks every second */}
+                  <span className="visually-hidden" role="alert">
+                    {sendError.announce}
+                  </span>
+                </>
               )}
+              {slowModeSec > 0 && !sendError && <p className={styles.slowNote}>Slow mode is on. One message every {slowModeSec}s.</p>}
             </form>
           )}
         </div>

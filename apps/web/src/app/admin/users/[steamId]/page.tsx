@@ -22,6 +22,7 @@ import { adminApi, errorMessage, isNotFound } from "../../_lib/client";
 import { ago, scoreLine, shortId, stamp, TRUST_LABEL, trustTone } from "../../_lib/format";
 import { useLiveData, useNow } from "../../_lib/live";
 import type { AuditEntry, UserDetailView } from "../../_lib/types";
+import { CancelMatchDialog } from "../../_components/CancelMatchDialog";
 import { ConfirmDialog, ErrorPanel, MatchStatus, PageHeader } from "../../_components/parts";
 import styles from "../../admin.module.css";
 
@@ -46,7 +47,11 @@ export default function AdminUserPage() {
   const { user: me } = useSession();
   const [banOpen, setBanOpen] = useState(false);
   const [unbanOpen, setUnbanOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const u = live.data;
+  const cooldown = u?.cooldowns[0];
 
   if (live.error && !u) {
     return (
@@ -133,6 +138,15 @@ export default function AdminUserPage() {
           </div>
 
           <div className={styles.col}>
+            <Card title="Right now">
+              <UserState
+                state={u.state}
+                now={now}
+                onRemove={() => setRemoveOpen(true)}
+                onCancel={() => setCancelOpen(true)}
+              />
+            </Card>
+
             <Card title="Actions">
               <div className="stack">
                 <TrustForm
@@ -151,6 +165,18 @@ export default function AdminUserPage() {
                     </Button>
                   )}
                 </div>
+                {cooldown && (
+                  <div className="stack" style={{ gap: "var(--space-2)" }}>
+                    <p className={styles.muted}>
+                      Queue cooldown for {cooldown.reason}, offence {cooldown.offence}, ends {ago(cooldown.endsAt, now)}.
+                    </p>
+                    <div className="row">
+                      <Button variant="secondary" onClick={() => setClearOpen(true)}>
+                        Clear cooldown
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {u.activeBan && (
                   <p className={styles.muted}>
                     Banned {ago(u.activeBan.createdAt, now)} for {u.activeBan.reason}.{" "}
@@ -229,6 +255,37 @@ export default function AdminUserPage() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={clearOpen}
+        title="Clear cooldown"
+        body={
+          <p>
+            Ends the running queue cooldown for {u?.user.displayName} now so they can queue again. The offence still counts toward
+            their next cooldown.
+          </p>
+        }
+        confirmLabel="Clear cooldown"
+        onClose={() => setClearOpen(false)}
+        onConfirm={async () => {
+          await adminApi.clearCooldown(steamId);
+          done("Cooldown cleared");
+        }}
+      />
+      <ConfirmDialog
+        open={removeOpen}
+        title="Remove from queue"
+        body={<p>Removes {u?.user.displayName}&apos;s party from every mode. The party is told they left the queue.</p>}
+        confirmLabel="Remove"
+        reason="optional"
+        danger
+        onClose={() => setRemoveOpen(false)}
+        onConfirm={async (reason) => {
+          if (!u?.state.queue) return;
+          await adminApi.removeTicket(u.state.queue.ticketId, reason || undefined);
+          done("Removed from queue");
+        }}
+      />
+      <CancelMatchDialog match={cancelOpen && u?.state.match ? u.state.match : null} onClose={() => setCancelOpen(false)} onDone={() => done("Match cancelled")} />
       <BanDialog open={banOpen} steamId={steamId} name={u?.user.displayName ?? steamId} onClose={() => setBanOpen(false)} onDone={() => done("User banned")} />
       <ConfirmDialog
         open={unbanOpen}
@@ -379,14 +436,65 @@ function AuditLine({ entry: a, now }: { entry: AuditEntry; now: number }) {
               ? "Chat mute lifted"
               : a.action === "chat.delete"
                 ? `Chat message deleted: ${p.body}`
-                : a.action;
+                : a.action === "chat.refused"
+                  ? `Chat message blocked by the filter (${p.code}): ${p.body}`
+                  : a.action === "user.cooldown_clear"
+                    ? "Queue cooldown cleared"
+                    : a.action;
   return (
     <span className="stack" style={{ gap: 0 }}>
       <span>{what}</span>
       <span className={styles.muted}>
-        by <Link href={`/admin/users/${a.adminSteamId}`} className="mono">{a.adminSteamId}</Link>, {ago(a.createdAt, now)}
+        by{" "}
+        <Link href={`/admin/users/${a.adminSteamId}`} className={a.adminName ? undefined : "mono"}>
+          {a.adminName ?? a.adminSteamId}
+        </Link>
+        , {ago(a.createdAt, now)}
       </span>
     </span>
+  );
+}
+
+function UserState({
+  state,
+  now,
+  onRemove,
+  onCancel,
+}: {
+  state: UserDetailView["state"];
+  now: number;
+  onRemove: () => void;
+  onCancel: () => void;
+}) {
+  if (!state.queue && !state.match) return <p className="muted">Not in a queue or a match.</p>;
+  return (
+    <div className="stack">
+      {state.queue && (
+        <div className={styles.stateLine}>
+          <Badge tone="info">In queue</Badge>
+          <span>
+            {state.queue.modes.map((m) => MODE_COPY[m].label).join(", ")}, queued {ago(state.queue.enqueuedAt, now)}
+          </span>
+          <Button variant="secondary" onClick={onRemove}>
+            Remove from queue
+          </Button>
+        </div>
+      )}
+      {state.match && (
+        <div className={styles.stateLine}>
+          <MatchStatus status={state.match.status} />
+          <span>
+            {MODE_COPY[state.match.mode].label} match{" "}
+            <Link href={`/admin/matches/${state.match.id}`} className="mono">
+              {state.match.slug ?? shortId(state.match.id)}
+            </Link>
+          </span>
+          <Button variant="danger" onClick={onCancel}>
+            Cancel match
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 

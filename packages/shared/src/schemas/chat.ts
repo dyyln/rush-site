@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { CHAT_LIMITS } from "../config/chat.js"
 import { TierIdSchema } from "../config/tiers.js"
 import { SteamId64Schema, UuidSchema } from "./common.js"
 import { TrustLevelSchema } from "./trust.js"
@@ -8,7 +9,7 @@ export const CHAT_MAX_LENGTH = 280
 // Messages returned by one history request
 export const CHAT_HISTORY_LIMIT = 50
 // Per user posting limit across every channel
-export const CHAT_RATE = { max: 5, windowSec: 10 } as const
+export const CHAT_RATE = CHAT_LIMITS.rate
 // Longest mute an admin can set. Null in a mute request means permanent
 export const CHAT_MUTE_MAX_MINUTES = 60 * 24 * 30
 
@@ -36,6 +37,8 @@ export const ChatMessageSchema = z.object({
   body: z.string(),
   // ISO timestamp
   createdAt: z.string(),
+  // Text before masking. Only sent to admins, and only when the filter changed it
+  originalBody: z.string().optional(),
 })
 export type ChatMessage = z.infer<typeof ChatMessageSchema>
 
@@ -66,6 +69,8 @@ export type ChatMuteStatus = z.infer<typeof ChatMuteStatusSchema>
 export const ChatHistoryResponseSchema = z.object({
   channel: ChatChannelSchema,
   messages: z.array(ChatMessageSchema),
+  // Seconds between posts while the global slow mode is on. Missing when it is off
+  slowModeSec: z.number().int().positive().optional(),
   // Set for signed in viewers only
   me: z.object({ muted: ChatMuteStatusSchema.nullable() }).optional(),
 })

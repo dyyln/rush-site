@@ -15,6 +15,7 @@ import type {
   QueueView,
   UserCard,
   UserDetailView,
+  UserSearchHit,
 } from "./types";
 
 const USER_COUNT = 48;
@@ -51,6 +52,8 @@ type World = {
   trust: Map<string, TrustLevel>;
   bans: Map<string, BanView[]>;
   used: Set<number>;
+  // Players whose cooldown an admin cleared
+  cleared?: Set<string>;
 };
 
 let world: World | null = null;
@@ -238,6 +241,15 @@ function build(): World {
     createdAt: iso(now - 3 * 86_400_000),
   });
   return world;
+}
+
+function mockState(w: World, steamId: string): UserDetailView["state"] {
+  const t = w.tickets.find((x) => x.players.some((p) => p.steamId === steamId));
+  const m = w.matches.find((x) => ACTIVE.includes(x.status) && x.teams.some((team) => team.players.some((p) => p.steamId === steamId)));
+  return {
+    queue: t ? { ticketId: t.id, partyId: t.partyId, modes: t.modes, enqueuedAt: t.enqueuedAt } : null,
+    match: m ? { id: m.id, slug: null, mode: m.mode, status: m.status, createdAt: m.createdAt } : null,
+  };
 }
 
 function userIndexOf(steamId: string): number {
@@ -477,6 +489,8 @@ export const mockAdmin = {
         const t = team < 0 ? Math.floor(r() * 2) : team;
         return {
           id: m.id,
+          slug: null,
+          bestOf: null,
           mode: m.mode,
           status: m.status,
           team: t,
@@ -521,11 +535,39 @@ export const mockAdmin = {
       recentMatches,
       bans,
       activeBan: bans.find((b) => b.active) ?? null,
-      cooldowns: i % 6 === 1 ? [{ reason: "decline", endsAt: iso(now + 240_000), offence: 2 }] : [],
+      cooldowns: i % 6 === 1 && !w.cleared?.has(steamId) ? [{ reason: "decline", endsAt: iso(now + 240_000), offence: 2 }] : [],
       reports: { received: i === 7 ? 9 : 1, open: i === 7 ? 2 : 0 },
       flags: { open: i === 7 ? 1 : 0, total: i === 7 ? 2 : 0 },
-      audit: w.audit.filter((a) => a.target === steamId),
+      state: mockState(w, steamId),
+      audit: w.audit
+        .filter((a) => a.target === steamId)
+        .map((a) => ({ ...a, adminName: a.adminSteamId === MOCK_ME.steamId ? MOCK_ME.displayName : null })),
     };
+  },
+
+  searchUsers(q: string): UserSearchHit[] {
+    const lower = q.trim().toLowerCase();
+    if (lower.length < 2) throw new Error("Enter at least 2 characters");
+    const w = getWorld();
+    return Array.from({ length: USER_COUNT }, (_, i) => mockUser(i))
+      .filter((u) => (lower.length < 3 ? u.displayName.toLowerCase().startsWith(lower) : u.displayName.toLowerCase().includes(lower)) || u.steamId.startsWith(lower))
+      .slice(0, 20)
+      .map((u) => ({
+        steamId: u.steamId,
+        displayName: u.displayName,
+        avatarUrl: u.avatarUrl,
+        lastLoginAt: iso(Date.now() - 3600_000),
+        trustLevel: w.trust.get(u.steamId) ?? u.trustLevel,
+        banned: (w.bans.get(u.steamId) ?? []).some((b) => b.active),
+      }));
+  },
+
+  clearCooldown(steamId: string): AuditEntry {
+    const w = getWorld();
+    const i = userIndexOf(steamId);
+    if (i % 6 !== 1 || w.cleared?.has(steamId)) throw new Error("User has no running cooldown");
+    (w.cleared ??= new Set()).add(steamId);
+    return audit("user.cooldown_clear", steamId, { cleared: [{ reason: "decline", offence: 2 }] });
   },
 
   removeTicket(ticketId: string, reason?: string): AuditEntry {

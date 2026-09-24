@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm"
 import {
   bans,
   cooldowns,
@@ -13,8 +13,10 @@ import {
   trustSignals,
   users,
 } from "../../db/schema.js"
+import { namePattern } from "../stats/rank.js"
 import { adminAudit } from "./schema.js"
 import type {
+  ActiveMatchRef,
   AuditAction,
   AuditEntry,
   BanView,
@@ -25,6 +27,7 @@ import type {
   TrustLevel,
   UserCard,
   UserDetailView,
+  UserSearchHit,
 } from "./types.js"
 
 export interface Counts {
@@ -39,8 +42,10 @@ export interface Counts {
 
 export type NewAudit = { adminSteamId: string; action: AuditAction; target: string; payload: unknown }
 
-// User detail without the audit list, which the routes add.
-export type UserRecord = Omit<UserDetailView, "audit">
+// User detail without the audit list and live state, which the routes add.
+export type UserRecord = Omit<UserDetailView, "audit" | "state">
+
+export type ClearedCooldown = { reason: string; endsAt: string; offence: number }
 
 export interface AdminStore {
   ping(): Promise<void>
@@ -53,6 +58,12 @@ export interface AdminStore {
   listMatches(statuses: string[], limit: number): Promise<MatchSummaryView[]>
   getMatch(id: string): Promise<MatchDetailView | null>
   getUser(steamId: string, now: Date): Promise<UserRecord | null>
+  // Name contains search, exact names first. A digit query also matches SteamID64 prefixes
+  searchUsers(q: string, limit: number, now: Date): Promise<UserSearchHit[]>
+  // Newest match in one of the statuses that the player is on
+  activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null>
+  // Ends every running cooldown now. Rows stay so the escalation ladder still counts them
+  clearCooldowns(steamId: string, now: Date): Promise<ClearedCooldown[]>
   writeAudit(entry: NewAudit): Promise<AuditEntry>
   // Newest first
   listAudit(opts: { target?: string; limit: number }): Promise<AuditEntry[]>
@@ -308,6 +319,8 @@ export class DrizzleAdminStore implements AdminStore {
       })),
       recentMatches: recent.map(({ m, p }) => ({
         id: m.id,
+        slug: m.slug,
+        bestOf: m.bestOf,
         mode: m.mode as Mode,
         status: m.status,
         team: p.team,
@@ -326,6 +339,65 @@ export class DrizzleAdminStore implements AdminStore {
       reports: { received: sum(reportRows), open: sum(reportRows.filter((r) => r.status === "open")) },
       flags: { total: sum(flagRows), open: sum(flagRows.filter((r) => r.status === "open")) },
     }
+  }
+
+  async searchUsers(q: string, limit: number, now: Date): Promise<UserSearchHit[]> {
+    const lower = q.toLowerCase()
+    const prefix = namePattern(q).replace(/^%/, "")
+    const byName = sql`lower(${users.displayName}) like ${namePattern(q)}`
+    const where = /^\d{3,17}$/.test(q) ? or(byName, sql`${users.steamId} like ${`${q}%`}`) : byName
+    const rows = await this.db
+      .select({
+        steamId: users.steamId,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        lastLoginAt: users.lastLoginAt,
+        trustLevel: trustLevels.level,
+        banned: sql<boolean>`exists (select 1 from ${bans} where ${bans.steamId} = ${users.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > ${now.toISOString()}::timestamptz))`,
+      })
+      .from(users)
+      .leftJoin(trustLevels, eq(trustLevels.steamId, users.steamId))
+      .where(where)
+      .orderBy(
+        sql`case when lower(${users.displayName}) = ${lower} or ${users.steamId} = ${q} then 0 when lower(${users.displayName}) like ${prefix} then 1 else 2 end`,
+        desc(users.lastLoginAt),
+        asc(users.steamId),
+      )
+      .limit(limit)
+    return rows.map((r) => ({
+      steamId: r.steamId,
+      displayName: r.displayName,
+      avatarUrl: r.avatarUrl,
+      lastLoginAt: isoReq(r.lastLoginAt),
+      trustLevel: (r.trustLevel as TrustLevel | null) ?? null,
+      banned: Boolean(r.banned),
+    }))
+  }
+
+  async activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null> {
+    if (statuses.length === 0) return null
+    const [row] = await this.db
+      .select({ id: matches.id, slug: matches.slug, mode: matches.mode, status: matches.status, createdAt: matches.createdAt })
+      .from(matchPlayers)
+      .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .where(and(eq(matchPlayers.steamId, steamId), inArray(matches.status, statuses as any)))
+      .orderBy(desc(matches.createdAt))
+      .limit(1)
+    return row ? { ...row, mode: row.mode as Mode, createdAt: isoReq(row.createdAt) } : null
+  }
+
+  async clearCooldowns(steamId: string, now: Date): Promise<ClearedCooldown[]> {
+    const rows = await this.db
+      .select({ id: cooldowns.id, reason: cooldowns.reason, endsAt: cooldowns.endsAt, offence: cooldowns.offence })
+      .from(cooldowns)
+      .where(and(eq(cooldowns.steamId, steamId), gt(cooldowns.endsAt, now)))
+    if (rows.length === 0) return []
+    await this.db
+      .update(cooldowns)
+      .set({ endsAt: now })
+      .where(inArray(cooldowns.id, rows.map((r) => r.id)))
+    return rows.map((r) => ({ reason: r.reason, endsAt: isoReq(r.endsAt), offence: r.offence }))
   }
 
   async writeAudit(entry: NewAudit): Promise<AuditEntry> {

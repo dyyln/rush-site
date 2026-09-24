@@ -11,6 +11,8 @@ export type Audience =
   | { kind: "tournament"; tournamentId: string }
   // Closes every socket of these users instead of delivering msg
   | { kind: "disconnect"; steamIds: string[]; reason: string }
+  // Moves the users' open sockets in or out of the admin audience instead of delivering msg
+  | { kind: "admin_access"; steamIds: string[]; isAdmin: boolean }
 
 // Close code for a socket whose session was ended by logout or a ban
 export const CLOSE_SESSION_ENDED = 4001
@@ -18,6 +20,11 @@ export const CLOSE_SESSION_ENDED = 4001
 // Anything services use to push messages to connected players
 export interface Notifier {
   send(audience: Audience, msg: Outgoing): void
+}
+
+// Admin events reach sockets opened before a grant and stop at once after a revoke
+export function setAdminAccess(notifier: Notifier, steamId: string, isAdmin: boolean): void {
+  notifier.send({ kind: "admin_access", steamIds: [steamId], isAdmin }, { type: "admin_access", payload: { isAdmin }, ts: Date.now() })
 }
 
 // Ends the live sockets of a user on every instance
@@ -121,6 +128,15 @@ export class LocalHub {
   deliver(audience: Audience, msg: Outgoing): void {
     if (audience.kind === "disconnect") {
       for (const id of audience.steamIds) this.closeUser(id, audience.reason)
+      return
+    }
+    if (audience.kind === "admin_access") {
+      for (const id of audience.steamIds) {
+        for (const socket of this.byUser.get(id) ?? []) {
+          if (audience.isAdmin) this.admins.add(socket)
+          else this.admins.delete(socket)
+        }
+      }
       return
     }
     const data = JSON.stringify(msg)

@@ -25,7 +25,7 @@ import { registerStatsFeatures } from "./modules/stats/features.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { sampleMetrics } from "./modules/admin/metrics.js"
 import { fetchWorkshopItem } from "./modules/maps/workshop.js"
-import { LocalHub, type Audience } from "./modules/ws/hub.js"
+import { LocalHub, setAdminAccess, type Audience } from "./modules/ws/hub.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
 
 export type BuildAppOptions = Omit<ContextDeps, "log"> & {
@@ -159,6 +159,14 @@ export function adminOptions(ctx: AppContext) {
     redis: ctx.redis,
     isAdmin: ctx.isAdmin,
     admins: ctx.admins,
+    steamProfiles: async (steamIds: string[]) =>
+      (await ctx.steam.playerSummaries(steamIds)).map((p) => ({
+        steamId: p.steamid,
+        displayName: p.personaname,
+        avatarUrl: p.avatarfull ?? p.avatarmedium ?? p.avatar ?? null,
+        profileUrl: p.profileurl ?? null,
+      })),
+    onAdminChanged: (steamId: string, isAdmin: boolean) => setAdminAccess(ctx.notifier, steamId, isAdmin),
     authenticate: ctx.auth,
     getQueueSnapshot: () => queueSnapshot(ctx),
     getHosts: async () => {
@@ -195,6 +203,7 @@ export function adminOptions(ctx: AppContext) {
     onModeClosed: (mode: Mode) => drainMode(ctx, mode),
     resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
     mapPool: ctx.maps,
+    notifyQueueStatus: (steamId: string) => ctx.queue.notifyParty([steamId]),
     fetchWorkshop: (workshopId: string) =>
       fetchWorkshopItem(ctx.fetch, workshopId, async (id) => (await ctx.steam.playerSummaries([id]))[0]?.personaname ?? null),
     now: () => new Date(ctx.now()),

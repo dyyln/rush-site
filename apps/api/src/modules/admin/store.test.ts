@@ -122,4 +122,36 @@ describe("DrizzleAdminStore", () => {
     expect((await store.listAudit({ target: B, limit: 10 })).map((r) => r.action)).toEqual(["user.ban"])
     expect(await store.listAudit({ limit: 10 })).toHaveLength(2)
   })
+
+  it("searches users by name or SteamID64 prefix with exact names first", async () => {
+    await pg.exec(`insert into users (steam_id, display_name) values ('76561198000000013', 'vexa_alt')`)
+    expect((await store.searchUsers("vexa", 10, NOW)).map((u) => u.displayName)).toEqual(["vexa", "vexa_alt"])
+    // Short queries match the start of the name only
+    expect((await store.searchUsers("ex", 10, NOW)).map((u) => u.displayName)).toEqual([])
+    const [kolt] = await store.searchUsers("KOL", 10, NOW)
+    expect(kolt).toMatchObject({ steamId: B, displayName: "kolt", banned: true, trustLevel: null })
+    const [vexa] = await store.searchUsers("vexa", 10, NOW)
+    expect(vexa).toMatchObject({ steamId: A, banned: false, trustLevel: "verified" })
+    expect((await store.searchUsers("7656119800000001", 10, NOW)).map((u) => u.steamId).sort()).toEqual([A, B, "76561198000000013"])
+    expect((await store.searchUsers(B, 10, NOW)).map((u) => u.steamId)).toEqual([B])
+    expect(await store.searchUsers("%", 10, NOW)).toEqual([])
+    expect(await store.searchUsers("vexa", 1, NOW)).toHaveLength(1)
+  })
+
+  it("finds the player's active match", async () => {
+    expect(await store.activeMatchOf(A, ["live"])).toBeNull()
+    await pg.exec(`insert into match_players (match_id, steam_id, team) values ('${M2}', '${A}', 0)`)
+    expect(await store.activeMatchOf(A, ["live", "ready"])).toMatchObject({ id: M2, mode: "aim1v1", status: "live", slug: null })
+    expect(await store.activeMatchOf(A, ["ready"])).toBeNull()
+    expect(await store.activeMatchOf(B, ["live"])).toBeNull()
+  })
+
+  it("clears running cooldowns and keeps the rows", async () => {
+    const cleared = await store.clearCooldowns(A, NOW)
+    expect(cleared).toEqual([{ reason: "decline", offence: 1, endsAt: new Date(NOW.getTime() + 600_000).toISOString() }])
+    expect((await store.getUser(A, NOW))!.cooldowns).toEqual([])
+    expect(await store.clearCooldowns(A, NOW)).toEqual([])
+    const rows = await pg.query<{ n: number }>(`select count(*)::int as n from cooldowns where steam_id = '${A}'`)
+    expect(rows.rows[0]!.n).toBe(1)
+  })
 })

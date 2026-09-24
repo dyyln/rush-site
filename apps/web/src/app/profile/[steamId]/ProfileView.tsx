@@ -13,7 +13,6 @@ import { RatingChart } from "@/components/ui/RatingChart";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { FormDots } from "@/components/ui/FormDots";
 import { StatTile } from "@/components/ui/StatTile";
-import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
 import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
@@ -28,6 +27,7 @@ import { MyReports } from "@/components/review/MyReports";
 import { WeaponIcon, weaponLabel } from "@/components/icons";
 import { ProfileSkeleton } from "@/components/skeletons/ProfileSkeleton";
 import { MapThumb } from "@/components/play/MapThumb";
+import { MatchHistory } from "./MatchHistory";
 import styles from "./profile.module.css";
 
 const TRUST: Record<TrustLevel, { label: string; tone: BadgeTone }> = {
@@ -41,38 +41,6 @@ const BADGE_LABEL: Record<BadgeKind, string> = {
   cup_runner_up: "Runner up",
   cup_semifinalist: "Semifinalist",
 };
-
-const matchColumns: Column<MatchSummary>[] = [
-  {
-    key: "result",
-    header: "Result",
-    cell: (m) => (
-      <Badge tone={m.result === "win" ? "win" : m.result === "loss" ? "loss" : "warn"}>
-        {m.result === "abandoned" ? "Forfeit" : m.result}
-      </Badge>
-    ),
-  },
-  { key: "mode", header: "Mode", cell: (m) => MODE_COPY[m.mode].short },
-  { key: "map", header: "Map", cell: (m) => <span className="mono">{mapName(m.mode, m.mapId)}</span>, hideOnMobile: true },
-  {
-    key: "score",
-    header: "Score",
-    cell: (m) => (
-      <Link href={`/matches/${m.matchId}`} className={styles.scoreLink} aria-label={`Match details, ${m.result === "abandoned" ? "forfeit" : `${m.scoreFor} to ${m.scoreAgainst}`}`}>
-        {m.result === "abandoned" ? "--" : `${m.scoreFor}:${m.scoreAgainst}`}
-      </Link>
-    ),
-    numeric: true,
-  },
-  { key: "kd", header: "K/D", cell: (m) => `${m.kills}/${m.deaths}`, numeric: true, hideOnMobile: true },
-  {
-    key: "delta",
-    header: "Rating",
-    cell: (m) => <span className={m.ratingDelta >= 0 ? styles.up : styles.down}>{signed(m.ratingDelta)}</span>,
-    numeric: true,
-  },
-  { key: "date", header: "Date", cell: (m) => shortDate(m.playedAt), align: "right", hideOnMobile: true },
-];
 
 export function ProfileView({ steamId }: { steamId: string }) {
   const data = useAsync(() => api.profile(steamId), [steamId]);
@@ -157,10 +125,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
       </Tabs>
 
       <div className="grid-2">
-        <section aria-labelledby="history-heading" className="stack">
-          <h2 id="history-heading">Match history</h2>
-          <Table caption="Recent matches" columns={matchColumns} rows={profile.recentMatches} rowKey={(m) => m.matchId} empty="No matches yet." />
-        </section>
+        <MatchHistory steamId={profile.user.steamId} first={profile.recentMatches} firstCursor={profile.recentMatchesCursor ?? null} />
         <section aria-labelledby="badges-heading" className="stack">
           <h2 id="badges-heading">Cup badges</h2>
           {profile.badges.length === 0 ? (

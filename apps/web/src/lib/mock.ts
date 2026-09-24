@@ -9,6 +9,7 @@ import type {
   Leaderboard,
   LeaderboardRow,
   MatchDetail,
+  MatchHistoryPage,
   MatchKill,
   MatchPlayer,
   MatchRound,
@@ -177,9 +178,12 @@ function hinted(id: string, mode: Mode, mapId: string): string {
   return id;
 }
 
+const MOCK_HISTORY = 45;
+const MOCK_FIRST_PAGE = 20;
+
 function mockMatches(steamId: string): MatchSummary[] {
   const r = rng(hash(steamId + "matches"));
-  return Array.from({ length: 12 }, (_, i) => {
+  return Array.from({ length: MOCK_HISTORY }, (_, i) => {
     const mode = MODES[Math.floor(r() * MODES.length)]!;
     const aim = mode !== "rush3v3";
     const win = r() > 0.45;
@@ -187,6 +191,26 @@ function mockMatches(steamId: string): MatchSummary[] {
     const mapId = aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : RUSH_MAP.id;
     const kills = 8 + Math.floor(r() * 20);
     const abandoned = i === 7;
+    // One Bo3 series so the history shows map scores
+    if (i === 2 && aim) {
+      const maps = AIM_MAPS.slice(0, 3).map((m) => m.id);
+      return {
+        matchId: hinted(mockUuid(steamId + i), mode, maps[2]!),
+        slug: "brave-amber-falcon",
+        mode,
+        mapId: maps[2]!,
+        bestOf: 3,
+        maps,
+        playedAt: new Date(MOCK_NOW - i * DAY * 0.6).toISOString(),
+        result: win ? "win" : "loss",
+        scoreFor: win ? 2 : 1,
+        scoreAgainst: win ? 1 : 2,
+        ratingDelta: win ? 12 : -12,
+        kills: kills * 3,
+        deaths: 30,
+        headshots: kills,
+      };
+    }
     return {
       matchId: hinted(mockUuid(steamId + i), mode, mapId),
       mode,
@@ -201,6 +225,14 @@ function mockMatches(steamId: string): MatchSummary[] {
       headshots: Math.floor(kills * (0.3 + r() * 0.4)),
     };
   });
+}
+
+// Offset cursors are fine for the mock. The api uses opaque keyset cursors
+export function mockUserMatches(steamId: string, opts: { mode?: Mode; cursor?: string; limit?: number }): MatchHistoryPage {
+  const all = mockMatches(steamId).filter((m) => !opts.mode || m.mode === opts.mode);
+  const start = Number(opts.cursor ?? 0) || 0;
+  const end = start + (opts.limit ?? 20);
+  return { matches: all.slice(start, end), nextCursor: end < all.length ? String(end) : null };
 }
 
 export function mockProfile(steamId: string): Profile {
@@ -233,7 +265,8 @@ export function mockProfile(steamId: string): Profile {
         awardedAt: new Date(MOCK_NOW - 9 * DAY).toISOString(),
       },
     ],
-    recentMatches: mockMatches(steamId),
+    recentMatches: mockMatches(steamId).slice(0, MOCK_FIRST_PAGE),
+    recentMatchesCursor: String(MOCK_FIRST_PAGE),
     favouriteWeapon: mockFavouriteWeapon(steamId),
   };
 }
