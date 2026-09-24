@@ -68,9 +68,9 @@ export function RanksView() {
         <div>
           <h1>Ranks</h1>
           <p>
-            Each mode has its own rating, calculated with Glicko-2. It moves after every match based on the result and how your
-            opponents are rated, and it shows from your first match. Play {LEADERBOARD_MIN_MATCHES}{" "}
-            {LEADERBOARD_MIN_MATCHES === 1 ? "match" : "matches"} in a mode to appear on its leaderboard.
+            Each mode has its own rating, calculated with Glicko-2. It moves after every match based on the result and how your opponents are rated, and it
+            shows from your first match. Play {LEADERBOARD_MIN_MATCHES} {LEADERBOARD_MIN_MATCHES === 1 ? "match" : "matches"} in a mode to appear on its
+            leaderboard.
           </p>
         </div>
       </header>
@@ -88,9 +88,7 @@ export function RanksView() {
                 <li key={m} className={`glass ${styles.youCard}`}>
                   <span className={styles.youMode}>{MODE_COPY[m].label}</span>
                   {y ? <TierChip tier={y.tier} rating={y.rating} size="sm" link={false} /> : <TierChip unranked size="sm" link={false} />}
-                  <span className="muted">
-                    {!y ? "No matches yet" : n ? `${n.points} rating to ${n.name}` : "Top tier"}
-                  </span>
+                  <span className="muted">{!y ? "No matches yet" : n ? `${n.points} rating to ${n.name}` : "Top tier"}</span>
                 </li>
               );
             })}
@@ -114,7 +112,10 @@ export function RanksView() {
                     <TierChip tier={t.id} link={false} />
                     <span className={`${styles.band} mono`}>{bandText(t)}</span>
                     {mine.length > 0 && (
-                      <span className={styles.youTag}>You{mine.length < MODES.length ? `, ${mine.map((m) => MODE_COPY[m].short).join(" ")}` : ""}</span>
+                      <span className={styles.youTag}>
+                        <span className="visually-hidden">Your rank in </span>
+                        {mine.map((m) => MODE_COPY[m].short).join(" ")}
+                      </span>
                     )}
                   </div>
                   <p className={styles.desc}>{DESCRIPTIONS[t.id]}</p>
