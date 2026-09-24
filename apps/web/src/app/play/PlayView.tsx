@@ -21,7 +21,7 @@ import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { trustProgressLine, type TrustStatus } from "@/lib/trust";
-import { MODE_COPY } from "@/lib/modes";
+import { MODE_ART, MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { activeMatch, usePlay } from "@/lib/usePlay";
 import { mapPoolId } from "@/components/play/ModeMapPool";
@@ -34,13 +34,6 @@ import { CooldownLine } from "./CooldownLine";
 import { PlayChat } from "./PlayChat";
 import styles from "./play.module.css";
 
-// Full-bleed art per mode tile
-const MODE_ART: Record<Mode, string> = {
-  rush3v3: "/backdrops/rush_001_1.webp",
-  aim1v1: "/maps/aim_redline.webp",
-  aim2v2: "/maps/aim_deagle7k.webp",
-  rush1v1: "/rush-rooms/205.webp",
-};
 
 // Play: the modes as picture tiles. The dock at the bottom of every page starts the queue for the picked ones,
 // and the party sits in the top bar

@@ -40,6 +40,14 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
   },
 };
 
+// Full-bleed art per mode, for mode tiles and cup banners
+export const MODE_ART: Record<Mode, string> = {
+  rush3v3: "/backdrops/rush_001_1.webp",
+  aim1v1: "/maps/aim_redline.webp",
+  aim2v2: "/maps/aim_deagle7k.webp",
+  rush1v1: "/rush-rooms/205.webp",
+};
+
 export function modeLabel(mode: Mode): string {
   return MODE_COPY[mode].label;
 }
