@@ -59,6 +59,9 @@ type Status struct {
 	LastUpdate *time.Time `json:"lastUpdate,omitempty"`
 	LastError  string     `json:"lastError,omitempty"`
 	Attempts   int        `json:"attempts,omitempty"`
+	// Rush room veto script: off (not installed), on, stale (Valve changed rush_001) or error.
+	RushRooms       RushRoomsState `json:"rushRooms,omitempty"`
+	RushRoomsDetail string         `json:"rushRoomsDetail,omitempty"`
 }
 
 // Updater runs the update state machine.
@@ -88,6 +91,30 @@ func New(cfg Config, checker Checker, gate Gate, runner procrun.Runner, log *slo
 		kick:    make(chan struct{}, 1),
 		status:  Status{State: Idle},
 	}
+}
+
+// PatchGameinfo checks the Rush script VPK and puts the Metamod and Rush lines in gameinfo.gi.
+// Called at start and after every CS2 update. Does nothing when patching is turned off.
+func (u *Updater) PatchGameinfo() error {
+	if !u.cfg.PatchGameinfo {
+		return nil
+	}
+	state, detail := CheckRushRooms(u.cfg.CS2Dir)
+	u.set(func(s *Status) { s.RushRooms, s.RushRoomsDetail = state, detail })
+	switch state {
+	case RushRoomsStale, RushRoomsError:
+		u.log.Error("Rush room veto script left out, Valve's random draw runs", "state", state, "detail", detail)
+	case RushRoomsOn:
+		u.log.Info("Rush room veto script enabled")
+	}
+	changed, err := EnsureGameinfo(GameinfoPath(u.cfg.CS2Dir), state == RushRoomsOn)
+	if err != nil {
+		return fmt.Errorf("patch gameinfo.gi: %w", err)
+	}
+	if changed {
+		u.log.Info("updated gameinfo.gi search paths", "rushRooms", state)
+	}
+	return nil
 }
 
 // Status returns a copy of the current status.
@@ -166,11 +193,8 @@ func (u *Updater) drain(ctx context.Context) {
 	}
 	u.set(func(s *Status) { s.State = Updating; s.Attempts++ })
 	err := u.runSteamCMD(ctx)
-	if err == nil && u.cfg.PatchGameinfo {
-		_, err = EnsureMetamod(GameinfoPath(u.cfg.CS2Dir))
-		if err != nil {
-			err = fmt.Errorf("patch gameinfo.gi: %w", err)
-		}
+	if err == nil {
+		err = u.PatchGameinfo()
 	}
 	if err != nil {
 		u.log.Error("CS2 update failed, will retry", "err", err)
@@ -179,7 +203,8 @@ func (u *Updater) drain(ctx context.Context) {
 	}
 	now := time.Now().UTC()
 	u.mu.Lock()
-	u.status = Status{State: Idle, LastCheck: u.status.LastCheck, LastUpdate: &now}
+	u.status = Status{State: Idle, LastCheck: u.status.LastCheck, LastUpdate: &now,
+		RushRooms: u.status.RushRooms, RushRoomsDetail: u.status.RushRoomsDetail}
 	u.gate.SetAccepting(true)
 	u.mu.Unlock()
 	u.log.Info("CS2 updated, accepting servers again")

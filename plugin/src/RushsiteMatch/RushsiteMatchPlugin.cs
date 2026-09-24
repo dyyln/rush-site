@@ -77,6 +77,15 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         AddCommand("css_ready", "Explains that the match starts on its own", (p, info) => Reply(p, info, _ => _match!.ReadyHint()));
         AddCommand("rushsite_status", "Print match status", OnStatusCommand);
         AddCommand("rushsite_force_start", "Start an aim match now", OnForceStartCommand);
+        // Our rush_001 script answers each room set with one of these. Server console only.
+        AddCommand("rushsite_rooms_applied", "Sent by the rush_001 script after it applied the rooms", (p, info) =>
+        {
+            if (p is null) _match?.OnRushRoomsApplied(info.ArgString.Trim().Trim('"'));
+        });
+        AddCommand("rushsite_rooms_rejected", "Sent by the rush_001 script when it refused the rooms", (p, info) =>
+        {
+            if (p is null) _match?.OnRushRoomsRejected(info.ArgString.Trim().Trim('"'));
+        });
         AddCommand("rushsite_rush_rooms_send", "Send this map's Rush rooms to the script again (warmup only)", OnRushRoomsSendCommand);
         AddCommand("rushsite_reload", "Reload match.json if no match is running", OnReloadCommand);
 

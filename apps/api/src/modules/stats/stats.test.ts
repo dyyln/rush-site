@@ -8,7 +8,7 @@ import type { Db } from "../../db/client.js"
 import { buildDistribution } from "./distribution.js"
 import { estimateFromTickets, median } from "./eta.js"
 import { namePattern } from "./rank.js"
-import { buildStatus, type StatusInput } from "./status.js"
+import { availabilityKey, buildStatus, type StatusInput } from "./status.js"
 
 const none = Object.fromEntries(MODES.map((m) => [m, []])) as unknown as Record<Mode, string[]>
 
@@ -86,6 +86,17 @@ describe("status", () => {
     expect(off.modes.at(-1)).toEqual({ mode: "rush1v1", available: false, reason: "disabled" })
     const upd = buildStatus({ ...base, hosts: [{ status: "updating", slotsTotal: 8, slotsFree: 8 }] })
     expect(upd.modes[0]).toEqual({ mode: "aim1v1", available: false, reason: "servers_updating" })
+  })
+
+  it("diffs availability only, not slot counts or time", () => {
+    const busy = buildStatus({ ...base, hosts: [{ status: "online", slotsTotal: 8, slotsFree: 1 }] })
+    const idle = buildStatus({ ...base, hosts: [{ status: "online", slotsTotal: 8, slotsFree: 8 }], now: base.now + 60_000 })
+    expect(availabilityKey(busy)).toBe(availabilityKey(idle))
+    // The CS2 update window and an admin closure both change it
+    const updating = buildStatus({ ...base, hosts: [{ status: "updating", slotsTotal: 8, slotsFree: 8 }] })
+    expect(availabilityKey(updating)).not.toBe(availabilityKey(idle))
+    const closed = buildStatus({ ...base, hosts: [{ status: "online", slotsTotal: 8, slotsFree: 8 }], closed: ["aim1v1"] })
+    expect(availabilityKey(closed)).not.toBe(availabilityKey(idle))
   })
 })
 

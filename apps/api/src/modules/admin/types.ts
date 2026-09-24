@@ -168,6 +168,8 @@ export interface AdminPluginOptions {
   metrics?(range: MetricsRange, now: Date): Promise<MetricsView>
   // Pulls every waiting ticket out of a mode that was just closed. Returns how many tickets it touched
   onModeClosed?(mode: Mode): Promise<number>
+  // Pushes the new mode availability to every client after a queue flag changes
+  onQueueFlagChanged?(): Promise<unknown>
   // Turns a /id/<vanity> profile URL into a SteamID64. Null when unknown or Steam is not configured
   resolveVanity?(vanity: string): Promise<string | null>
   // Map pool routes answer 404 without these

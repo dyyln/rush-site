@@ -108,4 +108,6 @@ public sealed class MatchSettings
     public bool HoldRushWarmup { get; init; } = true;
     // Rush. Send the veto's rushRooms to our rush_001.js on each map.
     public bool RushRooms { get; init; } = true;
+    // Rush. How long to wait for our script to answer. The rooms are sent once more, then rush_rooms_failed goes out.
+    public TimeSpan RushRoomsReplyTimeout { get; init; } = TimeSpan.FromSeconds(5);
 }

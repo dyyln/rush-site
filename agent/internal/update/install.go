@@ -176,25 +176,48 @@ func PublicBuildID(appInfo string) (string, error) {
 	return m[1], nil
 }
 
-var reLowViolence = regexp.MustCompile(`(?m)^([ \t]*)Game_LowViolence[ \t]+csgo_lv[^\n]*\n`)
+var (
+	reLowViolence   = regexp.MustCompile(`(?m)^([ \t]*)Game_LowViolence[ \t]+csgo_lv[^\n]*\n`)
+	reMetamodLine   = regexp.MustCompile(`(?m)^[ \t]*Game[ \t]+csgo/addons/metamod[^\n]*\n`)
+	reRushRoomsLine = regexp.MustCompile(`(?m)^[ \t]*Game[ \t]+` + regexp.QuoteMeta(rushRoomsLine) + `[^\n]*\n`)
+)
 
-// EnsureMetamod adds the Metamod search path to gameinfo.gi if it is missing.
-// CS2 updates overwrite gameinfo.gi, which silently unloads Metamod and every plugin.
-func EnsureMetamod(path string) (bool, error) {
+// EnsureGameinfo keeps our search paths in gameinfo.gi. CS2 updates overwrite the file, which
+// silently unloads Metamod and every plugin, and our Rush script.
+// The Metamod line always goes in. The rushsite_rooms.vpk line goes right after it when rushRooms
+// is true and is taken out when false, because a search path to a missing or bad VPK stops the server.
+func EnsureGameinfo(path string, rushRooms bool) (bool, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
 	s := string(b)
-	if strings.Contains(s, "csgo/addons/metamod") {
+	patched := s
+	if !strings.Contains(patched, "csgo/addons/metamod") {
+		loc := reLowViolence.FindStringSubmatchIndex(patched)
+		if loc == nil {
+			return false, errors.New("Game_LowViolence csgo_lv line not found")
+		}
+		indent := patched[loc[2]:loc[3]]
+		patched = patched[:loc[1]] + indent + "Game\tcsgo/addons/metamod\n" + patched[loc[1]:]
+	}
+	has := reRushRoomsLine.MatchString(patched)
+	switch {
+	case rushRooms && !has:
+		// Both lines must sit above `Game csgo` to win over pak01.
+		loc := reMetamodLine.FindStringIndex(patched)
+		if loc == nil {
+			return false, errors.New("Metamod line not found")
+		}
+		line := patched[loc[0]:loc[1]]
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		patched = patched[:loc[1]] + indent + "Game\t" + rushRoomsLine + "\n" + patched[loc[1]:]
+	case !rushRooms && has:
+		patched = reRushRoomsLine.ReplaceAllString(patched, "")
+	}
+	if patched == s {
 		return false, nil
 	}
-	loc := reLowViolence.FindStringSubmatchIndex(s)
-	if loc == nil {
-		return false, errors.New("Game_LowViolence csgo_lv line not found")
-	}
-	indent := s[loc[2]:loc[3]]
-	patched := s[:loc[1]] + indent + "Game\tcsgo/addons/metamod\n" + s[loc[1]:]
 	info, err := os.Stat(path)
 	if err != nil {
 		return false, err

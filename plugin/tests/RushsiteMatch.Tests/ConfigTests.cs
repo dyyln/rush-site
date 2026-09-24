@@ -103,12 +103,14 @@ public class ConfigTests
         const string csgo = "/srv/cs2/game/csgo";
         var none = Array.Empty<string>();
         var cmd = new[] { "-dedicated", "+rushsite_match_config", "cfg/cmd.json", "+map", "x" };
+        // Separators and drive letters follow the OS running the tests.
+        static string UnderCsgo(string rel) => Path.GetFullPath(Path.Combine(csgo, rel));
 
         Assert.Equal("/env/match.json", MatchConfigLoader.ResolvePath("/env/match.json", "cfg/cv.json", cmd, "/dir", csgo));
-        Assert.Equal("/srv/cs2/game/csgo/cfg/cv.json", MatchConfigLoader.ResolvePath(null, "cfg/cv.json", cmd, "/dir", csgo));
-        Assert.Equal("/srv/cs2/game/csgo/cfg/cmd.json", MatchConfigLoader.ResolvePath("", "", cmd, "/dir", csgo));
-        Assert.Equal("/dir/match.json", MatchConfigLoader.ResolvePath(null, null, none, "/dir", csgo));
-        Assert.Equal("/srv/cs2/game/csgo/cfg/match.json", MatchConfigLoader.ResolvePath(null, null, none, null, csgo));
+        Assert.Equal(UnderCsgo("cfg/cv.json"), MatchConfigLoader.ResolvePath(null, "cfg/cv.json", cmd, "/dir", csgo));
+        Assert.Equal(UnderCsgo("cfg/cmd.json"), MatchConfigLoader.ResolvePath("", "", cmd, "/dir", csgo));
+        Assert.Equal(Path.Combine("/dir", "match.json"), MatchConfigLoader.ResolvePath(null, null, none, "/dir", csgo));
+        Assert.Equal(UnderCsgo("cfg/match.json"), MatchConfigLoader.ResolvePath(null, null, none, null, csgo));
     }
 }
 

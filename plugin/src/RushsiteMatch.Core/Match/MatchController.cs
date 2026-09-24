@@ -59,6 +59,11 @@ public sealed class MatchController
     // Rush. Rooms picked in the veto for this map, null for Valve's random draw.
     private RushRoomPlan? _roomPlan;
     private bool _roomsMismatchSent;
+    // Rush. Handshake with our rush_001 script. It answers every set with rushsite_rooms_applied or _rejected.
+    private DateTimeOffset? _roomsSentAt;
+    private int _roomsSends;
+    private bool _roomsConfirmed;
+    private bool _roomsFailedSent;
 
     private int _round;
     // True from round_end until the next round starts. Kills in that gap belong to the round that just ended.
@@ -224,6 +229,8 @@ public sealed class MatchController
         _stats.Restore(st.Players);
         LoadRushRooms();
         _roomsMismatchSent = st.RushRoomsMismatchSent ?? false;
+        _roomsConfirmed = st.RushRoomsConfirmed ?? false;
+        _roomsFailedSent = st.RushRoomsFailedSent ?? false;
         _recording = st.Recording;
         if (_recording) MarkRecording();
         _currentArena = st.Arena;
@@ -273,6 +280,10 @@ public sealed class MatchController
     private void LoadRushRooms()
     {
         _roomPlan = null;
+        _roomsSentAt = null;
+        _roomsSends = 0;
+        _roomsConfirmed = false;
+        _roomsFailedSent = false;
         if (!IsRush || !_settings.RushRooms) return;
         if (RushRoomPlan.TryParse(_cfg.RushRoomsFor(MapNumber), out var plan, out var error))
             _roomPlan = plan;
@@ -285,7 +296,59 @@ public sealed class MatchController
     {
         if (_roomPlan is null || Phase != MatchPhase.Warmup) return;
         _game.ExecuteCommand(_roomPlan.Command());
+        _roomsSentAt = _clock.UtcNow;
+        _roomsSends++;
+        _roomsConfirmed = false;
         _game.Log($"rush rooms sent for map {MapNumber}: {string.Join(",", _roomPlan.Path)}.");
+    }
+
+    // rushsite_rooms_applied from our script, with the 7 rooms now in play.
+    public void OnRushRoomsApplied(string reported)
+    {
+        if (_roomPlan is null) return;
+        var ids = reported.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (ids.SequenceEqual(_roomPlan.Path.Select(id => id.ToString())))
+        {
+            _roomsSentAt = null;
+            _roomsConfirmed = true;
+            _game.Log($"rush rooms confirmed by the script for map {MapNumber}.");
+            SaveState();
+            return;
+        }
+        FailRushRooms("different", string.Join(",", ids));
+    }
+
+    // rushsite_rooms_rejected from our script, with its reason and the set it was given.
+    public void OnRushRoomsRejected(string detail)
+    {
+        if (_roomPlan is null) return;
+        FailRushRooms("rejected", detail.Trim());
+    }
+
+    // No answer within the timeout: send once more in warmup, then report the script as missing.
+    private void TickRushRoomsReply(DateTimeOffset now)
+    {
+        if (_roomPlan is null || _roomsConfirmed || _roomsFailedSent || _roomsSentAt is null) return;
+        if (now - _roomsSentAt < _settings.RushRoomsReplyTimeout) return;
+        if (Phase == MatchPhase.Warmup && _roomsSends < 2)
+        {
+            _game.Log("no answer from the rush_001 script. Sending the rooms again.");
+            FireRushRooms();
+            return;
+        }
+        FailRushRooms("no_reply", null);
+    }
+
+    private void FailRushRooms(string reason, string? detail)
+    {
+        _roomsSentAt = null;
+        _roomsConfirmed = false;
+        if (_roomsFailedSent) return;
+        _roomsFailedSent = true;
+        _game.Log($"rush rooms did not take for map {MapNumber}: {reason}{(detail is null ? "" : " " + detail)}." +
+                  (reason == "no_reply" ? " Is rushsite_rooms.vpk installed and named in gameinfo.gi?" : ""));
+        _sink.Enqueue(new RushRoomsFailed(reason, _roomPlan!.Path) { Detail = detail, MapNumber = EventMapNumber });
+        SaveState();
     }
 
     // Console command. Sends the rooms again, for testing on a server.
@@ -722,7 +785,12 @@ public sealed class MatchController
         _stats.Reset();
         _round = 0;
         _betweenRounds = false;
-        _sink.Enqueue(new MatchStarted { MapNumber = EventMapNumber, RushRooms = _roomPlan?.Path });
+        _sink.Enqueue(new MatchStarted
+        {
+            MapNumber = EventMapNumber,
+            RushRooms = _roomPlan?.Path,
+            RushRoomsConfirmed = _roomPlan is null ? null : _roomsConfirmed,
+        });
         SaveState();
     }
 
@@ -892,6 +960,7 @@ public sealed class MatchController
                 if (CheckAbandon(now)) return;
                 AnnounceAway(now);
                 if (Phase == MatchPhase.Warmup && IsRush) TickRushWarmup(now);
+                if (IsRush && Phase is MatchPhase.Warmup or MatchPhase.Live) TickRushRoomsReply(now);
                 if (Phase == MatchPhase.Warmup && ManagesMatch) TickAimWarmup(now);
                 if (Phase == MatchPhase.Live && _endDeadline is not null && now >= _endDeadline)
                     FinishMap("score tracking");
@@ -1226,6 +1295,8 @@ public sealed class MatchController
         Recording = _recording,
         Arena = _currentArena,
         RushRoomsMismatchSent = _roomsMismatchSent ? true : null,
+        RushRoomsConfirmed = _roomsConfirmed ? true : null,
+        RushRoomsFailedSent = _roomsFailedSent ? true : null,
         RushFrontSlot = _rush?.FrontSlot,
         RushTWins = _rush?.Wins[Side.T],
         RushCtWins = _rush?.Wins[Side.CT],
@@ -1254,6 +1325,8 @@ public sealed class MatchController
     private static string SafeName(string s) =>
         new(s.Select(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray());
 
+    private string RoomsState => _roomsConfirmed ? " confirmed" : _roomsFailedSent ? " FAILED" : " unconfirmed";
+
     public string Status()
     {
         var countdown = _countdown is null ? "n/a" : _countdown.Running ? $"{_countdown.SecondsLeft(_clock.UtcNow)}s" : _countdown.Fired ? "done" : "waiting";
@@ -1262,7 +1335,7 @@ public sealed class MatchController
                $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))} " +
                $"connected {_cfg.AllowedSteamIds.Count - _presence.Missing.Count}/{_cfg.AllowedSteamIds.Count} countdown {countdown} " +
                $"recording {_recording}" + (IsRush ? $" arena {_currentArena ?? "?"} front {_rush!.FrontSlot} " +
-               $"rooms {(_roomPlan is null ? "random" : string.Join(",", _roomPlan.Path))}{(_roomsMismatchSent ? " MISMATCH" : "")} " +
+               $"rooms {(_roomPlan is null ? "random" : string.Join(",", _roomPlan.Path) + RoomsState)}{(_roomsMismatchSent ? " MISMATCH" : "")} " +
                $"lineup {_cfg.AllowedSteamIds.Count - RushNotReady().Count}/{_cfg.AllowedSteamIds.Count} " +
                $"wrong side [{string.Join(",", WrongSidePlayers())}] warmup held {_warmupHeld}" : "");
     }
