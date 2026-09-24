@@ -89,6 +89,8 @@ export const MatchAcceptViewSchema = z.object({
   required: z.number().int().positive(),
   // True once the viewer accepted or declined
   responded: z.boolean(),
+  // Players who accepted so far
+  acceptedSteamIds: z.array(SteamId64Schema).optional(),
 })
 export type MatchAcceptView = z.infer<typeof MatchAcceptViewSchema>
 
@@ -136,7 +138,16 @@ export const MatchDetailSchema = z.object({
   // Participants only, while the match is in that step
   accept: MatchAcceptViewSchema.optional(),
   veto: MatchVetoViewSchema.optional(),
-  warmup: z.object({ connected: z.number().int().nonnegative(), expected: z.number().int().nonnegative() }).optional(),
+  warmup: z
+    .object({
+      connected: z.number().int().nonnegative(),
+      expected: z.number().int().nonnegative(),
+      // Players not on the server yet
+      missingSteamIds: z.array(SteamId64Schema).optional(),
+      // Epoch ms by which every player must be on the server
+      connectDeadline: z.number().optional(),
+    })
+    .optional(),
   // Only included for participants
   connect: z
     .object({

@@ -20,6 +20,12 @@ public sealed class MatchConfig
     // Optional. Present only for a series such as a Bo3. Absent means one map.
     public SeriesConfig? Series { get; init; }
 
+    // Optional. Brand name for the chat prefix and the site the match link points to.
+    public BrandConfig? Brand { get; init; }
+
+    // Optional. Word id of the match, such as brave-amber-falcon. The match link uses it over matchId.
+    public string? Slug { get; init; }
+
     [JsonIgnore]
     public WinCondition ParsedWinCondition { get; internal set; } = null!;
 
@@ -69,6 +75,9 @@ public sealed class TeamConfig
     // Optional. "ct" or "t". When left out teams[0] plays CT and teams[1] plays T.
     public string? Side { get; init; }
 
+    // Optional. Shown in chat when set, such as a cup team name.
+    public string? DisplayName { get; init; }
+
     public const string SideCt = "ct";
     public const string SideT = "t";
 
@@ -78,6 +87,13 @@ public sealed class TeamConfig
         "t" or "2" or "terrorist" => SideT,
         _ => null,
     };
+}
+
+public sealed class BrandConfig
+{
+    public string? Name { get; init; }
+    // Web site root, such as https://example.gg. Match links are siteUrl/matches/<slug or matchId>.
+    public string? SiteUrl { get; init; }
 }
 
 public sealed class DemoUploadConfig

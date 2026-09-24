@@ -8,6 +8,10 @@ public interface IGameServer
     void Kick(int userId, string reason);
     void PrintToAll(string message);
     void PrintToPlayer(string steamId, string message);
+    // Center screen text for every player. Plain text without colour codes.
+    void PrintCenterToAll(string message);
+    // In-game name of a connected player, or null.
+    string? PlayerName(string steamId);
     void Log(string message);
     string CsgoDirectory { get; }
 
@@ -93,8 +97,10 @@ public sealed class MatchSettings
     public bool AimHalftime { get; init; }
     public bool PauseOnDisconnect { get; init; } = true;
     public bool KickBots { get; init; } = true;
-    // Kick every player as soon as the result is decided
+    // Kick every player once the result is decided and MatchEndKickDelay has passed.
     public bool KickOnMatchEnd { get; init; } = true;
+    // Time the final score stays on screen before the kick.
+    public TimeSpan MatchEndKickDelay { get; init; } = TimeSpan.FromSeconds(10);
     public bool TryChangeTeam { get; init; }
     // Rush. Wrong team joins a player may make before being kicked.
     public int TeamJoinRefusalsBeforeKick { get; init; } = 3;

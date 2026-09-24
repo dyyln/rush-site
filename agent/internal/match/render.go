@@ -165,6 +165,8 @@ func PluginJSON(p Params) ([]byte, error) {
 		WinCondition:    p.Spec.WinCondition,
 		Series:          p.Req.Series,
 		RushRooms:       p.Req.RushRooms,
+		Brand:           p.Req.Brand,
+		Slug:            p.Req.Slug,
 	}
 	return json.MarshalIndent(pc, "", "  ")
 }

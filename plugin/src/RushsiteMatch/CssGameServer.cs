@@ -59,6 +59,13 @@ public sealed class CssGameServer : IGameServer
 
     public void PrintToPlayer(string steamId, string message) => FindPlayer(steamId)?.PrintToChat(message);
 
+    public void PrintCenterToAll(string message)
+    {
+        foreach (var p in HumanPlayers()) p.PrintToCenter(message);
+    }
+
+    public string? PlayerName(string steamId) => FindPlayer(steamId)?.PlayerName;
+
     public void Log(string message) => _logger.LogInformation("{Message}", message);
 
     public IReadOnlyList<(string SteamId, Side Side)> GetPlayerSides() =>

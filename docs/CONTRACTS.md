@@ -66,6 +66,8 @@ type StartServerRequest = {
   // Required. Built by resolveLaunch(mode, map) from MODE_CONFIGS, with exactly one of workshopId or mapName matching map.
   // This is the only launch table. The agent refuses (400) an execCfg it does not ship, and DatHost maps from the same block
   series?: SeriesConfig        // best-of series on this one server. map, cs2 and demoUpload then describe map startMapNumber
+  brand?: { name: string; siteUrl: string }   // chat prefix and web root. The API sends BRAND_NAME and PUBLIC_URL
+  slug?: string                // match room word id. The plugin links to <siteUrl>/matches/<slug or matchId>
 }
 type SeriesConfig = {
   bestOf: number               // 2 to 7, 3 for cup finals
@@ -108,7 +110,8 @@ type SeriesMapResult = { mapNumber: number; mapId: string; winnerTeam: string; s
 `mapNumber` counts from 1 and is left out on single map matches. `kill` also takes an optional `mapNumber`. Scores have no upper bound. A tied aim map, and every series map, goes to overtime so a map can end 16-14. Rush follows Valve's rules.
 
 The plugin reads its match config from `match.json` written by the agent next to the server cfg:
-`{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition, series? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series` is the StartServerRequest block, copied as is. Both the Go agent and the DatHost driver write these.
+`{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition, series?, rushRooms?, brand?, slug? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series`, `rushRooms`, `brand` and `slug` are the StartServerRequest fields, copied as is. Both the Go agent and the DatHost driver write these.
+`brand.name` is the chat prefix (`[rushsite]` when absent). At match end, and at series end, the plugin prints the final score and `<brand.siteUrl>/matches/<slug or matchId>`, waits `rushsite_match_end_kick_delay` seconds (default 10) and then kicks everyone with the score in the kick reason. An invalid or missing `siteUrl` only drops the link. Team `displayName` is used in chat, otherwise `Team <name>`.
 In Rush the plugin holds warmup until every player is on their team's side, redirects wrong joins, and kicks after 3 refusals. It writes `match_state.json` beside match.json so a hot reload with the same matchId resumes without a second `server_ready`.
 
 ## API -> Web (WebSocket at `/ws`, JSON messages, auth via session cookie)

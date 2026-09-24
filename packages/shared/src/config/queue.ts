@@ -5,6 +5,9 @@ export const ACCEPT_WINDOW_SEC = 20
 // Seconds each veto step stays open before it resolves with the votes cast so far
 export const VETO_STEP_SEC = 20
 
+// Seconds a player has to join the server once it is ready. The plugin's no-show grace must match
+export const CONNECT_GRACE_SEC = 300
+
 export type RatingWidenStep = {
   // Applies once a ticket has waited at least this long
   afterSec: number

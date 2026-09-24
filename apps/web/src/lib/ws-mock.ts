@@ -3,6 +3,7 @@ import {
   MODES,
   MODE_CONFIGS,
   maxRatingDiffAfter,
+  CONNECT_GRACE_SEC,
   RUSH_MAP,
   RUSH_ROOM_VETO,
   createRoomVeto,
@@ -24,6 +25,12 @@ type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]
 
 const MATCH_ID = MOCK_ROOM_MATCH_ID;
 const ACCEPT_SEC = 20;
+
+// Players in the mock room, your team first, the same ids the mock match detail uses
+function mockRoster(mode: Mode): string[] {
+  const size = MODE_CONFIGS[mode].teamSize;
+  return [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4)), ...Array.from({ length: size }, (_, i) => mockSteamId(i + 20))];
+}
 const STEP_SEC = 20;
 
 export class MockRealtime extends Emitter implements Realtime {
@@ -243,6 +250,7 @@ export class MockRealtime extends Emitter implements Realtime {
       acceptDeadline: Date.now() + (ACCEPT_SEC - 1) * 1000,
       acceptWindowSec: ACCEPT_SEC,
       accepted: this.accepted,
+      acceptedSteamIds: mockRoster(mode).slice(0, this.accepted),
       required: this.required,
     });
     if (this.accepted === this.required) this.later(800, () => this.afterAccept(mode));
@@ -396,13 +404,14 @@ export class MockRealtime extends Emitter implements Realtime {
       port: 27017,
       password: "mock-7f3a",
       connect: "connect 203.0.113.24:27017; password mock-7f3a",
+      connectDeadline: Date.now() + CONNECT_GRACE_SEC * 1000,
       mapId,
     });
     // Players join the server one by one during warm-up
     const expected = MODE_CONFIGS[mode].teamSize * 2;
     for (let n = 1; n <= expected; n++) {
       this.later(2500 * n, () =>
-        this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected }),
+        this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected, missingSteamIds: mockRoster(mode).slice(n) }),
       );
     }
     this.later(2500 * expected + 1500, () =>

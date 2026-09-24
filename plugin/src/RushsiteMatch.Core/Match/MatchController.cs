@@ -36,8 +36,6 @@ public enum MatchPhase
 // when the series is decided or the last map ends.
 public sealed class MatchController
 {
-    public const string ChatPrefix = "[rushsite]";
-
     private readonly MatchConfig _cfg;
     private readonly MatchSettings _settings;
     private readonly IGameServer _game;
@@ -51,6 +49,7 @@ public sealed class MatchController
     private readonly StartCountdown? _countdown;
     private readonly SeriesTracker? _series;
     private readonly Dictionary<string, int> _teamScore;
+    private readonly MatchMessages _msg;
 
     // Per map. Rebuilt when a series moves to the next map.
     private SideMap _sides;
@@ -84,6 +83,16 @@ public sealed class MatchController
     private readonly Dictionary<string, int> _forcedMoves = new();
     public const int MaxForcedMovesPerPlayer = 5;
 
+    // Last known name of each match player, for chat lines about players who already left.
+    private readonly Dictionary<string, string> _names = new();
+    // Disconnected players with a forfeit countdown, and the seconds last announced.
+    private readonly Dictionary<string, int> _away = new();
+    private int _lastCenterSaid;
+    // Match end. Players are kicked at this time so the final scoreboard stays up.
+    private DateTimeOffset? _kickAt;
+    private string _endKickReason = "Match over. Thanks for playing.";
+    private bool _endKicked;
+
     public MatchController(
         MatchConfig cfg,
         MatchSettings settings,
@@ -105,6 +114,7 @@ public sealed class MatchController
         _sides = NewSideMap();
         _stats = new StatsAggregator(cfg.AllowedSteamIds, cfg.TeamOf);
         _teamScore = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
+        _msg = new MatchMessages(cfg);
 
         if (ManagesMatch)
         {
@@ -138,6 +148,7 @@ public sealed class MatchController
     public MapConfig? CurrentMap => _cfg.MapAt(MapNumber);
     public string CurrentMapId => CurrentMap?.Id ?? _game.CurrentMapName ?? "unknown";
     public bool CountdownRunning => _countdown?.Running == true;
+    public MatchMessages Messages => _msg;
 
     public string DemoName => "rushsite_" + SafeName(_cfg.MatchId) + (_series is null ? "" : "_m" + MapNumber);
     public string DemoPath => Path.Combine(_game.CsgoDirectory, DemoName + ".dem");
@@ -226,6 +237,10 @@ public sealed class MatchController
                 _nextMapAt = _clock.UtcNow;
                 break;
             case MatchPhase.Ended:
+                _countdown?.Close();
+                ScheduleDemoStop();
+                ScheduleEndKick();
+                break;
             case MatchPhase.Abandoned:
                 _countdown?.Close();
                 ScheduleDemoStop();
@@ -234,7 +249,7 @@ public sealed class MatchController
         _game.Log($"restored match {_cfg.MatchId} after a plugin reload. phase {Phase} round {_round} " +
                   $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
         if (Phase == MatchPhase.Warmup && ManagesMatch)
-            _game.PrintToAll($"{ChatPrefix} The match plugin reloaded. The match starts once everyone is in and on their side.");
+            _game.PrintToAll(_msg.Line($"The match plugin reloaded. The match starts once everyone is in and on their side."));
         SaveState();
     }
 
@@ -342,11 +357,19 @@ public sealed class MatchController
     public void OnPlayerConnected(string steamId, int userId)
     {
         if (!CheckWhitelist(steamId, userId)) return;
+        RememberName(steamId);
+        if (_endKicked && Phase == MatchPhase.Ended)
+        {
+            _game.KickPlayer(steamId, _endKickReason);
+            return;
+        }
         // Players are counted again on the new map once it is up.
         if (_mapLoadingSince is not null) return;
         if (!_presence.Connect(steamId)) return;
         _sink.Enqueue(new PlayerConnected(steamId));
+        var wasAway = _away.Remove(steamId);
 
+        var unpausing = false;
         if (_presence.AllConnected)
         {
             // Rush records from the moment everyone is in so nothing Valve's script does is missed.
@@ -355,35 +378,75 @@ public sealed class MatchController
             {
                 _pausedForDisconnect = false;
                 _game.ExecuteCommand("mp_unpause_match");
-                _game.PrintToAll($"{ChatPrefix} All players are back. Unpausing.");
+                unpausing = true;
             }
         }
+        if (wasAway) _game.PrintToAll(_msg.Returned(NameOf(steamId), unpausing));
+        else if (unpausing) _game.PrintToAll(_msg.Line("All players are back. Unpausing."));
 
         if (ManagesMatch && Phase == MatchPhase.Warmup)
         {
             var required = _sides.RequiredSide(steamId);
             if (required is not null && _settings.TryChangeTeam) _game.TryMovePlayer(steamId, required.Value);
-            _game.PrintToPlayer(steamId, $"{ChatPrefix} Join your team's side. The match starts once everyone is in and on their side.");
+            _game.PrintToPlayer(steamId, _msg.Line($"Join your team's side. The match starts once everyone is in and on their side."));
             UpdateAimCountdown(_clock.UtcNow);
         }
         if (IsRush && Phase == MatchPhase.Warmup)
-            _game.PrintToPlayer(steamId, $"{ChatPrefix} Your team plays {SideName(RequiredRushSide(steamId))}.");
+            _game.PrintToPlayer(steamId, _msg.Line($"Your team plays {SideName(RequiredRushSide(steamId))}."));
     }
 
-    public void OnPlayerDisconnected(string steamId, int? userId = null)
+    // name is the name from the disconnect event when the adapter has it.
+    public void OnPlayerDisconnected(string steamId, int? userId = null, string? name = null)
     {
         if (userId is int uid) _awaitingAuth.Remove(uid);
         foreach (var k in _awaitingAuth.Where(kv => kv.Value == steamId).Select(kv => kv.Key).ToList()) _awaitingAuth.Remove(k);
+        if (_cfg.IsAllowed(steamId)) RememberName(steamId, name);
         _sides.RemovePlayer(steamId);
         if (!_presence.Disconnect(steamId, _clock.UtcNow)) return;
-        if (Phase is MatchPhase.Warmup or MatchPhase.Live or MatchPhase.BetweenMaps) _sink.Enqueue(new PlayerDisconnected(steamId));
-        UpdateAimCountdown(_clock.UtcNow);
+        var inPlay = Phase is MatchPhase.Warmup or MatchPhase.Live or MatchPhase.BetweenMaps;
+        if (inPlay) _sink.Enqueue(new PlayerDisconnected(steamId));
 
-        if (ManagesMatch && Phase == MatchPhase.Live && _settings.PauseOnDisconnect && !_pausedForDisconnect)
+        var pausing = ManagesMatch && Phase == MatchPhase.Live && _settings.PauseOnDisconnect && !_pausedForDisconnect;
+        if (pausing)
         {
             _pausedForDisconnect = true;
             _game.ExecuteCommand("mp_pause_match");
-            _game.PrintToAll($"{ChatPrefix} A player disconnected. The match pauses at the next freeze time.");
+        }
+        // The same grace CheckAbandon uses. Announced so the others know how long they wait.
+        if (inPlay && _mapLoadingSince is null)
+        {
+            var grace = _settings.DisconnectGrace;
+            _away[steamId] = (int)Math.Ceiling(grace.TotalSeconds);
+            var who = NameOf(steamId);
+            _game.PrintToAll(_msg.Disconnected(who, grace, pausing));
+            _game.PrintCenterToAll(MatchMessages.DisconnectedCenter(who, grace));
+        }
+        UpdateAimCountdown(_clock.UtcNow, steamId, left: true);
+    }
+
+    private void RememberName(string steamId, string? name = null)
+    {
+        var clean = MatchMessages.CleanText(name ?? _game.PlayerName(steamId), 32);
+        if (clean.Length > 0) _names[steamId] = clean;
+    }
+
+    public string NameOf(string steamId) => _names.TryGetValue(steamId, out var n) ? n : steamId;
+
+    // Announces the forfeit countdown of each disconnected player at set marks.
+    private void AnnounceAway(DateTimeOffset now)
+    {
+        foreach (var (id, last) in _away.ToList())
+        {
+            if (_presence.IsConnected(id) || _presence.MissingSince(id) is not DateTimeOffset since)
+            {
+                _away.Remove(id);
+                continue;
+            }
+            var left = _settings.DisconnectGrace - (now - since);
+            var secs = (int)Math.Ceiling(left.TotalSeconds);
+            if (!CountdownMarks.Due(secs, last, CountdownMarks.IsGraceMark)) continue;
+            _away[id] = secs;
+            _game.PrintToAll(_msg.StillAway(NameOf(id), left));
         }
     }
 
@@ -391,7 +454,7 @@ public sealed class MatchController
     {
         if (!_cfg.IsAllowed(steamId)) return;
         _sides.SetPlayerSide(steamId, side);
-        UpdateAimCountdown(_clock.UtcNow);
+        UpdateAimCountdown(_clock.UtcNow, steamId);
         // The game can place a player without a jointeam, for example auto assign. Send them to their side.
         if (IsRush && EnforcesRushTeams && side.IsPlaying() && !_sides.IsOnRequiredSide(steamId))
             RedirectToRequiredSide(steamId, "placed on the wrong side");
@@ -434,7 +497,7 @@ public sealed class MatchController
             return !requested.IsPlaying() || !teamSide.IsPlaying() || requested == teamSide;
         }
         if (_sides.IsJoinAllowed(steamId, requested)) return true;
-        _game.PrintToPlayer(steamId, $"{ChatPrefix} That side belongs to the other team. Join {_sides.RequiredSide(steamId)}.");
+        _game.PrintToPlayer(steamId, _msg.Line($"That side belongs to the other team. Join {_sides.RequiredSide(steamId)}."));
         return false;
     }
 
@@ -447,7 +510,7 @@ public sealed class MatchController
         {
             if (!SideHasRoom(required, steamId))
             {
-                _game.PrintToPlayer(steamId, $"{ChatPrefix} {SideName(required)} is full.");
+                _game.PrintToPlayer(steamId, _msg.Line($"{SideName(required)} is full."));
                 return false;
             }
             return true;
@@ -467,7 +530,7 @@ public sealed class MatchController
                 return false;
             }
             _game.PrintToPlayer(steamId,
-                $"{ChatPrefix} Your team plays {SideName(required)} in this match. Moving you there.");
+                _msg.Line($"Your team plays {SideName(required)} in this match. Moving you there."));
         }
         _game.ForceJoinTeam(steamId, required);
         if (_settings.TryChangeTeam) _game.TryMovePlayer(steamId, required);
@@ -497,11 +560,12 @@ public sealed class MatchController
 
     // Ready-up is gone. The command only explains what happens now.
     public string ReadyHint() => IsRush
-        ? $"{ChatPrefix} Ready-up is not used in Rush. Valve's warmup starts the match once everyone is on their side."
-        : $"{ChatPrefix} No ready-up needed. The match starts on its own once everyone is in and on their side.";
+        ? _msg.Line($"Ready-up is not used in Rush. Valve's warmup starts the match once everyone is on their side.")
+        : _msg.Line($"No ready-up needed. The match starts on its own once everyone is in and on their side.");
 
     // Aim. Runs the start countdown from the current lineup.
-    private void UpdateAimCountdown(DateTimeOffset now)
+    // changedBy is the player whose leave or side change caused this update, when known.
+    private void UpdateAimCountdown(DateTimeOffset now, string? changedBy = null, bool left = false)
     {
         if (_countdown is null || Phase != MatchPhase.Warmup || _mapLoadingSince is not null) return;
         var complete = _presence.AllConnected && _sides.TeamsAreValid(_cfg.AllowedSteamIds);
@@ -509,25 +573,53 @@ public sealed class MatchController
         {
             case CountdownChange.Started:
                 _lastCountdownSaid = _countdown.SecondsLeft(now);
+                _lastCenterSaid = _lastCountdownSaid;
                 _game.Log("all players are in and on their side. Start countdown running.");
-                _game.PrintToAll($"{ChatPrefix} All players are in. {WhatStarts} starts in {_lastCountdownSaid} seconds.");
+                _game.PrintToAll(_msg.CountdownStarted(WhatStarts, _lastCountdownSaid));
+                _game.PrintCenterToAll(MatchMessages.CountdownCenter(WhatStarts, _lastCountdownSaid));
                 break;
             case CountdownChange.Cancelled:
-                _game.Log("start countdown cancelled. A player left or changed side.");
-                _game.PrintToAll($"{ChatPrefix} A player left or changed side. Countdown stopped. Waiting for everyone.");
+                AnnounceCountdownCancelled(changedBy, left);
                 break;
             case CountdownChange.Fired:
                 StartAimMatch("all players in and on their side");
                 break;
             default:
-                var left = _countdown.SecondsLeft(now);
-                if (_countdown.Running && left > 0 && left <= 5 && left < _lastCountdownSaid)
+                var secs = _countdown.SecondsLeft(now);
+                if (!_countdown.Running || secs <= 0) break;
+                if (CountdownMarks.Due(secs, _lastCountdownSaid, CountdownMarks.IsStartMark))
                 {
-                    _lastCountdownSaid = left;
-                    _game.PrintToAll($"{ChatPrefix} {WhatStarts} starts in {left}.");
+                    _lastCountdownSaid = secs;
+                    _game.PrintToAll(_msg.CountdownTick(WhatStarts, secs));
+                }
+                if (secs < _lastCenterSaid)
+                {
+                    _lastCenterSaid = secs;
+                    _game.PrintCenterToAll(MatchMessages.CountdownCenter(WhatStarts, secs));
                 }
                 break;
         }
+    }
+
+    // Names who left or switched side. Falls back to the current lineup when the cause is not known.
+    private void AnnounceCountdownCancelled(string? changedBy, bool left)
+    {
+        var gone = new List<string>();
+        var switched = new List<string>();
+        if (changedBy is not null)
+        {
+            (left ? gone : switched).Add(NameOf(changedBy));
+        }
+        else
+        {
+            foreach (var id in _cfg.AllowedSteamIds)
+            {
+                if (!_presence.IsConnected(id)) gone.Add(NameOf(id));
+                else if (!_sides.IsOnRequiredSide(id)) switched.Add(NameOf(id));
+            }
+        }
+        _game.Log($"start countdown cancelled. left [{string.Join(",", gone)}] switched [{string.Join(",", switched)}].");
+        _game.PrintToAll(_msg.CountdownCancelled(gone, switched));
     }
 
     private string WhatStarts => _series is null ? "The match" : $"Map {MapNumber}";
@@ -565,7 +657,7 @@ public sealed class MatchController
         StartRecording();
         _game.ExecuteCommand("mp_warmup_end");
         GoLive();
-        _game.PrintToAll($"{ChatPrefix} {(_series is null ? "Match" : $"Map {MapNumber}")} is live. First to {wc.RoundsToWin}.");
+        _game.PrintToAll(_msg.Line($"{(_series is null ? "Match" : $"Map {MapNumber}")} is live. First to {wc.RoundsToWin}."));
     }
 
     // Rush only. Called on round_announce_match_start, begin_new_match or the first
@@ -722,6 +814,7 @@ public sealed class MatchController
     {
         var now = _clock.UtcNow;
         if (_stopDemoAt is not null && now >= _stopDemoAt) StopDemoAndUpload();
+        if (_kickAt is not null && now >= _kickAt) KickAtMatchEnd();
         EnforceNoBots();
         switch (Phase)
         {
@@ -736,6 +829,7 @@ public sealed class MatchController
                 }
                 SyncConnectedPlayers();
                 if (CheckAbandon(now)) return;
+                AnnounceAway(now);
                 if (Phase == MatchPhase.Warmup && IsRush) TickRushWarmup(now);
                 if (Phase == MatchPhase.Warmup && ManagesMatch) TickAimWarmup(now);
                 if (Phase == MatchPhase.Live && _endDeadline is not null && now >= _endDeadline)
@@ -756,7 +850,7 @@ public sealed class MatchController
         foreach (var id in _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)))
         {
             var side = _sides.RequiredSide(id);
-            _game.PrintToPlayer(id, $"{ChatPrefix} Join {(side is Side s ? SideName(s) : "your team's side")} to start the match.");
+            _game.PrintToPlayer(id, _msg.Line($"Join {(side is Side s ? SideName(s) : "your team's side")} to start the match."));
         }
     }
 
@@ -797,7 +891,7 @@ public sealed class MatchController
             {
                 _warmupHeld = false;
                 _game.ExecuteCommand("mp_warmup_pausetimer 0");
-                _game.PrintToAll($"{ChatPrefix} All players are in and on their side. Warmup continues.");
+                _game.PrintToAll(_msg.Line($"All players are in and on their side. Warmup continues."));
             }
         }
         var wrong = WrongSidePlayers();
@@ -806,7 +900,7 @@ public sealed class MatchController
             _lastLineupReminder = now;
             foreach (var id in wrong)
             {
-                _game.PrintToPlayer(id, $"{ChatPrefix} You are not ready. Your team plays {SideName(RequiredRushSide(id))}.");
+                _game.PrintToPlayer(id, _msg.Line($"You are not ready. Your team plays {SideName(RequiredRushSide(id))}."));
                 RedirectToRequiredSide(id, "is off their side in warmup");
             }
         }
@@ -832,8 +926,9 @@ public sealed class MatchController
     private void Abandon(string reason, IReadOnlyList<string> missing, string why)
     {
         _game.Log($"abandoning match. {reason}: {string.Join(",", missing)}");
-        _game.PrintToAll($"{ChatPrefix} Match abandoned. {why}");
+        _game.PrintToAll(_msg.Line($"Match abandoned. {why}"));
         Phase = MatchPhase.Abandoned;
+        _away.Clear();
         _mapLoadingSince = null;
         _nextMapAt = null;
         if (ManagesMatch) _game.ExecuteCommand("mp_pause_match");
@@ -881,8 +976,8 @@ public sealed class MatchController
         var next = _cfg.MapAt(MapNumber + 1);
         _nextMapAt = Max(_clock.UtcNow + _settings.SeriesMapBreak, _stopDemoAt ?? _clock.UtcNow);
         var wait = (int)Math.Ceiling((_nextMapAt.Value - _clock.UtcNow).TotalSeconds);
-        _game.PrintToAll($"{ChatPrefix} Map {MapNumber} to {winner}. Series {SeriesScoreText()}. " +
-                         $"Next map {next?.DisplayName ?? next?.Id} in {wait} seconds.");
+        _game.PrintToAll(_msg.MapOver(MapNumber, MapLabel(CurrentMap, CurrentMapId), winner, score, _series.Wins,
+            next is null ? null : MapLabel(next, next.Id), wait));
         SaveState();
     }
 
@@ -890,11 +985,53 @@ public sealed class MatchController
     {
         _game.Log($"match over. Winner {end.WinnerTeam}.");
         Phase = MatchPhase.Ended;
+        _away.Clear();
         _sink.Enqueue(end);
         ScheduleDemoStop();
         SaveState();
-        if (_settings.KickOnMatchEnd) KickEveryone("Match over. Thanks for playing.");
+        AnnounceMatchEnd(end);
+        ScheduleEndKick();
     }
+
+    // Final score, the map scores of a series and the match link.
+    private void AnnounceMatchEnd(MatchEnd end)
+    {
+        if (_series is null)
+        {
+            _game.PrintToAll(_msg.MatchOver(end.WinnerTeam, end.Score));
+        }
+        else
+        {
+            _game.PrintToAll(_msg.SeriesOver(end.WinnerTeam, end.Score));
+            foreach (var r in _series.Results)
+                _game.PrintToAll(_msg.SeriesMapLine(r, MapLabel(_cfg.MapAt(r.MapNumber), r.MapId)));
+        }
+        if (_msg.LinkLine() is { } link) _game.PrintToAll(link);
+        if (_settings.KickOnMatchEnd && _settings.MatchEndKickDelay > TimeSpan.Zero)
+            _game.PrintToAll(_msg.ClosingIn((int)Math.Ceiling(_settings.MatchEndKickDelay.TotalSeconds)));
+    }
+
+    private IReadOnlyDictionary<string, int> FinalScore() =>
+        _series is null ? _teamScore : _series.Wins;
+
+    // Players stay for MatchEndKickDelay so the final scoreboard is visible, then are kicked.
+    private void ScheduleEndKick()
+    {
+        if (!_settings.KickOnMatchEnd) return;
+        _endKickReason = _msg.KickReason(FinalScore(), _series is not null);
+        _kickAt = _clock.UtcNow + _settings.MatchEndKickDelay;
+        if (_settings.MatchEndKickDelay <= TimeSpan.Zero) KickAtMatchEnd();
+    }
+
+    private void KickAtMatchEnd()
+    {
+        _kickAt = null;
+        _endKicked = true;
+        KickEveryone(_endKickReason);
+    }
+
+    private static string MapLabel(MapConfig? map, string fallback) =>
+        !string.IsNullOrWhiteSpace(map?.DisplayName) ? map.DisplayName! : fallback;
 
     private string SeriesScoreText() =>
         _series is null ? "" : string.Join("-", _cfg.Teams.Select(t => _series.Wins[t.Name]));
@@ -934,6 +1071,8 @@ public sealed class MatchController
         _pausedForDisconnect = false;
         _warmupHeld = false;
         _lastCountdownSaid = 0;
+        _lastCenterSaid = 0;
+        _away.Clear();
         _lastLineupReminder = DateTimeOffset.MinValue;
         foreach (var t in _teamScore.Keys.ToList()) _teamScore[t] = 0;
         _sides = NewSideMap();

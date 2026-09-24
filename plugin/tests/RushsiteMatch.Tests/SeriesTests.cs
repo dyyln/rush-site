@@ -117,6 +117,10 @@ public class SeriesTests
         Assert.Equal(new[] { "aim_map", "aim_usp" }, end.Maps!.Select(x => x.MapId));
         Assert.Equal(1, end.Players.Single(p => p.SteamId == A1).Kills);
         Assert.Equal("match_end", _sink.Types.Last());
+        // Players see the final score for the kick delay before the kick.
+        Assert.Empty(_game.SteamKicks);
+        _clock.Advance(10);
+        m.Tick();
         Assert.NotEmpty(_game.SteamKicks);
         Assert.DoesNotContain(_game.Commands, c => c.StartsWith("changelevel"));
     }

@@ -64,6 +64,12 @@ type Series struct {
 	DemoUploads    []DemoUpload   `json:"demoUploads"`
 }
 
+// Brand is passed through to match.json. The plugin uses Name as the chat prefix and SiteURL for the match link.
+type Brand struct {
+	Name    string `json:"name"`
+	SiteURL string `json:"siteUrl"`
+}
+
 // StartRequest is the POST /servers body.
 type StartRequest struct {
 	MatchID         string     `json:"matchId"`
@@ -82,6 +88,9 @@ type StartRequest struct {
 	Series *Series `json:"series,omitempty"`
 	// RushRooms holds room ids from the room veto, T castle first. It is passed through to match.json.
 	RushRooms []int `json:"rushRooms,omitempty"`
+	// Brand and Slug are passed through to match.json for chat and the match link.
+	Brand *Brand `json:"brand,omitempty"`
+	Slug  string `json:"slug,omitempty"`
 }
 
 // CS2Settings is the cs2 block of StartRequest. It mirrors the shared Cs2Start type.
@@ -116,4 +125,6 @@ type PluginConfig struct {
 	WinCondition    string     `json:"winCondition"`
 	Series          *Series    `json:"series,omitempty"`
 	RushRooms       []int      `json:"rushRooms,omitempty"`
+	Brand           *Brand     `json:"brand,omitempty"`
+	Slug            string     `json:"slug,omitempty"`
 }

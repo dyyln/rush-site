@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { MatchMap, RoomStage, RoomState } from "@rushsite/shared";
+import { connectDeadlineOf, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -206,7 +206,16 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
   const me = participant ? viewer : null;
   switch (stage) {
     case "accept":
-      return room.accept ? <AcceptPanel accept={room.accept} mode={m.mode} participant={participant} onRespond={onRespond} /> : null;
+      return room.accept ? (
+        <AcceptPanel
+          accept={room.accept}
+          mode={m.mode}
+          participant={participant}
+          onRespond={onRespond}
+          viewer={viewer}
+          team={(m.teams.find((t) => t.players.some((p) => p.steamId === viewer))?.players ?? []).map((p) => ({ steamId: p.steamId, name: p.displayName }))}
+        />
+      ) : null;
     case "veto":
       return <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} />;
     case "allocating":
@@ -214,7 +223,16 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
     case "connect":
     case "live":
       return participant && room.server ? (
-        <ConnectPanel mode={m.mode} server={room.server} live={stage === "live"} warmup={room.warmup} mapId={currentMapId} />
+        <ConnectPanel
+          mode={m.mode}
+          server={room.server}
+          live={stage === "live"}
+          warmup={room.warmup}
+          mapId={currentMapId}
+          deadline={connectDeadlineOf(room)}
+          names={names}
+          viewer={viewer}
+        />
       ) : null;
     case "result":
       return <RoomResult m={m} result={room.result} viewer={viewer} />;

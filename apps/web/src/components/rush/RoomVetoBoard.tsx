@@ -57,7 +57,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
       ? myVote
         ? `You voted ${rushRoomName(myVote)}. Change it until everyone on your team has voted.`
         : step!.action === "pick"
-          ? `Pick a room for ${nextSlot !== null ? rushSlotLabel(nextSlot) : "your side"}.`
+          ? `Pick a room to play in ${nextSlot !== null ? rushSlotLabel(nextSlot) : "your side"}.`
           : "Pick a room to ban."
       : myTeam === null
         ? "The teams are banning and picking rooms."

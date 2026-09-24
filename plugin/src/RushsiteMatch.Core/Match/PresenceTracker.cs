@@ -17,6 +17,10 @@ public sealed class PresenceTracker
 
     public bool IsConnected(string steamId) => _connected.Contains(steamId);
     public bool AllConnected => _players.All(_connected.Contains);
+    // When the player went missing, or null while connected.
+    public DateTimeOffset? MissingSince(string steamId) =>
+        _missingSince.TryGetValue(steamId, out var t) ? t : null;
+
     public IReadOnlyList<string> Missing => _players.Where(p => !_connected.Contains(p)).ToList();
 
     // Returns true when this is a change.

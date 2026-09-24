@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyRoomEvent, mergeRoomDetail, roomFromDetail, roomPath, roomStage, type RoomEvent, type RoomState } from "./room.js"
+import { applyRoomEvent, connectDeadlineOf, mergeRoomDetail, roomFromDetail, roomPath, roomStage, type RoomEvent, type RoomState } from "./room.js"
 import type { MatchDetail } from "./schemas/match.js"
 import type { VetoState } from "./schemas/veto.js"
 
@@ -195,5 +195,26 @@ describe("roomPath", () => {
     expect(roomPath({ matchId: ID, slug: "brave-amber-falcon" })).toBe("/matches/brave-amber-falcon")
     expect(roomPath({ matchId: ID })).toBe(`/matches/${ID}`)
     expect(roomPath({ id: ID, slug: null })).toBe(`/matches/${ID}`)
+  })
+})
+
+describe("warm-up details", () => {
+  it("keeps who accepted, who is missing and the connect deadline", () => {
+    let s = roomFromDetail(detail())
+    s = run(s, { type: "match_found", payload: { ...(found(1) as Extract<RoomEvent, { type: "match_found" }>).payload, acceptedSteamIds: [A] } })
+    expect(s.accept?.acceptedSteamIds).toEqual([A])
+    s = run(s, { type: "server_ready", payload: { ...(server as Extract<RoomEvent, { type: "server_ready" }>).payload, connectDeadline: 9000 } })
+    expect(connectDeadlineOf(s)).toBe(9000)
+    s = run(s, { type: "match_update", payload: { matchId: ID, status: "ready", teams: [], connected: 1, expected: 2, missingSteamIds: [B] } })
+    expect(s.warmup?.missingSteamIds).toEqual([B])
+    expect(connectDeadlineOf(s)).toBe(9000)
+  })
+
+  it("reads the deadline from the REST warm-up after a reload", () => {
+    const s = roomFromDetail(
+      detail({ status: "ready", connect: { ip: "1.2.3.4", port: 1, password: "p", connect: "c" }, warmup: { connected: 0, expected: 2, connectDeadline: 5000, missingSteamIds: [A, B] } }),
+    )
+    expect(connectDeadlineOf(s)).toBe(5000)
+    expect(s.warmup?.missingSteamIds).toEqual([A, B])
   })
 })

@@ -103,11 +103,15 @@ public class ControllerTests
     {
         var m = LiveRush();
         for (var i = 0; i < 4; i++) m.OnRoundEnd(Side.CT, false, false);
+        foreach (var id in new[] { A1, A2, A3, B1, B2, B3 }) _game.Connected.Add(new ConnectedPlayer(id, 1, true));
         m.OnWinPanelMatch();
         Assert.Equal(MatchPhase.Ended, m.Phase);
+        Assert.Empty(_game.SteamKicks);
+        _clock.Advance(10);
+        m.Tick();
         var kicked = _game.SteamKicks.Select(k => k.Item1).ToHashSet();
-        Assert.All(_game.ConnectedPlayers(), p => Assert.Contains(p.SteamId, kicked));
-        Assert.All(_game.SteamKicks, k => Assert.Equal("Match over. Thanks for playing.", k.Item2));
+        Assert.Equal(6, kicked.Count);
+        Assert.All(_game.SteamKicks, k => Assert.Equal("Match over. Team alpha 4-0 Team bravo. Thanks for playing.", k.Item2));
         Assert.Single(_sink.Types, "match_end");
     }
 

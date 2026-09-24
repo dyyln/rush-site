@@ -6,7 +6,7 @@ export type AcceptPlayer = {
 }
 
 export type AcceptOutcome =
-  | { kind: "pending"; accepted: number; required: number }
+  | { kind: "pending"; accepted: number; required: number; acceptedSteamIds: string[] }
   | { kind: "all_accepted" }
   | {
       kind: "failed"
@@ -24,7 +24,7 @@ export function resolveAccept(players: AcceptPlayer[], timedOut: boolean): Accep
   const declined = players.filter((p) => p.declined)
   const accepted = players.filter((p) => p.accepted && !p.declined)
   if (declined.length === 0 && accepted.length === players.length) return { kind: "all_accepted" }
-  if (declined.length === 0 && !timedOut) return { kind: "pending", accepted: accepted.length, required: players.length }
+  if (declined.length === 0 && !timedOut) return { kind: "pending", accepted: accepted.length, required: players.length, acceptedSteamIds: accepted.map((p) => p.steamId) }
 
   // On a decline only the decliners are at fault. On a timeout everyone who did not accept is
   const offenders = new Set(

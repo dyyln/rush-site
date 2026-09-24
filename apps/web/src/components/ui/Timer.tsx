@@ -58,8 +58,8 @@ export function Timer({ until, since, totalSec, label, size = "sm", frozenSec }:
             transform="rotate(-90 50 50)"
           />
         </svg>
-        <span className={cx(styles.ringText, "mono")} aria-hidden="true">
-          {sec}
+        <span className={cx(styles.ringText, "mono", totalSec >= 60 && styles.ringTextLong)} aria-hidden="true">
+          {totalSec >= 60 ? text : sec}
         </span>
       </div>
     );

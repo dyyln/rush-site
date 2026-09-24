@@ -31,6 +31,23 @@
 .pips .pipOn {
   background: var(--color-win);
 }
+.names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.names li {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.names li[data-ok] {
+  color: var(--color-win);
+}
 .waiting {
   color: var(--color-win);
 }

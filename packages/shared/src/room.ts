@@ -12,7 +12,9 @@ import type {
 // What the match room shows. REST gives the first snapshot and ws events move it forward
 export type RoomStage = "accept" | "veto" | "allocating" | "connect" | "live" | "result" | "cancelled"
 
-export type RoomServer = { ip: string; port: number; password: string; connect: string; mapId: string }
+export type RoomServer = { ip: string; port: number; password: string; connect: string; mapId: string; connectDeadline?: number }
+
+export type RoomWarmup = { connected: number; expected: number; missingSteamIds?: string[]; connectDeadline?: number }
 
 export type RoomMap = Omit<MatchMap, "players">
 
@@ -24,7 +26,7 @@ export type RoomState = {
   accept: MatchAcceptView | null
   veto: MatchVetoView | null
   server: RoomServer | null
-  warmup: { connected: number; expected: number } | null
+  warmup: RoomWarmup | null
   // Rounds on a single map, maps won in a series
   scores: { name: string; score: number }[]
   maps: RoomMap[]
@@ -79,7 +81,7 @@ export function roomFromDetail(d: MatchDetail): RoomState {
     status: d.status,
     accept: d.accept ?? null,
     veto: d.veto ?? null,
-    server: d.connect ? { ...d.connect, mapId: d.mapId ?? "" } : null,
+    server: d.connect ? { ...d.connect, mapId: d.mapId ?? "", ...(d.warmup?.connectDeadline ? { connectDeadline: d.warmup.connectDeadline } : {}) } : null,
     warmup: d.warmup ?? null,
     scores: d.teams.map((t) => ({ name: t.name, score: t.score })),
     maps,
@@ -118,6 +120,7 @@ export function applyRoomEvent(s: RoomState, e: RoomEvent): RoomState {
           accepted: p.accepted,
           required: p.required,
           responded: s.accept?.responded ?? false,
+          ...(p.acceptedSteamIds ? { acceptedSteamIds: p.acceptedSteamIds } : {}),
         },
       }
     }
@@ -143,7 +146,15 @@ export function applyRoomEvent(s: RoomState, e: RoomEvent): RoomState {
         ...s,
         status,
         scores: p.teams.length > 0 ? p.teams : s.scores,
-        warmup: p.connected !== undefined && p.expected !== undefined ? { connected: p.connected, expected: p.expected } : s.warmup,
+        warmup:
+          p.connected !== undefined && p.expected !== undefined
+            ? {
+                connected: p.connected,
+                expected: p.expected,
+                ...(p.missingSteamIds ? { missingSteamIds: p.missingSteamIds } : {}),
+                ...(s.warmup?.connectDeadline ? { connectDeadline: s.warmup.connectDeadline } : {}),
+              }
+            : s.warmup,
         maps,
         liveMap: p.mapNumber ?? (p.maps ? liveMapOf(maps) : s.liveMap),
       }
@@ -183,4 +194,9 @@ export function roomStage(s: RoomState): RoomStage {
 // Path of the room for a match. Older matches without a room id use the uuid
 export function roomPath(m: { matchId?: string; id?: string; slug?: string | null }): string {
   return `/matches/${m.slug || m.matchId || m.id}`
+}
+
+// Epoch ms by which players must be on the server, when known
+export function connectDeadlineOf(s: RoomState): number | null {
+  return s.server?.connectDeadline ?? s.warmup?.connectDeadline ?? null
 }

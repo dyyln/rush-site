@@ -66,6 +66,8 @@ export function buildMatchJson(req: StartServerRequest): PluginMatchConfig {
     winCondition: MODE_CONFIGS[req.mode].winCondition,
     ...(req.series ? { series: req.series } : {}),
     ...(req.rushRooms ? { rushRooms: req.rushRooms } : {}),
+    ...(req.brand ? { brand: req.brand } : {}),
+    ...(req.slug ? { slug: req.slug } : {}),
   }
 }
 

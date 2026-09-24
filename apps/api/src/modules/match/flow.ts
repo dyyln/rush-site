@@ -51,6 +51,7 @@ import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
 import { newMatchSlug } from "./slug.js"
 import { ROOM_VETO_FORMAT, vetoKindOf } from "./room-veto.js"
+import { connectDeadline } from "./room-view.js"
 import { demoKey } from "./storage.js"
 import {
   isSeries,
@@ -268,7 +269,7 @@ export class MatchFlow {
       )
     })
     const total = rosters.reduce((s, r) => s + r.steamIds.length, 0)
-    this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, slug, mode, acceptDeadline: deadline, accepted: 0, required: total })
+    this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, slug, mode, acceptDeadline: deadline, accepted: 0, required: total, acceptedSteamIds: [] })
     this.d.events?.emit("match", { event: "match_found", matchId, mode, teams: rosters })
     await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { ok: true, matchId }
@@ -276,7 +277,7 @@ export class MatchFlow {
 
   private sendMatchFound(
     steamIds: string[],
-    p: { matchId: string; slug?: string | null; mode: Mode; acceptDeadline: number; accepted: number; required: number },
+    p: { matchId: string; slug?: string | null; mode: Mode; acceptDeadline: number; accepted: number; required: number; acceptedSteamIds: string[] },
   ): void {
     const { slug, ...rest } = p
     const payload: MatchFoundPayload = { ...rest, ...(slug ? { slug } : {}), acceptWindowSec: ACCEPT_WINDOW_SEC }
@@ -425,6 +426,7 @@ export class MatchFlow {
         acceptDeadline: deadline,
         accepted: everyone.length,
         required: everyone.length,
+        acceptedSteamIds: everyone,
       })
       if (post) await this.afterPostAccept(m.id, post, allocateNow)
       return
@@ -620,6 +622,7 @@ export class MatchFlow {
             webhookSecret: m.webhookSecret,
             ...(series ? { series } : {}),
             ...(m.rushRooms ? { rushRooms: m.rushRooms } : {}),
+            ...(m.slug ? { slug: m.slug } : {}),
           },
           waitedMs,
         )
@@ -972,6 +975,7 @@ export class MatchFlow {
       teams: teamScores(m.teams, m.score),
       connected: rows.filter((p) => p.connected).length,
       expected: this.allSteamIds(m).length,
+      missingSteamIds: rows.filter((p) => !p.connected).map((p) => p.steamId),
     }
     toUsers(this.d.notifier, this.allSteamIds(m), "match_update", payload)
   }
@@ -991,6 +995,7 @@ export class MatchFlow {
       password: m.password ?? "",
       connect: m.connect,
       mapId: m.mapId ?? "",
+      ...connectDeadline(m),
     }
     toUsers(this.d.notifier, this.allSteamIds(m), "server_ready", payload)
   }
@@ -1417,6 +1422,7 @@ export class MatchFlow {
         acceptDeadline: m.acceptDeadline?.getTime() ?? this.now(),
         accepted: players.filter((p) => p.accepted).length,
         required: players.length,
+        acceptedSteamIds: players.filter((p) => p.accepted).map((p) => p.steamId),
       })
     } else if (m.status === "veto") {
       const [row] = await this.d.db.select().from(vetoes).where(eq(vetoes.matchId, m.id))
@@ -1444,6 +1450,7 @@ export class MatchFlow {
         password: m.password ?? "",
         connect: m.connect,
         mapId: m.mapId ?? "",
+        ...connectDeadline(m),
       }
       toUsers(this.d.notifier, [steamId], "server_ready", payload)
     }

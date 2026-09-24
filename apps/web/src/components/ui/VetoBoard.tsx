@@ -58,7 +58,9 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
     : myTurn
       ? myVote
         ? `You voted ${mapName(mode, myVote)}.`
-        : "Pick a map to ban."
+        : step!.action === "pick"
+          ? "Pick a map to play."
+          : "Pick a map to ban."
       : "Waiting for opponents.";
 
   return (

@@ -1,5 +1,5 @@
 import { createFaceitClient } from "@rushsite/faceit"
-import type { ServerDriver } from "@rushsite/shared"
+import { BRAND_NAME, type ServerDriver } from "@rushsite/shared"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
@@ -129,7 +129,11 @@ export function buildContext(deps: ContextDeps): AppContext {
     db,
     agent,
     storage,
-    { webhookBaseUrl: env.API_PUBLIC_URL, surgeWaitSec: env.SURGE_WAIT_SEC },
+    {
+      webhookBaseUrl: env.API_PUBLIC_URL,
+      surgeWaitSec: env.SURGE_WAIT_SEC,
+      brand: { name: BRAND_NAME, siteUrl: env.PUBLIC_URL },
+    },
     log,
     deps.surgeDriver ?? null,
   )
