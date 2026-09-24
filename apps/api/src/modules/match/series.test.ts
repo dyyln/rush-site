@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createHarness, finishVeto, makeUsers, withServers, type Harness } from "../../../test/helpers.js"
 import { demos, gsltTokens, matchMaps, matchPlayers, matchRounds, matches, ratingEvents, serverSlots } from "../../db/schema.js"
 import type { MapResultEvent, MatchResultEvent } from "./flow.js"
+import { buildMatchPage } from "./match-page.js"
 import { padMaps, seriesWinner } from "./series.js"
 import { MatchWatchdog, SERIES_MAP_GAP_MIN, type WatchdogDeps } from "./watchdog.js"
 
@@ -170,6 +171,29 @@ describe("best-of series on one server", () => {
     expect(await h.db.select().from(gsltTokens).where(eq(gsltTokens.matchId, matchId))).toHaveLength(0)
     const uploaded = await h.db.select().from(demos).where(eq(demos.matchId, matchId))
     expect(uploaded.filter((d) => d.uploaded).map((d) => d.mapNumber).sort()).toEqual([2, 3])
+  })
+
+  it("adds the live map's kills to the finished maps on the scoreboard", async () => {
+    const { matchId, a, b } = await bo3()
+    await event(matchId, { type: "server_ready" })
+    await playMap(matchId, 1, "A", a, b)
+    await event(matchId, { type: "match_started", mapNumber: 2 })
+    const kill = (round: number, tick: number, attacker: string, victim: string) =>
+      event(matchId, { type: "kill", round, tick, attacker, victim, weapon: "ak47", headshot: true, wallbang: false, mapNumber: 2 })
+    await kill(1, 10, a, b)
+    await event(matchId, { type: "round_end", round: 1, winnerTeam: "A", score: { A: 1, B: 0 }, mapNumber: 2 })
+    // Round 2 is still running, so its kill stays out
+    await kill(2, 20, b, a)
+
+    const page = (await buildMatchPage(h.ctx, matchId, null))!
+    const line = (id: string) => page.teams.flatMap((t) => t.players).find((p) => p.steamId === id)!
+    // Map 1 from map_end (a 11 kills, b 5, 5 deaths each), plus the ended round of map 2
+    expect(line(a)).toMatchObject({ kills: 12, deaths: 5, headshots: 3, damage: 1100 })
+    expect(line(b)).toMatchObject({ kills: 5, deaths: 6, headshots: 2, damage: 500 })
+    const map2 = page.maps!.find((m) => m.mapNumber === 2)!
+    expect(map2.players!.find((p) => p.steamId === a)).toMatchObject({ kills: 1, deaths: 0, headshots: 1, damage: 0 })
+    expect(map2.players!.find((p) => p.steamId === b)).toMatchObject({ kills: 0, deaths: 1, damage: 0 })
+    expect(page.maps!.find((m) => m.mapNumber === 1)!.players!.find((p) => p.steamId === a)).toMatchObject({ kills: 11 })
   })
 
   it("ends a 2-0 series early and drops the unplayed map's demo", async () => {

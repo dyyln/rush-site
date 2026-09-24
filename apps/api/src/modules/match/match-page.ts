@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.js"
 import { matchPlayers, matchRounds, matches, tournaments } from "../../db/schema.js"
 import type { UsersService } from "../auth/users.js"
 import type { RatingService } from "../rating/service.js"
+import { loadLiveStats, type LiveLine } from "./extras.js"
 import { buildRoomView } from "./room-view.js"
 import { loadMapRows, seriesDetail, showsAsSeries } from "./series.js"
 import type { DemoStorage } from "./storage.js"
@@ -56,6 +57,32 @@ export async function buildMatchPage(
   const series = showsAsSeries(m, mapRows.length)
   const scores = teamScores(m.teams, m.score)
 
+  // Until the plugin sends final stats, the scoreboard counts kills and deaths from kill events.
+  // matchPlayers already holds finished maps of a series, so only maps not yet done are added
+  const last = rounds.at(-1)
+  const live =
+    m.status === "finished"
+      ? new Map<number, Map<string, LiveLine>>()
+      : await loadLiveStats(
+          db,
+          m.id,
+          m.status,
+          { mapNumber: last?.mapNumber ?? 1, round: last?.round ?? 0 },
+          new Set(mapRows.filter((r) => r.status === "done").map((r) => r.mapNumber)),
+          new Map(players.map((p) => [p.steamId, p.team])),
+        )
+  const liveTotal = (id: string): LiveLine => {
+    const sum = { kills: 0, deaths: 0, headshots: 0 }
+    for (const lines of live.values()) {
+      const l = lines.get(id)
+      if (!l) continue
+      sum.kills += l.kills
+      sum.deaths += l.deaths
+      sum.headshots += l.headshots
+    }
+    return sum
+  }
+
   const page: MatchPage = {
     id: m.id,
     ...(m.slug ? { slug: m.slug } : {}),
@@ -74,15 +101,16 @@ export async function buildMatchPage(
         .filter((p) => p.team === idx)
         .map((p) => {
           const r = ratings.get(p.steamId)!.rating
+          const l = liveTotal(p.steamId)
           return {
             steamId: p.steamId,
             displayName: cards.get(p.steamId)?.displayName ?? p.steamId,
             avatarUrl: cards.get(p.steamId)?.avatarUrl ?? null,
             tier: tierForRating(r).id,
             rating: Math.round(r),
-            kills: p.kills ?? 0,
-            deaths: p.deaths ?? 0,
-            headshots: p.headshots ?? 0,
+            kills: (p.kills ?? 0) + l.kills,
+            deaths: (p.deaths ?? 0) + l.deaths,
+            headshots: (p.headshots ?? 0) + l.headshots,
             damage: p.damage ?? 0,
           }
         }),
@@ -95,6 +123,12 @@ export async function buildMatchPage(
     const lines = new Map(page.teams.flatMap((t) => t.players).map((p) => [p.steamId, p]))
     page.bestOf = m.bestOf ?? 1
     page.maps = await seriesDetail(db, m, mapRows, lines, deps.storage, deps.now?.() ?? Date.now())
+    // The map being played has no stat lines until map_end. Show the ones counted from kills
+    for (const map of page.maps) {
+      const counted = live.get(map.mapNumber)
+      if (map.players || !counted) continue
+      map.players = [...lines.values()].map((p) => ({ ...p, ...(counted.get(p.steamId) ?? { kills: 0, deaths: 0, headshots: 0 }), damage: 0 }))
+    }
   }
 
   if (m.tournamentId) {
