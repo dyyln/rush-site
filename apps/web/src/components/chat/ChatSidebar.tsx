@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "@/lib/session";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChatBody } from "./ChatBody";
@@ -52,7 +53,9 @@ export function ChatSidebar() {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const headingId = useId();
-  const hidden = pathname?.startsWith("/banned") ?? false;
+  const { user } = useSession();
+  // Chat is for signed in players only
+  const hidden = !user || (pathname?.startsWith("/banned") ?? false);
 
   // Desktop remembers the last choice. Mobile always starts closed
   useEffect(() => {

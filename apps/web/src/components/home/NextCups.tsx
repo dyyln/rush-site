@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { isRushMode } from "@rushsite/shared";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { LocalTime } from "@/components/tournaments/LocalTime";
-import { MODE_COPY } from "@/lib/modes";
+import { MODE_ART, MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
 import { Countdown } from "./Countdown";
@@ -23,9 +22,6 @@ export function NextCups() {
         <h2 id="next-cups" className={styles.sectionTitle}>
           Next cups
         </h2>
-        <Link href="/tournaments" className={styles.more}>
-          All cups
-        </Link>
       </div>
       {data.status === "error" && (
         <div className={styles.error} role="alert">
@@ -35,14 +31,16 @@ export function NextCups() {
           </Button>
         </div>
       )}
-      {data.status === "loading" && <p className="muted">Loading</p>}
+      {data.status === "loading" && <p className={`glass ${styles.empty}`}>Loading cups.</p>}
       {data.status === "success" && (
         <ul className={styles.cups}>
-          {data.data.map((c) => (
-            <li key={c.mode}>
-              <CupCard next={c} />
-            </li>
-          ))}
+          {[...data.data]
+            .sort((a, b) => Number(isRushMode(b.mode)) - Number(isRushMode(a.mode)))
+            .map((c) => (
+              <li key={c.mode}>
+                <CupCard next={signedIn ? c : { ...c, entered: false }} />
+              </li>
+            ))}
         </ul>
       )}
     </section>
@@ -53,23 +51,22 @@ function CupCard({ next }: { next: NextCup }) {
   const { mode, cup, entered } = next;
   if (!cup) {
     return (
-      <Card as="article" tone="flat" padded={false} className={`${styles.cup} ${styles.cupEmpty}`}>
+      <article className={`glass ${styles.cup} ${styles.cupEmpty}`}>
         <p className={styles.cupMode}>{MODE_COPY[mode].label}</p>
         <p className="muted">No cup open for sign ups right now.</p>
-      </Card>
+      </article>
     );
   }
   return (
-    <Card as="article" tone="flat" padded={false} className={styles.cup}>
+    <article className={styles.cup}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className={styles.cupArt} src={MODE_ART[mode]} alt="" />
+      <span className={styles.cupShade} />
       <div className={styles.cupTop}>
         <p className={styles.cupMode}>{MODE_COPY[mode].label}</p>
         {entered ? <Badge tone="win">Entered</Badge> : <Badge>{cup.cadence}</Badge>}
       </div>
-      <h3 className={styles.cupName}>
-        <Link href={`/tournaments/${cup.id}`} className={styles.cupLink}>
-          {cup.name}
-        </Link>
-      </h3>
+      <h3 className={styles.cupName}>{cup.name}</h3>
       <p className={styles.countdownLabel}>Starts in</p>
       <Countdown until={Date.parse(cup.startsAt)} className={styles.countdown} />
       <p className={styles.cupMeta}>
@@ -78,6 +75,6 @@ function CupCard({ next }: { next: NextCup }) {
           {cup.entrantCount} / {cup.maxEntrants}
         </span>
       </p>
-    </Card>
+    </article>
   );
 }
