@@ -19,7 +19,8 @@ x-api-env: &api-env
   STEAM_API_KEY: ${STEAM_API_KEY:-}
   FACEIT_API_KEY: ${FACEIT_API_KEY:-}
   RUSHSITE_AGENT_TOKEN: ${RUSHSITE_AGENT_TOKEN:?set RUSHSITE_AGENT_TOKEN in .env}
-  AGENT_URLS: ${AGENT_URLS:-http://host.docker.internal:8080}
+  # Unset means the local agent. Set it empty on a box with no game servers
+  AGENT_URLS: ${AGENT_URLS-http://host.docker.internal:8080}
   GSLT_TOKENS: ${GSLT_TOKENS:-}
   # Dev talks to the minio container. The prod override points at real storage.
   S3_ENDPOINT: http://minio:9000
