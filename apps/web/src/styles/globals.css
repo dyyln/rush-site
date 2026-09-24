@@ -201,11 +201,13 @@ output,
   top: var(--space-4);
 }
 
+/* Sides only. In the production build this rule can load after a page's own CSS module, so a shorthand here
+   would wipe that page's top and bottom spacing */
 .container {
   width: 100%;
   max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 0 var(--gutter);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
 }
 
 .page {
