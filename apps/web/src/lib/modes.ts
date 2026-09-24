@@ -40,7 +40,6 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "Rush 2v2",
     format: "2v2",
     players: "2 vs 2",
-    blurb: "Unrated test queue for Rush with four players",
   },
 };
 
