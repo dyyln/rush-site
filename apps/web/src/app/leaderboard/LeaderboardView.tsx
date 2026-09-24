@@ -277,7 +277,7 @@ export function LeaderboardView() {
                   {r.displayName}
                   {friendIds.has(r.steamId) && <FriendMark />}
                 </span>
-                <TierChip tier={r.tier} rating={r.rating} rank={r.rank} size="sm" link={false} />
+                <TierChip tier={r.tier} rating={r.rating} size="sm" link={false} />
                 <span className={styles.podiumMeta}>
                   <span className="mono">{formatStat(winRate(r.wins, r.matches), "pct", r.matches)}</span> win · <span className="mono">{r.matches}</span>{" "}
                   {r.matches === 1 ? "match" : "matches"}
