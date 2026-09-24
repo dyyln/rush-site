@@ -3,7 +3,7 @@ import styles from "./home.module.css";
 const STEPS = [
   { title: "Sign in with Steam", body: "We will never ask for your credentials, sign in securely via Steam." },
   { title: "Grab your mates and play", body: "Solo queue or party up and queue for one or more modes you want to play." },
-  { title: "Accept, veto, connect", body: "Accept in 20 seconds, vote on the maps, then join the server from the dock." },
+  { title: "Show your skill", body: "Accept in 20 seconds, vote on the maps, then join the server from the dock." },
 ];
 
 // Three steps from landing to playing, straight on the scene
