@@ -1,43 +1,93 @@
-/* In-game style "Match found" screen. The dialog sits in the top layer over a dimmed, blurred page */
+/* In-game style "Match found": a band across the middle of the screen over a dimmed, blurred page */
 .dialog {
-  --accept-ring-size: 176px;
+  --accept-ring-size: 128px;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: fit-content;
+  max-height: calc(100dvh - 2 * var(--gutter));
+  margin: auto 0;
   padding: 0;
-  margin: auto;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
+  overflow: auto;
+  border: 0;
+  border-top: 1px solid var(--color-border-strong);
+  border-bottom: 1px solid var(--color-border-strong);
+  border-radius: 0;
   background: var(--glass-strong);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
   color: var(--color-text);
-  width: calc(100% - 2 * var(--gutter));
-  max-width: 460px;
-  max-height: calc(100dvh - 2 * var(--gutter));
-  overflow: auto;
+  isolation: isolate;
 }
 .dialog::backdrop {
   background: rgb(8 7 11 / 0.72);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-6) var(--space-5) var(--space-5);
-  text-align: center;
+/* The mode's art, faded to the left behind the title */
+.art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  opacity: 0.35;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 70%);
+  mask-image: linear-gradient(90deg, #000 0%, transparent 70%);
 }
 
-.title {
+.panel {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-6) var(--gutter);
+}
+@media (min-width: 760px) {
+  .panel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: var(--space-7) var(--gutter);
+  }
+}
+.lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.mode {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-accent-hover);
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 6vw, 3.5rem);
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  line-height: 1.1;
-  margin-top: calc(-1 * var(--space-3));
+  line-height: 1;
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.7);
+}
+/* Timer beside the buttons */
+.answer {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr);
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+}
+.answer > :is(.note, .waiting) {
+  grid-column: 1 / -1;
 }
 
 /* The ring itself is the shared CountdownRing. These style its centre */
@@ -57,11 +107,13 @@
 .count {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 .countText {
-  color: var(--color-text-muted);
+  margin: 0;
+  color: var(--color-text);
 }
 .pips {
   list-style: none;
@@ -69,11 +121,10 @@
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--space-1);
 }
 .pips li {
-  width: 22px;
+  width: 28px;
   height: 6px;
   border-radius: 2px;
   background: var(--color-surface-3);
@@ -88,13 +139,22 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+/* Green like the game's accept, the one thing to press */
 .acceptBtn {
-  min-height: 64px;
-  font-size: var(--text-xl);
-  letter-spacing: 0.1em;
+  min-height: 72px;
+  border-color: var(--color-win);
+  background: var(--color-win);
+  color: var(--color-text-on-accent);
+  font-size: var(--text-2xl);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
+.acceptBtn:hover:not(:disabled) {
+  border-color: var(--color-win);
+  background: color-mix(in srgb, var(--color-win) 85%, white);
+}
 .note {
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
@@ -119,7 +179,7 @@
 @keyframes accept-in {
   from {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scaleY(0.6);
   }
   to {
     opacity: 1;
@@ -137,7 +197,7 @@
 
 @media (max-height: 560px) {
   .dialog {
-    --accept-ring-size: 120px;
+    --accept-ring-size: 96px;
   }
   .ringSec {
     font-size: var(--text-3xl);
@@ -151,7 +211,6 @@
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--space-1) var(--space-4);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -162,4 +221,16 @@
 }
 .names li[data-ok] {
   color: var(--color-win);
+}
+
+@media (max-width: 480px) {
+  .answer {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .dialog {
+    --accept-ring-size: 96px;
+  }
+  .ringSec {
+    font-size: var(--text-3xl);
+  }
 }

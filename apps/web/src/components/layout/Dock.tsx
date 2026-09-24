@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { roomPath, type ServiceStatus } from "@rushsite/shared";
-import { etaRange } from "@/components/play/eta";
 import { queuedSince, useGlobalPlay, type GlobalMatch } from "@/components/play/playStore";
 import { eligibleModes, modesLabel, partySizeOf, useSelectedModes } from "@/components/play/selectionStore";
 import { useNow } from "@/components/play/useNow";
@@ -108,7 +107,6 @@ export function Dock() {
       </Link>
     );
   } else if (since !== null) {
-    const est = Math.max(0, ...(play.queue?.modes.map((m) => m.estimatedSec ?? 0) ?? []));
     const searching = play.queue?.modes.reduce((n, m) => n + (m.playersInQueue ?? 0), 0) ?? 0;
     label = "Searching";
     value = modesLabel(play.queue?.modes.map((m) => m.mode) ?? []);
@@ -117,8 +115,7 @@ export function Dock() {
         <span className={styles.timer}>
           <span className={cx(styles.timerValue, "mono")}>{now === null ? "--:--" : mmss((now - since) / 1000)}</span>
           <span className={styles.timerSub}>
-            {est > 0 ? `Est. ${etaRange(est)}` : "Finding players"}
-            {searching > 0 ? ` · ${searching} searching` : ""}
+            {searching > 0 ? `${searching} searching` : "Finding players"}
           </span>
         </span>
         <button type="button" className={styles.cancel} onClick={() => rt.send("queue_leave", {})}>

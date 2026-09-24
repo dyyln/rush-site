@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CONNECT_GRACE_SEC, type MatchAcceptView, type MatchVetoView, type Mode, type RoomServer, type RoomWarmup } from "@rushsite/shared";
+import { CONNECT_GRACE_SEC, isRushMode, type MatchAcceptView, type MatchVetoView, type Mode, type RoomServer, type RoomWarmup } from "@rushsite/shared";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -37,7 +37,7 @@ export function AcceptPanel({
   // Players get the blocking in-game style overlay. Spectators keep an inline panel
   if (participant) return <AcceptOverlay accept={accept} mode={mode} onRespond={onRespond} team={team} viewer={viewer} />;
   return (
-    <Card tone="accent" eyebrow="Match found" title={modeLabel(mode)}>
+    <Card eyebrow="Match found" title={modeLabel(mode)}>
       <div className={styles.accept}>
         <Timer until={accept.deadline} totalSec={accept.windowSec} size="lg" label="Time to accept" />
         <div className={styles.acceptBody}>
@@ -74,7 +74,7 @@ export function VetoPanel({
 }) {
   if (!veto || !viewer) {
     return (
-      <Card tone="accent" eyebrow="Map veto" title={modeLabel(mode)}>
+      <Card eyebrow="Map veto" title={modeLabel(mode)}>
         <p className="muted">The teams are banning maps.</p>
       </Card>
     );
@@ -105,7 +105,7 @@ export function AllocatingPanel({
   viewer: string | null;
 }) {
   return (
-    <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={modeLabel(mode)}>
+    <Card eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={modeLabel(mode)}>
       <div className="stack">
         {veto?.state.done && viewer && (veto.kind ?? "maps") === "maps" && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
         <ConnectSteps step={step} />
@@ -142,7 +142,7 @@ export function ConnectPanel({
 }) {
   const map = mapId || server.mapId;
   return (
-    <Card tone={live ? "raised" : "accent"} eyebrow={live ? "Server" : "Connect now"} title={live ? "Rejoin the server" : `Server ready on ${mapName(mode, map)}`}>
+    <Card eyebrow={live ? "Server" : "Connect now"} title={live ? "Rejoin the server" : isRushMode(mode) ? "Server ready" : `Server ready on ${mapName(mode, map)}`}>
       <div className="stack">
         {live ? (
           <p className="muted">Dropped out? Join the same server again. It stays the same for every map.</p>

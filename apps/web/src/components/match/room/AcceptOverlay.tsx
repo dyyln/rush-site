@@ -5,7 +5,7 @@ import type { MatchAcceptView, Mode } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
 import { CountdownRing, useRemainingMs } from "@/components/ui/CountdownRing";
 import { cx } from "@/components/ui/cx";
-import { modeLabel } from "@/lib/modes";
+import { MODE_ART, modeLabel } from "@/lib/modes";
 import styles from "./AcceptOverlay.module.css";
 
 const URGENT_SEC = 5;
@@ -74,76 +74,78 @@ export function AcceptOverlay({
       }}
       onCancel={(e) => e.preventDefault()}
     >
+      {/* A band across the screen, as in the game: the mode's art behind, who is in on the left, the answer on the right */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={MODE_ART[mode]} alt="" className={styles.art} />
       <div className={styles.panel}>
-        <p className="eyebrow">{modeLabel(mode)}</p>
-        <h2 id={titleId} className={styles.title}>
-          Match found
-        </h2>
+        <div className={styles.lead}>
+          <p className={styles.mode}>{modeLabel(mode)}</p>
+          <h2 id={titleId} className={styles.title}>
+            Match found
+          </h2>
 
-        {/* Drains over the accept window, turning to the loss colour for the last URGENT_SEC */}
-        <CountdownRing
-          remainingMs={remainingMs}
-          totalMs={accept.windowSec * 1000}
-          warnMs={URGENT_SEC * 1000}
-          size="var(--accept-ring-size)"
-        >
-          <span className={cx(styles.ringSec, "mono")}>{sec ?? "--"}</span>
-          <span className={styles.ringUnit}>sec</span>
-        </CountdownRing>
-        <p className="visually-hidden" role="timer">
-          {sec === null ? "" : `${sec} seconds left to accept`}
-        </p>
-        <p className="visually-hidden" aria-live="assertive" aria-atomic="true">
-          {announce}
-        </p>
-
-        <div className={styles.count}>
-          <p className={styles.countText} aria-live="polite">
-            {accept.accepted} of {accept.required} accepted
+          <p className="visually-hidden" role="timer">
+            {sec === null ? "" : `${sec} seconds left to accept`}
           </p>
-          <ol className={styles.pips} aria-hidden="true">
-            {Array.from({ length: accept.required }, (_, i) => (
-              <li key={i} className={i < accept.accepted ? styles.pipOn : undefined} />
-            ))}
-          </ol>
-          {accept.acceptedSteamIds && team.length > 1 && (
-            <ul className={styles.names} aria-label="Your team">
-              {team.map((p) => {
-                const ok = accept.acceptedSteamIds!.includes(p.steamId);
-                return (
-                  <li key={p.steamId} data-ok={ok || undefined}>
-                    <span aria-hidden="true">{ok ? "✓" : "…"}</span>
-                    <span>
-                      {p.name}
-                      {p.steamId === viewer ? " (you)" : ""}
-                    </span>
-                    <span className="visually-hidden">{ok ? ", accepted" : ", not yet"}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <p className="visually-hidden" aria-live="assertive" aria-atomic="true">
+            {announce}
+          </p>
+
+          <div className={styles.count}>
+            <p className={styles.countText} aria-live="polite">
+              {accept.accepted} of {accept.required} accepted
+            </p>
+            <ol className={styles.pips} aria-hidden="true">
+              {Array.from({ length: accept.required }, (_, i) => (
+                <li key={i} className={i < accept.accepted ? styles.pipOn : undefined} />
+              ))}
+            </ol>
+            {accept.acceptedSteamIds && team.length > 1 && (
+              <ul className={styles.names} aria-label="Your team">
+                {team.map((p) => {
+                  const ok = accept.acceptedSteamIds!.includes(p.steamId);
+                  return (
+                    <li key={p.steamId} data-ok={ok || undefined}>
+                      <span aria-hidden="true">{ok ? "✓" : "…"}</span>
+                      <span>
+                        {p.name}
+                        {p.steamId === viewer ? " (you)" : ""}
+                      </span>
+                      <span className="visually-hidden">{ok ? ", accepted" : ", not yet"}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
 
-        {open ? (
-          <>
-            <div className={styles.actions}>
-              <Button size="lg" block className={styles.acceptBtn} onClick={() => onRespond(true)} data-autofocus>
-                Accept
-              </Button>
-              <Button size="lg" block variant="ghost" onClick={() => onRespond(false)}>
-                Decline
-              </Button>
-            </div>
-            <p id={descId} className={styles.note}>
-              Declining or letting the timer run out puts you on a short queue cooldown.
+        <div className={styles.answer}>
+          {/* Drains over the accept window, turning to the loss colour for the last URGENT_SEC */}
+          <CountdownRing remainingMs={remainingMs} totalMs={accept.windowSec * 1000} warnMs={URGENT_SEC * 1000} size="var(--accept-ring-size)">
+            <span className={cx(styles.ringSec, "mono")}>{sec ?? "--"}</span>
+            <span className={styles.ringUnit}>sec</span>
+          </CountdownRing>
+          {open ? (
+            <>
+              <div className={styles.actions}>
+                <Button size="lg" block className={styles.acceptBtn} onClick={() => onRespond(true)} data-autofocus>
+                  Accept
+                </Button>
+                <Button size="lg" block variant="ghost" onClick={() => onRespond(false)}>
+                  Decline
+                </Button>
+              </div>
+              <p id={descId} className={styles.note}>
+                Declining or letting the timer run out puts you on a short queue cooldown.
+              </p>
+            </>
+          ) : (
+            <p id={descId} ref={waitingRef} tabIndex={-1} className={styles.waiting}>
+              Accepted. Waiting for the others.
             </p>
-          </>
-        ) : (
-          <p id={descId} ref={waitingRef} tabIndex={-1} className={styles.waiting}>
-            Accepted. Waiting for the others.
-          </p>
-        )}
+          )}
+        </div>
       </div>
     </dialog>
   );
