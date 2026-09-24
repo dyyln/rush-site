@@ -162,8 +162,8 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
       <ol id={feedId} ref={feedRef} style={lockHeight !== null ? { minHeight: lockHeight } : undefined} className={styles.all} aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}>
         {feedRounds.map((r) => (
           <li key={r.round} className={styles.allRound}>
-            <RoundTitle r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} />
-            {kills ? <KillFeed kills={killsOf(r.round)} roster={roster} highlight={highlight} /> : <NoKills />}
+            <RoundInfo r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} />
+            <div className={styles.roundKills}>{kills ? <KillFeed kills={killsOf(r.round)} roster={roster} highlight={highlight} /> : <NoKills />}</div>
           </li>
         ))}
       </ol>
@@ -171,22 +171,28 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
   );
 }
 
-function RoundTitle({ r, side, score, rush }: { r: MatchRound; side: TeamSide; score: string; rush: boolean }) {
+// Left of each round's kills: the round number in the winner's colour, the score and, in Rush, the room
+function RoundInfo({ r, side, score, rush }: { r: MatchRound; side: TeamSide; score: string; rush: boolean }) {
+  const room = rush && r.arena ? rushRoomName(r.arena) : null;
   return (
-    <h3 className={styles.roundTitle}>
-      <span className="mono">Round {r.round}</span>
-      <span className={styles.winner} data-side={side}>
-        <TeamMarker side={side} />
-        {r.winnerTeam === "draw" ? "Draw" : `${r.winnerTeam} won`}
+    <div className={styles.roundInfo}>
+      <h3 className="visually-hidden">
+        Round {r.round}, {r.winnerTeam === "draw" ? "draw" : `${r.winnerTeam} won`}, {score}
+        {room ? `, ${room}` : ""}
+      </h3>
+      <span className={styles.roundTop} aria-hidden="true">
+        <span className={cx(styles.roundBadge, "mono")} data-side={r.winnerTeam === "draw" ? undefined : side} title={r.winnerTeam === "draw" ? "Draw" : `${r.winnerTeam} won`}>
+          {r.round}
+        </span>
+        <span className={cx(styles.roundScore, "mono")}>{score}</span>
       </span>
-      <span className="mono muted">{score}</span>
       {rush && r.arena && (
-        <span className={styles.arena}>
+        <span className={styles.roundRoom} aria-hidden="true">
           <RoomImage room={r.arena} />
-          <span className="muted">{rushRoomName(r.arena)}</span>
+          <span className={styles.roundRoomName}>{room}</span>
         </span>
       )}
-    </h3>
+    </div>
   );
 }
 

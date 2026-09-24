@@ -32,15 +32,16 @@ export function KillFeed({ kills, roster, highlight }: { kills: MatchKill[]; ros
               <Name steamId={k.attacker} roster={roster} highlight={highlight} />
               {assist && (
                 <span className={styles.assist}>
-                  <KillModifier name="assist" size={14} decorative className={styles.assistIcon} />
+                  <span aria-hidden="true">+</span>
                   <span className="visually-hidden">assisted by </span>
                   <span className={styles.assistName}>{assist}</span>
                 </span>
               )}
             </span>
-            <span className={styles.how}>
-              <WeaponIcon name={k.weapon} size={24} className={styles.weapon} />
-              <span className={`${styles.weaponName} mono`}>{weaponLabel(k.weapon)}</span>
+            {/* The weapon name is in the tooltip and for screen readers. The icon says it at a glance */}
+            <span className={styles.how} title={weaponLabel(k.weapon)}>
+              <WeaponIcon name={k.weapon} size={22} className={styles.weapon} />
+              <span className="visually-hidden">with {weaponLabel(k.weapon)}</span>
               {k.wallbang && <KillModifier name="wallbang" size={16} decorative className={styles.flag} />}
               {k.headshot && <KillModifier name="headshot" size={16} decorative className={styles.flag} />}
               {tk && <KillModifier name="teamkill" size={16} decorative className={styles.tk} />}

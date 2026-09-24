@@ -92,46 +92,93 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.roundTitle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-.arena {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.arena > :first-child {
-  width: 64px;
-}
-.winner {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.winner[data-side="own"] {
-  color: var(--team-own);
-}
-.winner[data-side="enemy"] {
-  color: var(--team-enemy);
-}
+/* Kills by round: a narrow column for the round, the kills beside it */
 .all {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
 }
 .allRound {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.allRound:first-child {
+  border-top: 0;
+}
+.roundInfo {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.roundTop {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
+  min-height: 24px;
+}
+/* One badge per round in the winner's colour */
+.roundBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.roundBadge[data-side="own"] {
+  border-color: var(--team-own);
+  background: color-mix(in srgb, var(--team-own) 22%, transparent);
+}
+.roundBadge[data-side="enemy"] {
+  border-color: var(--team-enemy);
+  background: color-mix(in srgb, var(--team-enemy) 20%, transparent);
+}
+.roundScore {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.roundRoom {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+.roundRoom > :first-child {
+  display: block;
+  width: 100%;
+}
+.roundRoomName {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px var(--space-1);
+  background: linear-gradient(0deg, rgb(8 7 12 / 0.85), transparent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.roundKills {
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .allRound {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
 }
 
 /* Rush graph under the segments. One cell per round, lined up with its segment */
