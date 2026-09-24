@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { AIM_MAPS, TIERS, type QueueStatusPayload, type VetoState } from "@rushsite/shared";
+import { AIM_MAPS, TIERS, createVeto, vote, type QueueStatusPayload, type VetoState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { BracketView } from "@/components/ui/BracketView";
@@ -91,6 +91,20 @@ function Specimen({ label, children }: { label: string; children: ReactNode }) {
       <div className={styles.specimenBody}>{children}</div>
     </div>
   );
+}
+
+// A Bo3 pick and ban as a cup final runs it: ban, ban, pick, pick, ban, decider. played steps are already taken
+function bo3Fixture(played: number): VetoState {
+  const teams: VetoState["teams"] = [
+    { id: "team_a", steamIds: [MOCK_ME.steamId, mockSteamId(4)] },
+    { id: "team_b", steamIds: [mockSteamId(20), mockSteamId(21)] },
+  ];
+  let s = createVeto({ pool: AIM_MAPS.map((m) => m.id), teams, format: "bo3-pickban", firstTeam: 1 });
+  const order = ["aim_usp", "aim_deagle7k", "aim_redline", "awp_india", "aim_map"];
+  for (const mapId of order.slice(0, played)) {
+    for (const id of s.teams[s.steps[s.stepIndex]!.team].steamIds) s = vote(s, id, mapId);
+  }
+  return s;
 }
 
 function vetoFixture(stage: "mine" | "theirs" | "done"): VetoState {
@@ -489,6 +503,16 @@ export function DesignGuide() {
           <Specimen label="Done">
             <div className={styles.full}>
               <VetoBoard mode="aim2v2" state={vetoFixture("done")} mySteamId={MOCK_ME.steamId} stepDeadline={null} />
+            </div>
+          </Specimen>
+          <Specimen label="Bo3 pick and ban, your pick">
+            <div className={styles.full}>
+              <VetoBoard mode="aim2v2" state={bo3Fixture(3)} mySteamId={MOCK_ME.steamId} stepDeadline={MOCK_NOW} frozenSec={12} />
+            </div>
+          </Specimen>
+          <Specimen label="Bo3 pick and ban, done">
+            <div className={styles.full}>
+              <VetoBoard mode="aim2v2" state={bo3Fixture(5)} mySteamId={MOCK_ME.steamId} stepDeadline={null} />
             </div>
           </Specimen>
         </Section>
