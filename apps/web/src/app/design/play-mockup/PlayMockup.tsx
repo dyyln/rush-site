@@ -81,6 +81,16 @@ const TEST: Tile[] = [
     queue: 2,
     live: 1,
   },
+  {
+    mode: "rush2v2",
+    name: "Rush Test",
+    format: "2v2",
+    size: 2,
+    art: "/rush-rooms/203.webp",
+    blurb: "Unrated test queue for Rush with four players",
+    queue: 3,
+    live: 1,
+  },
 ];
 const ME = "meridius";
 const MAX_PARTY = 3;
@@ -376,7 +386,7 @@ export function PlayMockup() {
                                 <TierChip tier={t.tier.tier} rating={t.tier.rating} size="sm" link={false} />
                                 {t.tier.rank && <span className="mono">#{t.tier.rank}</span>}
                               </span>
-                            ) : t.mode === "rush1v1" ? (
+                            ) : t.mode === "rush1v1" || t.mode === "rush2v2" ? (
                               <span className={styles.standing}>Unrated</span>
                             ) : (
                               <TierChip unranked size="sm" link={false} />

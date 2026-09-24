@@ -169,6 +169,13 @@
       "when": 1790259301750,
       "tag": "0023_series_rooms",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790276481417,
+      "tag": "0024_rush2v2_test_mode",
+      "breakpoints": true
     }
   ]
 }

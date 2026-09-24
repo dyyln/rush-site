@@ -285,6 +285,7 @@ describe("read routes", () => {
       { mode: "aim2v2", tickets: 1, players: 1, longestWaitSec: 90 },
       { mode: "rush3v3", tickets: 0, players: 0, longestWaitSec: 0 },
       { mode: "rush1v1", tickets: 0, players: 0, longestWaitSec: 0 },
+      { mode: "rush2v2", tickets: 0, players: 0, longestWaitSec: 0 },
     ])
     expect(o.matches.active).toBe(1)
     expect(o.matches.byStatus).toEqual({ live: 1 })

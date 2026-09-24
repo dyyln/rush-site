@@ -34,6 +34,14 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     format: "1v1",
     players: "1 vs 1",
   },
+  rush2v2: {
+    label: "2v2 Rush Test",
+    name: "Rush",
+    short: "Rush 2v2",
+    format: "2v2",
+    players: "2 vs 2",
+    blurb: "Unrated test queue for Rush with four players",
+  },
 };
 
 // Full-bleed art per mode, for mode tiles and cup banners
@@ -42,6 +50,7 @@ export const MODE_ART: Record<Mode, string> = {
   aim1v1: "/maps/aim_redline.webp",
   aim2v2: "/maps/aim_deagle7k.webp",
   rush1v1: "/rush-rooms/205.webp",
+  rush2v2: "/rush-rooms/203.webp",
 };
 
 export function modeLabel(mode: Mode): string {

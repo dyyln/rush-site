@@ -4,6 +4,7 @@
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #9b8ac4;
+  --series-5: #d9b44a;
   --grid: var(--color-border);
   --axis-text: var(--color-text-muted);
   position: relative;

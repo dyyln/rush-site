@@ -163,6 +163,33 @@ public class RushTeamTests
     }
 
     [Fact]
+    public void RushTwoVsTwoTestModeHoldsWarmupUntilAllFourAreInThenGoesLive()
+    {
+        var m = New(Rush2v2());
+        Assert.True(m.IsRush);
+        Assert.Contains("mp_warmup_pausetimer 1", _game.Commands);
+        Join(m, A1, Side.CT, 1);
+        Join(m, A2, Side.CT, 2);
+        Join(m, B1, Side.T, 3);
+        m.Tick();
+        Assert.Equal(new[] { B2 }, m.RushNotReady());
+        Assert.False(m.CountdownRunning);
+        Assert.DoesNotContain("mp_warmup_pausetimer 0", _game.Commands);
+
+        Join(m, B2, Side.T, 4);
+        m.Tick();
+        Assert.Empty(m.RushNotReady());
+        Assert.True(m.CountdownRunning);
+        Assert.False(m.OnJoinTeamRequest(A2, Side.T));
+        _clock.Advance(10);
+        m.Tick();
+        Assert.Contains("mp_warmup_end", _game.Commands);
+
+        m.OnRushMatchLive();
+        Assert.Equal(MatchPhase.Live, m.Phase);
+    }
+
+    [Fact]
     public void MissingPlayerIsNotReadyAndHoldIsReassertedWhenACfgClearsIt()
     {
         var m = New();

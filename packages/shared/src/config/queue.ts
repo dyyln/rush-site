@@ -47,6 +47,8 @@ export const PARTY_BUCKET_RULES: Record<Mode, PartyBucketRule> = {
   aim2v2: { mode: "aim2v2", allowedPartySizes: [1, 2], mixAfterSec: 60 },
   rush3v3: { mode: "rush3v3", allowedPartySizes: [1, 2, 3], mixAfterSec: 90 },
   rush1v1: { mode: "rush1v1", allowedPartySizes: [1], mixAfterSec: 0 },
+  // Test queue with few players, so duos and solos mix from the start
+  rush2v2: { mode: "rush2v2", allowedPartySizes: [1, 2], mixAfterSec: 0 },
 }
 
 // A ticket's bucket is solo for party size 1, party otherwise

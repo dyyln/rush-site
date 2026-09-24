@@ -269,6 +269,7 @@ public class WarmupTests
         new object[] { "aim2v2" },
         new object[] { "rush" },
         new object[] { "rush1v1" },
+        new object[] { "rush2v2" },
         new object[] { "aimBo3" },
         new object[] { "rushBo3" },
     };
@@ -279,6 +280,7 @@ public class WarmupTests
         "aim2v2" => Aim2v2(),
         "rush" => Rush(),
         "rush1v1" => Rush1v1(),
+        "rush2v2" => Rush2v2(),
         "aimBo3" => AimBo3(),
         _ => RushBo3(),
     };
