@@ -52,9 +52,8 @@ export function VetoTurnChip({ turn, next }: { turn: VetoTurn; next?: boolean })
   );
 }
 
-// Class names the boards put on their header, card grid and steps
+// Class names the boards put on their header and card grid
 export const turnClass = {
   band: styles.band,
   grid: styles.grid,
-  step: styles.step,
 };

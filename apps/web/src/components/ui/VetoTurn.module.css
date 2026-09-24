@@ -89,34 +89,3 @@
   filter: saturate(0.6);
   transition: opacity var(--duration-normal) var(--ease), filter var(--duration-normal) var(--ease);
 }
-
-/* Steps in the owner's colour: yours filled purple, the opponents' outlined amber. The current one pulses.
-   Doubled class so it wins over each board's own step styles */
-.step.step[data-owner="own"] {
-  background: color-mix(in srgb, var(--team-own) 24%, var(--color-surface-2));
-  border-color: color-mix(in srgb, var(--team-own) 55%, transparent);
-  color: var(--color-text);
-}
-.step.step[data-owner="enemy"] {
-  background: transparent;
-  border-color: var(--team-enemy);
-  color: var(--color-text);
-}
-.step.step[aria-current="step"] {
-  opacity: 1;
-  outline: 2px solid var(--color-text);
-  outline-offset: 1px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .step.step[aria-current="step"] {
-    animation: step-pulse 1.2s var(--ease) infinite alternate;
-  }
-}
-@keyframes step-pulse {
-  from {
-    outline-color: color-mix(in srgb, var(--color-text) 35%, transparent);
-  }
-  to {
-    outline-color: var(--color-text);
-  }
-}

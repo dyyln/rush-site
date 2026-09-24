@@ -335,3 +335,41 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* CT or T mark on a castle, in the colour of the team playing that side. Sits above the stripes */
+.emblem {
+  position: absolute;
+  z-index: 3;
+  top: var(--space-1);
+  left: var(--space-1);
+  width: 34px;
+  height: 34px;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.8));
+}
+.emblem path {
+  fill: rgb(8 7 11 / 0.82);
+  stroke: var(--color-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.emblem[data-side="own"] path {
+  stroke: var(--team-own);
+}
+.emblem[data-side="enemy"] path {
+  stroke: var(--team-enemy);
+}
+.emblem text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  fill: var(--color-text);
+}
+.emblem[data-play="t"] text {
+  font-size: 13px;
+}
+.layoutCompact .emblem {
+  width: 30px;
+  height: 30px;
+}

@@ -16,6 +16,7 @@ import {
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
+import { VetoSteps } from "@/components/ui/VetoSteps";
 import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
 import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
@@ -181,29 +182,12 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   {done && <span className="visually-hidden">, done</span>}
                 </span>
               </div>
-              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? (previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)) : null} flip={flip} castles={castles} compact />
+              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? (previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)) : null} flip={flip} castles={castles} ctTeam={mp.ctTeam ?? previewCt} compact />
             </li>
           );
         })}
       </ol>
 
-      {mapSteps.length > 0 && (
-        <ol className={styles.steps} aria-label={`Steps for map ${cur?.mapNumber}`}>
-          {mapSteps.map(({ s, i }) => {
-            const doneStep = i < state.stepIndex;
-            const currentStep = i === state.stepIndex;
-            const h = state.history[i];
-            const kind = phaseAt(i)?.kind ?? "mid";
-            return (
-              <li key={i} className={cx(styles.step, turnClass.step, doneStep && styles.stepDone, currentStep && styles.stepCurrent)} data-side={sideOf(s.team)} data-owner={sideOf(s.team)} aria-current={currentStep ? "step" : undefined}>
-                <span className={styles.stepAction}>{STEP_LABEL[kind]}</span>
-                <span className={styles.stepTeam}>{myTeam === null ? state.teams[s.team].id : s.team === myTeam ? "You" : "Opp"}</span>
-                {h && <span className="visually-hidden">{keyLabel(h.mapId)}</span>}
-              </li>
-            );
-          })}
-        </ol>
-      )}
 
       {cur?.kind === "side" && (
         <div className={cx(own.sides, turnClass.grid)} data-turn={turn} role="group" aria-label={`Side for map ${cur.mapNumber}`}>
@@ -282,6 +266,17 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
         </ul>
       )}
 
+
+      <VetoSteps
+        label={`Steps for map ${cur?.mapNumber}`}
+        steps={mapSteps.map(({ s, i }) => ({
+          action: STEP_LABEL[phaseAt(i)?.kind ?? "mid"],
+          team: myTeam === null ? `Team ${state.teams[s.team].id}` : s.team === myTeam ? "You" : "Opponents",
+          owner: sideOf(s.team),
+          status: i < state.stepIndex ? "done" : i === state.stepIndex ? "current" : "upcoming",
+          result: state.history[i] ? keyLabel(state.history[i]!.mapId) : undefined,
+        }))}
+      />
     </section>
   );
 }

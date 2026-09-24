@@ -1,0 +1,63 @@
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+/* Arrow between steps */
+.step + .step::before {
+  content: "\2192" / "";
+  margin: 0 var(--space-2);
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  font-weight: 400;
+}
+.action {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text);
+}
+.team {
+  font-size: var(--text-xs);
+}
+.step[data-owner="own"] .team {
+  color: var(--team-own);
+}
+.step[data-owner="enemy"] .team {
+  color: var(--team-enemy);
+}
+.done .action,
+.done .team {
+  opacity: 0.45;
+}
+.upcoming .action {
+  color: var(--color-text-muted);
+}
+.current .action,
+.current .team {
+  font-weight: 700;
+}
+.current .action {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.step[data-owner="own"].current .action {
+  text-decoration-color: var(--team-own);
+}
+.step[data-owner="enemy"].current .action {
+  text-decoration-color: var(--team-enemy);
+}

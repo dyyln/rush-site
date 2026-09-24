@@ -3,6 +3,7 @@ import type { TeamSide } from "@/components/ui/TeamMarker";
 import { cx } from "@/components/ui/cx";
 import { rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
 import { RoomImage } from "./RoomImage";
+import { SideEmblem } from "./SideEmblem";
 import styles from "./Rush.module.css";
 
 type Props = {
@@ -20,12 +21,14 @@ type Props = {
   // Castles while the map's sides are open. unset: empty. choosing: empty under the stripes while a team picks sides.
   // preview: grey under the stripes, drawn with the side being hovered or voted. set (the default): the castles
   castles?: "set" | "unset" | "choosing" | "preview";
+  // Team playing CT. Puts a CT or T mark in that team's colour on each castle. null or left out: no marks
+  ctTeam?: 0 | 1 | null;
   // Always one row of seven with no how line, for the series room pick where three maps stack
   compact?: boolean;
 };
 
 // The seven rooms of the Complex from T castle to CT castle
-export function ComplexLayout({ slots, sideOf, nextSlot = null, previewRoom = null, pendingLabel = "Open", flip = false, compact = false, castles = "set" }: Props) {
+export function ComplexLayout({ slots, sideOf, nextSlot = null, previewRoom = null, pendingLabel = "Open", flip = false, compact = false, castles = "set", ctTeam = null }: Props) {
   return (
     <ol className={cx(styles.layout, compact && styles.layoutCompact)} aria-label={flip ? "Rooms from CT castle to T castle" : "Rooms from T castle to CT castle"}>
       {(flip ? [...slots].reverse() : slots).map((s) => {
@@ -52,6 +55,12 @@ export function ComplexLayout({ slots, sideOf, nextSlot = null, previewRoom = nu
                 <span className={styles.slotName} aria-hidden={preview ? true : undefined}>
                   {rushRoomName((preview ?? room)!)}
                 </span>
+              )}
+              {castle && !hideCastle && ctTeam !== null && (
+                <SideEmblem
+                  play={s.slot === 0 ? "t" : "ct"}
+                  side={sideOf(s.slot === 0 ? (ctTeam === 0 ? 1 : 0) : ctTeam)}
+                />
               )}
             </span>
             {hideCastle && <span className="visually-hidden">side not chosen yet</span>}

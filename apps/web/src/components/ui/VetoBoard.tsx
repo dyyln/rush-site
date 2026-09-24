@@ -7,6 +7,7 @@ import { VetoSummary } from "@/components/play/VetoSummary";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { MapCard, type MapCardState, type MapCardVoter } from "./MapCard";
 import { Timer } from "./Timer";
+import { VetoSteps } from "./VetoSteps";
 import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "./VetoTurn";
 import { cx } from "./cx";
 import styles from "./VetoBoard.module.css";
@@ -107,26 +108,6 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
         )}
       </header>
 
-      <ol className={styles.steps} aria-label="Veto steps">
-        {state.steps.map((s, i) => {
-          const done = i < state.stepIndex || state.done;
-          const current = i === state.stepIndex && !state.done;
-          const h = state.history[i];
-          return (
-            <li
-              key={i}
-              className={cx("glass", styles.step, turnClass.step, done && styles.stepDone, current && styles.stepCurrent, s.team === myTeam ? styles.stepUs : styles.stepThem)}
-              data-owner={s.team === myTeam ? "own" : "enemy"}
-              aria-current={current ? "step" : undefined}
-            >
-              <span className={styles.stepAction}>{s.action}</span>
-              <span className={styles.stepTeam}>{s.team === myTeam ? "You" : "Opp"}</span>
-              {h && <span className="visually-hidden">{mapName(mode, h.mapId)}</span>}
-            </li>
-          );
-        })}
-      </ol>
-
       <ul className={cx(styles.grid, turnClass.grid)} data-turn={turn} role="list">
         {state.pool.map((mapId) => {
           const cs = cardState(mapId);
@@ -152,6 +133,17 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
         })}
       </ul>
 
+
+      <VetoSteps
+        label="Veto steps"
+        steps={state.steps.map((s, i) => ({
+          action: s.action,
+          team: s.team === myTeam ? "You" : "Opponents",
+          owner: s.team === myTeam ? "own" : "enemy",
+          status: state.done || i < state.stepIndex ? "done" : i === state.stepIndex ? "current" : "upcoming",
+          result: state.history[i] ? mapName(mode, state.history[i]!.mapId) : undefined,
+        }))}
+      />
     </section>
   );
 }

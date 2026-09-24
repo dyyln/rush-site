@@ -4,6 +4,7 @@ import { RUSH_ROOM_VETO, VETO_STEP_SEC, currentRoomPhase, nextPickSlot, roomSlot
 import type { TeamSide } from "@/components/ui/TeamMarker";
 import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
+import { VetoSteps } from "@/components/ui/VetoSteps";
 import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
 import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
@@ -121,24 +122,8 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         })}
       </ol>
 
-      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} previewRoom={previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)} flip={flip} />
+      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} previewRoom={previewRoom ?? (step?.action === "pick" ? (myVote ?? null) : null)} flip={flip} ctTeam={flip ? 0 : 1} />
 
-      {phaseSteps.length > 0 && (
-      <ol className={styles.steps} aria-label="Veto steps">
-        {phaseSteps.map(({ s, i }) => {
-          const done = i < state.stepIndex || state.done;
-          const current = i === state.stepIndex && !state.done;
-          const h = state.history[i];
-          return (
-            <li key={i} className={cx(styles.step, turnClass.step, done && styles.stepDone, current && styles.stepCurrent)} data-side={sideOf(s.team)} data-owner={sideOf(s.team)} aria-current={current ? "step" : undefined}>
-              <span className={styles.stepAction}>{s.action}</span>
-              <span className={styles.stepTeam}>{myTeam === null ? state.teams[s.team].id : s.team === myTeam ? "You" : "Opp"}</span>
-              {h && <span className="visually-hidden">{rushRoomName(h.mapId)}</span>}
-            </li>
-          );
-        })}
-      </ol>
-      )}
 
       {phasePool.length > 0 && (
       <ul className={cx(styles.grid, turnClass.grid)} data-turn={turn} role="list">
@@ -178,6 +163,17 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
       </ul>
       )}
 
+
+      <VetoSteps
+        label="Veto steps"
+        steps={phaseSteps.map(({ s, i }) => ({
+          action: s.action,
+          team: myTeam === null ? `Team ${state.teams[s.team].id}` : s.team === myTeam ? "You" : "Opponents",
+          owner: sideOf(s.team),
+          status: state.done || i < state.stepIndex ? "done" : i === state.stepIndex ? "current" : "upcoming",
+          result: state.history[i] ? rushRoomName(state.history[i]!.mapId) : undefined,
+        }))}
+      />
     </section>
   );
 }
