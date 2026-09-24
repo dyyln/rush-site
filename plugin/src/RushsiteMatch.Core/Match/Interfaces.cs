@@ -38,7 +38,7 @@ public interface IGameServer
     // Name of the loaded map as the engine reports it, or null.
     string? CurrentMapName { get; }
 
-    // Aim only. Strips weapons the player should not hold, except the knife, then gives what is missing.
+    // Aim only. Gives each loadout weapon whose slot is empty. Never removes a weapon.
     void ApplyLoadout(string steamId, PlayerLoadout loadout);
 }
 
@@ -83,7 +83,7 @@ public sealed class MatchSettings
     public TimeSpan StartCountdown { get; init; } = TimeSpan.FromSeconds(10);
     // Aim. mp_respawn_immunitytime.
     public TimeSpan AimSpawnImmunity { get; init; } = TimeSpan.FromSeconds(2);
-    // Aim. Hand out the map loadout and strip everything else on spawn.
+    // Aim. Hand out the map loadout into empty weapon slots on spawn.
     public bool AimLoadout { get; init; } = true;
     // Aim. Overtime period length for a tied map. Zero turns overtime off.
     public int OvertimeMaxRounds { get; init; } = 6;

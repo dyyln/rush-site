@@ -523,16 +523,14 @@ public class LoadoutTests
     }
 
     [Fact]
-    public void PerSideWeaponsAndMatching()
+    public void PerSideWeaponsBySlot()
     {
-        Assert.Equal(new[] { "weapon_ak47", "weapon_glock" }, AimLoadouts.Rifles.For(Side.T).Weapons);
+        var t = AimLoadouts.Rifles.For(Side.T);
+        Assert.Equal("weapon_ak47", t.Primary);
+        Assert.Equal("weapon_glock", t.Secondary);
         Assert.Equal(new[] { "weapon_m4a1", "weapon_usp_silencer" }, AimLoadouts.Rifles.For(Side.CT).Weapons);
-        // The USP-S reports weapon_hkp2000 as its designer name.
-        Assert.True(WeaponItems.Matches("weapon_usp_silencer", "weapon_hkp2000", 61));
-        Assert.False(WeaponItems.Matches("weapon_usp_silencer", "weapon_hkp2000", 32));
-        Assert.True(WeaponItems.Matches("weapon_unknown_gun", "weapon_unknown_gun", 999));
-        Assert.True(WeaponItems.IsKnife("weapon_knife_t"));
-        Assert.True(WeaponItems.IsKnife("weapon_bayonet"));
-        Assert.False(WeaponItems.IsKnife("weapon_awp"));
+        var usp = AimLoadouts.UspOnly.For(Side.CT);
+        Assert.Null(usp.Primary);
+        Assert.Equal(new[] { "weapon_usp_silencer" }, usp.Weapons);
     }
 }

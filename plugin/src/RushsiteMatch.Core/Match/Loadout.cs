@@ -11,8 +11,11 @@ public enum ArmorKind
     KevlarHelmet,
 }
 
-// What one player should hold after spawning. The knife is always kept and never listed.
-public sealed record PlayerLoadout(IReadOnlyList<string> Weapons, ArmorKind Armor);
+// What one player should hold after spawning. Each weapon is given only when its slot is empty.
+public sealed record PlayerLoadout(string? Primary, string? Secondary, ArmorKind Armor)
+{
+    public IReadOnlyList<string> Weapons => new[] { Primary, Secondary }.OfType<string>().ToList();
+}
 
 // Aim mode loadout for one map. A null weapon means that slot stays empty.
 public sealed record Loadout(string? CtPrimary, string? TPrimary, string? CtSecondary, string? TSecondary, ArmorKind Armor)
@@ -46,15 +49,9 @@ public sealed record Loadout(string? CtPrimary, string? TPrimary, string? CtSeco
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
-    public PlayerLoadout For(Side side)
-    {
-        var weapons = new List<string>();
-        var primary = side == Side.T ? TPrimary : CtPrimary;
-        var secondary = side == Side.T ? TSecondary : CtSecondary;
-        if (primary is not null) weapons.Add(primary);
-        if (secondary is not null) weapons.Add(secondary);
-        return new PlayerLoadout(weapons, Armor);
-    }
+    public PlayerLoadout For(Side side) => side == Side.T
+        ? new PlayerLoadout(TPrimary, TSecondary, Armor)
+        : new PlayerLoadout(CtPrimary, CtSecondary, Armor);
 
     // Server convars that hand out this loadout and stop buying.
     // They must run after mode.cfg, which turns buying on.
@@ -118,42 +115,5 @@ public static class AimLoadouts
             if (prefix is not null) return ByMap[prefix];
         }
         return Rifles;
-    }
-}
-
-// Item definition indexes. Some weapons report another weapon's designer name in CS2,
-// for example the USP-S shows as weapon_hkp2000, so owned weapons are matched by index when known.
-public static class WeaponItems
-{
-    public static readonly IReadOnlyDictionary<string, int> DefIndex = new Dictionary<string, int>
-    {
-        ["weapon_deagle"] = 1,
-        ["weapon_elite"] = 2,
-        ["weapon_fiveseven"] = 3,
-        ["weapon_glock"] = 4,
-        ["weapon_ak47"] = 7,
-        ["weapon_aug"] = 8,
-        ["weapon_awp"] = 9,
-        ["weapon_famas"] = 10,
-        ["weapon_galilar"] = 13,
-        ["weapon_m4a1"] = 16,
-        ["weapon_tec9"] = 30,
-        ["weapon_hkp2000"] = 32,
-        ["weapon_p250"] = 36,
-        ["weapon_sg556"] = 39,
-        ["weapon_ssg08"] = 40,
-        ["weapon_m4a1_silencer"] = 60,
-        ["weapon_usp_silencer"] = 61,
-        ["weapon_cz75a"] = 63,
-        ["weapon_revolver"] = 64,
-    };
-
-    public static bool IsKnife(string? designerName) =>
-        designerName is not null && (designerName.Contains("knife", StringComparison.Ordinal) || designerName == "weapon_bayonet");
-
-    public static bool Matches(string wanted, string? designerName, int defIndex)
-    {
-        if (DefIndex.TryGetValue(wanted, out var idx) && defIndex > 0) return idx == defIndex;
-        return wanted == designerName;
     }
 }
