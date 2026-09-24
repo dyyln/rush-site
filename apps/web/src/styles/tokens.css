@@ -20,6 +20,8 @@
   /* Scene behind the page. At this tint only full-strength text passes 4.5:1 directly
      on the scene, so muted and accent text belong on glass */
   --backdrop-image: url("/backdrops/rush-tower.webp");
+  /* Softens the upscaled 720p capture. Drop to 0 with a 1440p or 4K image */
+  --backdrop-blur: 6px;
   --backdrop-tint: rgb(10 9 14 / 0.66);
   /* Edge of outlined controls. At least 3:1 on every surface */
   --color-border-control: #7a7292;

@@ -32,6 +32,9 @@ body::after {
 }
 body::before {
   background: var(--backdrop-image) center / cover no-repeat;
+  filter: blur(var(--backdrop-blur));
+  /* Bleed past the viewport so the blurred edges don't fade in */
+  inset: calc(-3 * var(--backdrop-blur));
 }
 body::after {
   background: var(--backdrop-tint);
