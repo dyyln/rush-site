@@ -298,7 +298,9 @@ export class Allocator {
       }
     }
 
-    if (this.surge && waitedMs >= this.opts.surgeWaitSec * 1000) {
+    // Waiting only helps when a Hetzner slot can free up. With no online Hetzner slots at all go straight to surge
+    const hetznerSlots = this.surge ? (await this.hetzner.capacity()).total : 0
+    if (this.surge && (hetznerSlots === 0 || waitedMs >= this.opts.surgeWaitSec * 1000)) {
       // DatHost servers run without a token, so a dry pool does not block surge capacity
       const token = await this.db.transaction((tx) => this.reserveGslt(tx as unknown as Db, p.matchId))
       if (!token) this.log.warn({ matchId: p.matchId }, "no free GSLT, starting surge server without a token")

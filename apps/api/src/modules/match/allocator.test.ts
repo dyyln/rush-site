@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { validateLikeAgent } from "../../../test/agent-contract.js"
 import { createHarness, finishVeto, makeUsers, type Harness } from "../../../test/helpers.js"
-import { gsltTokens, matches } from "../../db/schema.js"
+import { gsltTokens, matches, serverSlots } from "../../db/schema.js"
 import { matchmakeAll } from "../queue/loop.js"
 import { MatchesDathostStore } from "./dathost.js"
 
@@ -55,7 +55,18 @@ describe("allocator drivers", () => {
     return matchId!
   }
 
+  it("goes straight to DatHost when there is no Hetzner capacity at all", async () => {
+    const matchId = await vetoedMatch()
+    const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
+    expect(m!.status).toBe("starting")
+    expect(m!.driver).toBe("dathost")
+    expect(surge.started).toHaveLength(1)
+  })
+
   it("waits SURGE_WAIT_SEC for a Hetzner slot before using DatHost", async () => {
+    // A host with every slot busy, so waiting could still free one up
+    await h.ctx.allocator.syncHosts(["http://agent.test:8080"])
+    await h.db.update(serverSlots).set({ status: "running" })
     const matchId = await vetoedMatch()
     let [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
     expect(m!.status).toBe("allocating")
@@ -88,14 +99,12 @@ describe("allocator drivers", () => {
   })
 
   it("a cancel while the clone boots is not logged as an allocation error", async () => {
-    const matchId = await vetoedMatch()
     surge.start = async (req) => {
       surge.started.push(req)
       await h.ctx.flow.cancelMatch(req.matchId, "admin", { requeue: false })
       throw new Error("DatHost GET /game-servers/x returned 404")
     }
-    h.clock.advance((h.env.SURGE_WAIT_SEC + 1) * 1000)
-    await h.ctx.flow.tick()
+    const matchId = await vetoedMatch()
     const [m] = await h.db.select().from(matches).where(eq(matches.id, matchId))
     expect(m!.status).toBe("cancelled")
     expect(m!.cancelReason).toBe("admin")
@@ -104,12 +113,10 @@ describe("allocator drivers", () => {
   })
 
   it("a start failure on a live match is still logged", async () => {
-    const matchId = await vetoedMatch()
     surge.start = async () => {
       throw new Error("DatHost POST /game-servers returned 500")
     }
-    h.clock.advance((h.env.SURGE_WAIT_SEC + 1) * 1000)
-    await h.ctx.flow.tick()
+    const matchId = await vetoedMatch()
     const errors = (await h.ctx.events.recent()).filter((e) => e.type === "allocation_error" && e.matchId === matchId)
     expect(errors).toHaveLength(1)
   })
