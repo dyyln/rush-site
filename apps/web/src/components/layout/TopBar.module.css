@@ -21,9 +21,13 @@
   filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.6));
   transition: color var(--duration-fast) var(--ease);
 }
+/* The mark fills 56 of its 64 unit box. Scale the box up and pull it back so the mark itself spans --logo-h */
 .logo > svg {
-  width: 100%;
-  height: 100%;
+  flex: none;
+  width: calc(var(--logo-h) * 64 / 56);
+  height: calc(var(--logo-h) * 64 / 56);
+  margin: calc(var(--logo-h) * -4 / 56);
+  max-width: none;
 }
 .logo:hover {
   color: var(--color-accent-hover);
