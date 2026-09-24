@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, TIERS, trustAtLeast, type Mode } from "@rushsite/shared";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
+import { HowItWorksSteps } from "@/components/home/HowItWorks";
 import { readFlag, writeFlag } from "@/components/profile/flags";
 import { FriendsCard } from "@/components/friends/FriendsCard";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
@@ -146,7 +147,7 @@ export function PlayView() {
       searching={queuedModes.includes(mode)}
       locked={locked}
       partySize={partySize}
-      stats={play.stats?.modes.find((m) => m.mode === mode)}
+      stats={user ? play.stats?.modes.find((m) => m.mode === mode) : undefined}
       profile={user ? me : undefined}
     />
   );
@@ -191,11 +192,7 @@ export function PlayView() {
             <FriendsCard onParty={setGlobalParty} canJoinQueue={partySize === 1 && !queued && !active} />
           ) : (
             <Card title="How it works" tone="flat">
-              <ol className={styles.howTo}>
-                <li>Sign in with Steam.</li>
-                <li>Pick one or more modes and press Go. Friends can join your party.</li>
-                <li>Accept the match, ban maps with your team, then join the server we start for you.</li>
-              </ol>
+              <HowItWorksSteps stacked />
             </Card>
           )}
         </aside>
