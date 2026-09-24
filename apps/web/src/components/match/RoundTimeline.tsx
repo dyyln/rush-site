@@ -33,6 +33,18 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
   const [hover, setHover] = useState<number | null>(null);
   const feedId = useId();
   const listRef = useRef<HTMLOListElement>(null);
+  const feedRef = useRef<HTMLOListElement>(null);
+  // While a round is pointed at, the feed keeps the height it had, so the page does not get shorter,
+  // scroll up and pull the rounds out from under the pointer
+  const [lockHeight, setLockHeight] = useState<number | null>(null);
+  const peek = (round: number) => {
+    if (lockHeight === null && feedRef.current) setLockHeight(feedRef.current.offsetHeight);
+    setHover(round);
+  };
+  const unpeek = () => {
+    setHover(null);
+    setLockHeight(null);
+  };
 
   if (rounds.length === 0) return <p className="muted">No rounds yet.</p>;
 
@@ -87,7 +99,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
         </defs>
       </svg>
       <p className="visually-hidden">Point at or focus a round to see only its kills. Select it to keep it. Use the arrow keys to move between rounds.</p>
-      <ol className={styles.timeline} ref={listRef} onMouseLeave={() => setHover(null)}>
+      <ol className={styles.timeline} ref={listRef} onMouseLeave={unpeek}>
         {rounds.map((r, i) => {
           const next = rounds[i + 1];
           // Label the score where a streak ends, spaced out so labels do not collide
@@ -107,9 +119,10 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
                 aria-controls={feedId}
                 tabIndex={selected || (pinnedIndex === -1 && i === rounds.length - 1) ? 0 : -1}
                 onClick={() => setPinned(selected ? null : r.round)}
-                onMouseEnter={() => setHover(r.round)}
-                onFocus={() => setHover(r.round)}
-                onBlur={() => setHover(null)}
+                onMouseEnter={() => peek(r.round)}
+                onFocus={() => peek(r.round)}
+                // Arrowing to the next round keeps the lock. Leaving the rounds lets go
+                onBlur={(e) => !listRef.current?.contains(e.relatedTarget as Node | null) && unpeek()}
                 onKeyDown={(e) => onKey(e, i)}
                 data-selected={selected || undefined}
                 data-shown={(shown === r.round && !selected) || undefined}
@@ -146,7 +159,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
       </ol>
 
       {/* Every round's kills, or only the round pointed at or picked */}
-      <ol id={feedId} className={styles.all} aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}>
+      <ol id={feedId} ref={feedRef} style={lockHeight !== null ? { minHeight: lockHeight } : undefined} className={styles.all} aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}>
         {feedRounds.map((r) => (
           <li key={r.round} className={styles.allRound}>
             <RoundTitle r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} />
