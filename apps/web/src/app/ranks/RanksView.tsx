@@ -1,8 +1,23 @@
 "use client";
 
-import { LEADERBOARD_MIN_MATCHES, RANKED_MODES as MODES, TIERS, tierForRating, type Mode, type TierBand, type TierDistribution, type TierId } from "@rushsite/shared";
+import {
+  divisionBands,
+  divisionForRating,
+  isTopTier,
+  LEADERBOARD_MIN_MATCHES,
+  RANKED_MODES as MODES,
+  rankLabel,
+  TIERS,
+  tierForRating,
+  type DivisionBand,
+  type Mode,
+  type TierBand,
+  type TierDistribution,
+  type TierId,
+} from "@rushsite/shared";
 import { statsApi } from "@/components/stats/statsApi";
 import { TierChip } from "@/components/ui/TierChip";
+import { TierEmblem } from "@/components/ui/TierEmblem";
 import { MODE_COPY } from "@/lib/modes";
 import { useAsync } from "@/lib/useAsync";
 import styles from "./ranks.module.css";
@@ -16,7 +31,7 @@ const DESCRIPTIONS: Record<TierId, string> = {
   elite: "The top of the ladder. Few players reach it.",
 };
 
-function bandText(t: TierBand): string {
+function bandText(t: TierBand | DivisionBand): string {
   if (t.min === null) return `Below ${t.max}`;
   if (t.max === null) return `${t.min}+`;
   return `${t.min} to ${t.max - 1}`;
@@ -28,12 +43,13 @@ function share(p: number): string {
   return `${Math.round(v)}%`;
 }
 
-// Rating points to the next band, null at the top
-function toNext(rating: number): { points: number; next: TierBand } | null {
-  const idx = TIERS.findIndex((t) => t.id === tierForRating(rating).id);
-  const next = TIERS[idx + 1];
-  if (!next || next.min === null) return null;
-  return { points: next.min - Math.round(rating), next };
+// Rating points to the next division or tier, null in the top tier
+function toNext(rating: number): { points: number; name: string } | null {
+  const tier = tierForRating(rating);
+  const d = divisionForRating(rating);
+  const band = d === null ? null : divisionBands(tier)[d - 1];
+  if (!band) return null;
+  return { points: band.max - Math.round(rating), name: rankLabel(band.max) };
 }
 
 const LADDER = [...TIERS].reverse();
@@ -73,7 +89,7 @@ export function RanksView() {
                   <span className={styles.youMode}>{MODE_COPY[m].label}</span>
                   {y ? <TierChip tier={y.tier} rating={y.rating} size="sm" link={false} /> : <TierChip unranked size="sm" link={false} />}
                   <span className="muted">
-                    {!y ? "No matches yet" : n ? `${n.points} rating to ${n.next.displayName}` : "Top tier"}
+                    {!y ? "No matches yet" : n ? `${n.points} rating to ${n.name}` : "Top tier"}
                   </span>
                 </li>
               );
@@ -91,7 +107,8 @@ export function RanksView() {
           {LADDER.map((t) => {
             const mine = dist ? MODES.filter((m) => dist[m].you?.tier === t.id) : [];
             return (
-              <li key={t.id} className={`glass ${styles.tier}`} data-current={mine.length > 0 || undefined}>
+              <li key={t.id} className={`glass ${styles.tier}`} data-current={mine.length > 0 || undefined} data-tier={t.id}>
+                <TierEmblem tier={t.id} size={56} className={styles.emblem} />
                 <div className={styles.tierMain}>
                   <div className={styles.tierHead}>
                     <TierChip tier={t.id} link={false} />
@@ -101,6 +118,20 @@ export function RanksView() {
                     )}
                   </div>
                   <p className={styles.desc}>{DESCRIPTIONS[t.id]}</p>
+                  {isTopTier(t) ? (
+                    <p className={styles.divisions}>No divisions. Your leaderboard place shows instead, from #1 down.</p>
+                  ) : (
+                    <ul className={styles.divisions} aria-label={`${t.displayName} divisions`}>
+                      {[...divisionBands(t)].reverse().map((d) => (
+                        <li key={d.division}>
+                          <span className={styles.divName}>
+                            {t.displayName} {d.numeral}
+                          </span>
+                          <span className="mono">{bandText(d)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <dl className={styles.shares}>
                   {MODES.map((m) => {

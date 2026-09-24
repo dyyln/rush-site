@@ -41,8 +41,9 @@
   list-style: none;
 }
 .tier {
+  --tier-color: var(--tier-iron);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-4);
@@ -54,8 +55,38 @@
   border-color: var(--color-accent);
   background: var(--color-surface-2);
 }
+.tier[data-tier="bronze"] { --tier-color: var(--tier-bronze); }
+.tier[data-tier="silver"] { --tier-color: var(--tier-silver); }
+.tier[data-tier="gold"] { --tier-color: var(--tier-gold); }
+.tier[data-tier="platinum"] { --tier-color: var(--tier-platinum); }
+.tier[data-tier="elite"] { --tier-color: var(--tier-elite); }
+.emblem {
+  flex: none;
+  color: var(--tier-color);
+}
 .tierMain {
   min-width: 0;
+}
+.divisions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.divisions li {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+.divName {
+  color: var(--tier-color);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .tierHead {
   display: flex;
@@ -114,8 +145,15 @@
 }
 @media (max-width: 640px) {
   .tier {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: var(--space-3);
+  }
+  .emblem {
+    width: 40px;
+    height: 40px;
+  }
+  .shares {
+    grid-column: 1 / -1;
   }
   .shares {
     grid-template-columns: repeat(3, minmax(0, 1fr));
