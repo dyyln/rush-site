@@ -16,7 +16,7 @@ import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
 import { MatchSkeleton } from "@/components/skeletons/MatchSkeleton";
 import { DemoActions } from "@/components/match/DemoActions";
-import { MatchSummary } from "@/components/match/MatchSummary";
+import { ResultHeader } from "@/components/match/ResultHeader";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
 import { MatchRushTrack, rushFlip, rushRoundPath } from "@/components/match/RushRoomTrack";
@@ -31,6 +31,7 @@ import { SeriesStrip } from "@/components/match/room/SeriesStrip";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
+import { signed } from "@/lib/format";
 import { mapName, modeLabel } from "@/lib/modes";
 import { useBackdrop } from "@/lib/useBackdrop";
 import type { MatchDetail, MatchPlayer, MatchStatus } from "@/lib/types";
@@ -113,16 +114,32 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
   const [a, b] = m.teams;
   const teamInfo = a && b ? ([0, 1] as const).map((i) => ({ name: m.teams[i]!.name, label: m.teams[i]!.displayName ?? m.teams[i]!.name, side: sideOf(i) })) : null;
   const roomUrl = typeof window === "undefined" ? "" : `${window.location.origin}/matches/${m.slug ?? m.id}`;
+  // Scores and stats once the server is up or rounds are in
+  const scored = SCORED.includes(stage) || m.rounds.length > 0 || finished;
 
   return (
     <div className="container page">
       <header className={cx(styles.header, "title-band")}>
-        <div className="row">
-          <Badge tone={status.tone}>
-            {m.status === "live" && <Throbber />}
-            {status.label}
-          </Badge>
-          {m.unrated && <Badge tone="info">Unrated</Badge>}
+        {/* Status on the left, actions on the right, so they share a row on wide screens */}
+        <div className={styles.headTop}>
+          <div className="row">
+            <Badge tone={status.tone}>
+              {m.status === "live" && <Throbber />}
+              {status.label}
+            </Badge>
+            {m.unrated && <Badge tone="info">Unrated</Badge>}
+          </div>
+          <div className={actionStyles.actions}>
+            {finished && (
+              <>
+                <RematchButton matchId={m.id} mode={m.mode} participants={m.teams.flatMap((t) => t.players.map((pl) => pl.steamId))} />
+                {!series && <DemoActions matchId={m.id} demo={m.demo} />}
+              </>
+            )}
+            {roomUrl && <CopyButton text={roomUrl}>Copy room link</CopyButton>}
+            <ShareButton matchId={m.slug ?? m.id} />
+            {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
+          </div>
         </div>
         <h1 className={styles.title}>
           {modeLabel(m.mode)}
@@ -150,30 +167,18 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
             )}
           </p>
         )}
-        <div className={actionStyles.actions}>
-          {finished && (
-            <>
-              <RematchButton matchId={m.id} mode={m.mode} participants={m.teams.flatMap((t) => t.players.map((pl) => pl.steamId))} />
-              {!series && <DemoActions matchId={m.id} demo={m.demo} />}
-            </>
-          )}
-          {roomUrl && <CopyButton text={roomUrl}>Copy room link</CopyButton>}
-          <ShareButton matchId={m.slug ?? m.id} />
-          {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
-        </div>
+        {scored && <ResultHeader m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} sideOf={sideOf} />}
       </header>
 
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
-      {/* One Rush rooms card for a single map: who picked each room, then where play is and who holds what.
-          A series shows one per map in its map tab */}
-      {isRushMode(m.mode) && stage !== "veto" && !series && (
+      {/* Before the match starts the Rush rooms stand on their own. Once it has a score they move into the
+          flow card under the players. A series shows one per map in its map tab */}
+      {isRushMode(m.mode) && stage !== "veto" && !series && !scored && (
         <MatchRushTrack m={m} rounds={m.rounds} sideOf={sideOf} picks={room.veto?.kind === "rooms" && room.veto.state.done ? roomSlots(room.veto.state, RUSH_ROOM_VETO.format) : null} />
       )}
 
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
-
-      {finished && <MatchSummary m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} />}
 
       {series && teamInfo && (
         <SeriesStrip
@@ -186,7 +191,7 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
         />
       )}
 
-      {SCORED.includes(stage) || m.rounds.length > 0 ? (
+      {scored ? (
         series ? <SeriesStats m={m} maps={maps} liveMap={liveMap?.mapNumber ?? null} sideOf={sideOf} roster={roster} /> : <MapStats m={m} sideOf={sideOf} roster={roster} />
       ) : (
         <Lineup m={m} sideOf={sideOf} />
@@ -289,9 +294,23 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   const rounds = mapNumber === undefined ? m.rounds : m.rounds.filter((r) => (r.mapNumber ?? 1) === mapNumber);
   const kills = mapNumber === undefined ? m.kills : m.kills?.filter((k) => (k.mapNumber ?? 1) === mapNumber);
   const topDamage = Math.max(0, ...m.teams.flatMap((t) => t.players.map((p) => p.damage)));
+  const rush = isRushMode(m.mode);
+  const timeline = a && b && rounds.length > 0 && (
+    <RoundTimeline
+      rounds={rounds}
+      teamA={a.name}
+      teamB={b.name}
+      sideA={sideOf(0)}
+      rush={rush}
+      kills={kills}
+      roster={roster}
+      rushPath={rush ? rushRoundPath(m, rounds, mapNumber, sideOf) : null}
+    />
+  );
   return (
     <>
-      {a && b && (
+      {/* A single map has its score in the page header. A series map shows its own */}
+      {a && b && mapNumber !== undefined && (
         <Card padded={false} className={styles.scoreboard} aria-label="Score">
           <TeamScore team={a} side={sideOf(0)} />
           <span className={styles.dash} aria-hidden="true">
@@ -300,20 +319,16 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
           <TeamScore team={b} side={sideOf(1)} />
         </Card>
       )}
-      {isRushMode(m.mode) && mapNumber !== undefined && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
-      {a && b && rounds.length > 0 && (
-        <RoundTimeline
-          rounds={rounds}
-          teamA={a.name}
-          teamB={b.name}
-          sideA={sideOf(0)}
-          rush={isRushMode(m.mode)}
-          kills={kills}
-          roster={roster}
-          rushPath={isRushMode(m.mode) ? rushRoundPath(m, rounds, mapNumber, sideOf) : null}
-        />
-      )}
       <PlayerTables m={m} sideOf={sideOf} topDamage={topDamage} />
+      {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they share a card */}
+      {rush ? (
+        <Card as="div" className={styles.flow}>
+          <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} bare />
+          {timeline}
+        </Card>
+      ) : (
+        timeline
+      )}
     </>
   );
 }
@@ -364,7 +379,7 @@ function PlayerTables({ m, sideOf, topDamage }: { m: MatchDetail; sideOf: (i: nu
             <TeamMarker side={sideOf(i)} />
             {t.displayName ?? t.name}
           </h2>
-          <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), topDamage)} rows={t.players} rowKey={(p) => p.steamId} />
+          <Table caption={`${t.displayName ?? t.name} players`} columns={playerColumns(sideOf(i), topDamage, m.ratingDeltas)} rows={t.players} rowKey={(p) => p.steamId} />
         </section>
       ))}
     </div>
@@ -391,7 +406,7 @@ function TeamScore({ team, side }: { team: MatchDetail["teams"][number]; side: T
   );
 }
 
-const playerColumns = (side: TeamSide, topDamage: number): Column<MatchPlayer>[] => [
+const playerColumns = (side: TeamSide, topDamage: number, deltas?: Record<string, number>): Column<MatchPlayer>[] => [
   {
     key: "player",
     header: "Player",
@@ -409,6 +424,23 @@ const playerColumns = (side: TeamSide, topDamage: number): Column<MatchPlayer>[]
   { key: "d", header: "D", cell: (p) => p.deaths, numeric: true },
   { key: "hs", header: "HS", cell: (p) => p.headshots, numeric: true },
   { key: "dmg", header: "DMG", cell: (p) => <DamageBar damage={p.damage} top={topDamage} side={side} />, numeric: true },
+  ...(deltas
+    ? [
+        {
+          key: "rating",
+          header: "Rating",
+          cell: (p: MatchPlayer) => {
+            const d = deltas[p.steamId];
+            return (
+              <span className={styles.delta} data-sign={d === undefined ? "none" : d >= 0 ? "up" : "down"}>
+                {d === undefined ? "n/a" : signed(d)}
+              </span>
+            );
+          },
+          numeric: true,
+        } satisfies Column<MatchPlayer>,
+      ]
+    : []),
 ];
 
 // Bar length is relative to the highest damage in the match

@@ -169,3 +169,34 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+
+/* Status badges and actions share the top row of the header, the actions wrap under on phones */
+.headTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+/* Rush rooms and rounds in one card */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Rating change in the player tables */
+.delta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.delta[data-sign="up"] {
+  color: var(--color-win);
+}
+.delta[data-sign="down"] {
+  color: var(--color-loss);
+}
+.delta[data-sign="none"] {
+  color: var(--color-text-muted);
+}

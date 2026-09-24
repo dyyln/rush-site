@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type CSSProperties } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RoomSlot, type RushRoom } from "@rushsite/shared";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
@@ -33,6 +33,8 @@ type Props = {
   title?: string;
   // How each slot got its room, from the room veto. Left out when the rooms were drawn by the map
   picks?: readonly RoomSlot[];
+  // Inside another card, as in the match page's flow card
+  bare?: boolean;
 };
 
 type Visit = { round: number; team: RushTrackTeam | null; toward: RushSide | null };
@@ -127,7 +129,7 @@ export function buildRushTrack(rooms: readonly (number | null)[] | undefined, ro
 const SLOT_LABEL: Record<Slot["kind"], string> = { castle: "Castle", start: "Start room", mid: "Mid room" };
 
 
-export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "Rooms", picks }: Props) {
+export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "Rooms", picks, bare }: Props) {
   const headingId = useId();
   const listRef = useRef<HTMLOListElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -174,7 +176,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
         : "";
 
   return (
-    <Card as="section" className={styles.card} aria-labelledby={headingId}>
+    <Frame bare={bare} labelledBy={headingId}>
       <div className={styles.head}>
         <h2 id={headingId} className={styles.title}>
           {title}
@@ -274,7 +276,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
             </div>
           )}
       </div>
-    </Card>
+    </Frame>
   );
 }
 
@@ -284,6 +286,18 @@ function pickedFromIds(ids: readonly number[]): RoomSlot[] {
     room: String(id),
     source: slot === 0 || slot === ids.length - 1 ? "castle" : slot === START_SLOT ? "leftover" : "pick",
   }));
+}
+
+function Frame({ bare, labelledBy, children }: { bare?: boolean; labelledBy: string; children: ReactNode }) {
+  return bare ? (
+    <section className={styles.card} aria-labelledby={labelledBy}>
+      {children}
+    </section>
+  ) : (
+    <Card as="section" className={styles.card} aria-labelledby={labelledBy}>
+      {children}
+    </Card>
+  );
 }
 
 // How a room got into the match, for screen readers: a team's pick, or the room left over after the bans
@@ -326,12 +340,14 @@ export function MatchRushTrack({
   mapNumber,
   sideOf,
   picks,
+  bare,
 }: {
   m: MatchDetail;
   rounds: MatchRound[];
   mapNumber?: number;
   sideOf: (i: number) => TeamSide;
   picks?: readonly RoomSlot[] | null;
+  bare?: boolean;
 }) {
   const inputs = rushInputs(m, mapNumber, sideOf);
   if (!inputs) return null;
@@ -341,7 +357,7 @@ export function MatchRushTrack({
   const shownPicks = picks ?? (inputs.rooms ? pickedFromIds(inputs.rooms) : undefined);
   // Shown once the rooms are known or the first round is in
   if (rounds.length === 0 && !rooms) return null;
-  return <RushRoomTrack rooms={rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} picks={shownPicks} />;
+  return <RushRoomTrack rooms={rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} picks={shownPicks} bare={bare} />;
 }
 
 // True when the left team (teams[0]) defends the CT castle, so every room row draws CT castle first
