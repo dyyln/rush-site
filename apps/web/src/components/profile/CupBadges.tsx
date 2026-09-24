@@ -3,7 +3,7 @@ import { cx } from "@/components/ui/cx";
 import { shortDate } from "@/lib/format";
 import { modeLabel } from "@/lib/modes";
 import type { BadgeKind, ProfileBadge } from "@/lib/types";
-import { BadgeEmblem } from "./BadgeEmblem";
+import { BadgeEmblem, cadenceFromName } from "./BadgeEmblem";
 import styles from "./CupBadges.module.css";
 
 const PLACING: Record<BadgeKind, { title: string; place: string; rank: number }> = {
@@ -25,7 +25,7 @@ export function CupBadges({ badges }: { badges: ProfileBadge[] }) {
         const p = PLACING[b.kind];
         return (
           <li key={b.id} className={cx("glass", styles.badge)} data-kind={b.kind}>
-            <BadgeEmblem kind={b.kind} />
+            <BadgeEmblem kind={b.kind} cadence={cadenceFromName(b.tournamentName)} />
             <span className={styles.text}>
               <span className={styles.title}>
                 {p.title}

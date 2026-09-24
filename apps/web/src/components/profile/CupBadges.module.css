@@ -8,7 +8,7 @@
 }
 
 .badge {
-  --badge-colour: var(--tier-silver);
+  --badge-colour: var(--place-runner-up);
   position: relative;
   display: flex;
   align-items: center;
@@ -29,13 +29,13 @@
   background: var(--badge-colour);
 }
 .badge[data-kind="cup_champion"] {
-  --badge-colour: var(--tier-gold);
+  --badge-colour: var(--place-champion);
 }
 .badge[data-kind="cup_runner_up"] {
-  --badge-colour: var(--tier-silver);
+  --badge-colour: var(--place-runner-up);
 }
 .badge[data-kind="cup_semifinalist"] {
-  --badge-colour: var(--tier-bronze);
+  --badge-colour: var(--place-semifinalist);
 }
 .badge:hover,
 .badge:focus-within {
@@ -44,7 +44,16 @@
 
 .emblem {
   flex: none;
-  color: var(--badge-colour, var(--tier-silver));
+  color: var(--badge-colour, var(--place-runner-up));
+}
+.emblem[data-kind="cup_champion"] {
+  color: var(--place-champion);
+}
+.emblem[data-kind="cup_runner_up"] {
+  color: var(--place-runner-up);
+}
+.emblem[data-kind="cup_semifinalist"] {
+  color: var(--place-semifinalist);
 }
 .emblemBody {
   fill: currentColor;
@@ -53,15 +62,28 @@
   stroke-width: 2;
   stroke-linejoin: round;
 }
-.emblemInner {
+.emblemHandle {
   fill: none;
   stroke: currentColor;
-  stroke-opacity: 0.45;
-  stroke-width: 1;
-  stroke-linejoin: round;
+  stroke-width: 2;
 }
 .emblemMark {
   fill: currentColor;
+}
+/* Special cups. Outlined in the page colour so the gem stays apart from the trophy */
+.emblemGem {
+  fill: var(--color-accent-hover);
+  stroke: var(--color-bg);
+  stroke-width: 1;
+}
+.emblemText {
+  fill: currentColor;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+}
+.emblemTextSm {
+  font-size: 9px;
 }
 
 .text {

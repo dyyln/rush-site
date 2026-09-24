@@ -19,6 +19,8 @@ import { StatTile } from "@/components/ui/StatTile";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
 import { TierChip } from "@/components/ui/TierChip";
+import { TierEmblem } from "@/components/ui/TierEmblem";
+import { BadgeEmblem } from "@/components/profile/BadgeEmblem";
 import { Throbber } from "@/components/ui/Throbber";
 import { Timer } from "@/components/ui/Timer";
 import { Toast, useToast } from "@/components/ui/Toast";
@@ -50,6 +52,7 @@ const SECTIONS = [
   "Button",
   "Badge",
   "Tier chip",
+  "Cup badge",
   "Avatar",
   "Party size",
   "Card",
@@ -247,12 +250,42 @@ export function DesignGuide() {
               <TierChip key={t.id} tier={t.id} />
             ))}
           </Specimen>
-          <Specimen label="With rating">
+          <Specimen label="With rating, division I to III">
             <TierChip rating={1729} />
-            <TierChip rating={2311} size="sm" />
+            <TierChip rating={1412} size="sm" />
             <TierChip rating={940} size="sm" />
             <TierChip unranked />
             <TierChip unranked size="sm" />
+          </Specimen>
+          <Specimen label="Elite shows the leaderboard place">
+            <TierChip rating={2311} rank={14} />
+            <TierChip rating={2486} rank={3} size="sm" />
+          </Specimen>
+          <Specimen label="Emblems, wings grow with the tier">
+            {TIERS.map((t) => (
+              <span key={t.id} style={{ color: `var(--tier-${t.id})` }} title={t.displayName}>
+                <TierEmblem tier={t.id} size={48} />
+              </span>
+            ))}
+          </Specimen>
+        </Section>
+
+        <Section title="Cup badge">
+          <Specimen label="Daily: champion, runner-up, top 4">
+            <BadgeEmblem kind="cup_champion" cadence="daily" />
+            <BadgeEmblem kind="cup_runner_up" cadence="daily" />
+            <BadgeEmblem kind="cup_semifinalist" cadence="daily" />
+          </Specimen>
+          <Specimen label="Weekly plinth and special gem">
+            <BadgeEmblem kind="cup_champion" cadence="weekly" />
+            <BadgeEmblem kind="cup_runner_up" cadence="weekly" />
+            <BadgeEmblem kind="cup_champion" cadence="special" />
+            <BadgeEmblem kind="cup_semifinalist" cadence="special" />
+          </Specimen>
+          <Specimen label="Inline, 18 px">
+            <BadgeEmblem kind="cup_champion" cadence="weekly" size={18} />
+            <BadgeEmblem kind="cup_runner_up" cadence="daily" size={18} />
+            <BadgeEmblem kind="cup_semifinalist" cadence="special" size={18} />
           </Specimen>
         </Section>
 

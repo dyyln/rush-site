@@ -1,42 +1,68 @@
-import type { BadgeKind } from "@/lib/types";
+import type { BadgeKind, CupCadence } from "@/lib/types";
 import { cx } from "@/components/ui/cx";
 import styles from "./CupBadges.module.css";
 
-// Each placing has its own outline and marking so the emblem never relies on colour alone:
-// champion is a shield with a star, runner-up a hexagon with two bars, semifinalist a diamond with one bar.
+// Cup trophy. The placing is written on the bowl (1, 2, T4), weekly cups stand on a stepped
+// plinth and special cups carry a gem, so neither placing nor cadence relies on colour alone.
+// Under 28 px the number becomes a mark: a star for champion, two bars for runner-up, one for top 4.
 // Decorative only, the placing is always written next to it.
-export function BadgeEmblem({ kind, size = 48, className }: { kind: BadgeKind; size?: number; className?: string }) {
+const MARK: Record<BadgeKind, string> = { cup_champion: "1", cup_runner_up: "2", cup_semifinalist: "T4" };
+
+// The badge carries no cadence, so it is read from the cup's name. Anything not named daily or
+// weekly counts as a special event
+export function cadenceFromName(name: string): CupCadence {
+  if (/\bweekly\b/i.test(name)) return "weekly";
+  if (/\bdaily\b/i.test(name)) return "daily";
+  return "special";
+}
+
+export function BadgeEmblem({
+  kind,
+  cadence = "daily",
+  size = 48,
+  className,
+}: {
+  kind: BadgeKind;
+  cadence?: CupCadence;
+  size?: number;
+  className?: string;
+}) {
+  const small = size < 28;
+  const mark = MARK[kind];
   return (
     <svg
-      viewBox="0 0 48 52"
-      width={size}
-      height={Math.round((size * 52) / 48)}
+      viewBox="0 0 40 48"
+      width={Math.round((size * 40) / 48)}
+      height={size}
       aria-hidden="true"
       focusable="false"
       className={cx(styles.emblem, className)}
       data-kind={kind}
     >
-      {kind === "cup_champion" && (
-        <>
-          <path d="M24 2 44 8v18c0 13-9 20.5-20 24C13 46.5 4 39 4 26V8Z" className={styles.emblemBody} />
-          <path d="M24 7.5 39 12v14c0 9.5-6.5 15.5-15 18.5C15.5 41.5 9 35.5 9 26V12Z" className={styles.emblemInner} />
-          <path d="m24 14.5 3 6.3 6.8.8-5 4.7 1.3 6.8-6.1-3.4-6.1 3.4 1.3-6.8-5-4.7 6.8-.8Z" className={styles.emblemMark} />
-        </>
+      <path d="M8 6H3v5c0 5 3.5 8 7 8.5M32 6h5v5c0 5-3.5 8-7 8.5" className={styles.emblemHandle} />
+      <path d="M8 3h24v10c0 8-5 13-12 13S8 21 8 13Z" className={styles.emblemBody} />
+      <path d="M18 26h4v6h-4Z" className={styles.emblemMark} />
+      {cadence === "weekly" ? (
+        <g className={styles.emblemMark}>
+          <rect x="12" y="32" width="16" height="4" />
+          <rect x="9" y="37" width="22" height="4" opacity={0.8} />
+          <rect x="6" y="42" width="28" height="4" opacity={0.6} />
+        </g>
+      ) : (
+        <rect x="11" y="32" width="18" height="5" className={styles.emblemMark} />
       )}
-      {kind === "cup_runner_up" && (
-        <>
-          <path d="M24 3 43 14v24L24 49 5 38V14Z" className={styles.emblemBody} />
-          <path d="M24 9 38 17v18L24 43 10 35V17Z" className={styles.emblemInner} />
-          <path d="m15 21 9-5 9 5v4.5l-9-5-9 5Z" className={styles.emblemMark} />
-          <path d="m15 30 9-5 9 5v4.5l-9-5-9 5Z" className={styles.emblemMark} />
-        </>
+      {cadence === "special" && <path d="M20 0l3.2 3.2L20 6.4l-3.2-3.2Z" className={styles.emblemGem} />}
+      {!small && (
+        <text x="20" y="15" textAnchor="middle" dominantBaseline="middle" className={cx(styles.emblemText, mark.length > 1 && styles.emblemTextSm)}>
+          {mark}
+        </text>
       )}
-      {kind === "cup_semifinalist" && (
-        <>
-          <path d="M24 3 45 26 24 49 3 26Z" className={styles.emblemBody} />
-          <path d="M24 10 38.5 26 24 42 9.5 26Z" className={styles.emblemInner} />
-          <path d="m15.5 26.5 8.5-7.5 8.5 7.5v5l-8.5-7.5-8.5 7.5Z" className={styles.emblemMark} />
-        </>
+      {small && (
+        <g className={styles.emblemMark} transform="translate(0 -16)">
+          {kind === "cup_champion" && <path d="m20 24.5 2 4 4.4.5-3.2 3 .8 4.4-4-2.2-4 2.2.8-4.4-3.2-3 4.4-.5Z" />}
+          {kind === "cup_runner_up" && <path d="M13 27h14v3H13Z M13 32h14v3H13Z" />}
+          {kind === "cup_semifinalist" && <path d="M13 29.5h14v3H13Z" />}
+        </g>
       )}
     </svg>
   );
