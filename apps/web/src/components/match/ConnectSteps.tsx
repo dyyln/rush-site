@@ -11,7 +11,8 @@ const STEPS: { id: ConnectStep; label: string; hint: string }[] = [
 ];
 
 // Shows where the server is in its start up so players know what they are waiting for
-export function ConnectSteps({ step, connected, expected }: { step: ConnectStep; connected?: number; expected?: number }) {
+// hint: false when the panel around it already says what is happening
+export function ConnectSteps({ step, connected, expected, hint = true }: { step: ConnectStep; connected?: number; expected?: number; hint?: boolean }) {
   const current = STEPS.findIndex((s) => s.id === step);
   const active = STEPS[current]!;
   return (
@@ -43,9 +44,11 @@ export function ConnectSteps({ step, connected, expected }: { step: ConnectStep;
           );
         })}
       </ol>
-      <p className={styles.hint} aria-live="polite">
-        {active.hint}
-      </p>
+      {hint && (
+        <p className={styles.hint} aria-live="polite">
+          {active.hint}
+        </p>
+      )}
     </div>
   );
 }

@@ -268,14 +268,20 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
           warmup={room.warmup}
           mapId={currentMapId}
           deadline={connectDeadlineOf(room)}
-          names={names}
+          players={m.teams.flatMap((t, i) =>
+            t.players.map((p) => ({
+              steamId: p.steamId,
+              name: p.displayName,
+              side: i === ownTeamIndex(m, viewer) ? ("own" as const) : ("enemy" as const),
+            })),
+          )}
           viewer={viewer}
         />
       ) : null;
     case "result":
       return <RoomResult m={m} result={room.result} viewer={viewer} />;
     case "cancelled":
-      return <CancelledPanel reason={room.cancelReason} participant={participant} />;
+      return <CancelledPanel mode={m.mode} reason={room.cancelReason} participant={participant} />;
   }
 }
 

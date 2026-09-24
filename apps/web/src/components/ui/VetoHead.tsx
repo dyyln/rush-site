@@ -43,13 +43,27 @@ export function VetoHead({ id, eyebrow, turn, next, headline, sub, notes, stepDe
         {notes}
         {children}
       </div>
-      {!done && (stepDeadline !== null || frozenSec !== undefined) && <StepClock until={stepDeadline} totalSec={totalSec} frozenSec={frozenSec} mine={turn === "mine"} />}
+      {!done && (stepDeadline !== null || frozenSec !== undefined) && (
+        <StepClock until={stepDeadline} totalSec={totalSec} frozenSec={frozenSec} mine={turn === "mine"} />
+      )}
     </header>
   );
 }
 
-// Seconds left in big numbers over a bar that drains with them
-function StepClock({ until, totalSec, frozenSec, mine }: { until: number | null; totalSec: number; frozenSec?: number; mine: boolean }) {
+// Seconds left in big numbers over a bar that drains with them. Long waits read as m:ss
+export function StepClock({
+  until,
+  totalSec,
+  frozenSec,
+  mine,
+  label = "sec left",
+}: {
+  until: number | null;
+  totalSec: number;
+  frozenSec?: number;
+  mine: boolean;
+  label?: string;
+}) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     if (frozenSec !== undefined) return;
@@ -60,9 +74,16 @@ function StepClock({ until, totalSec, frozenSec, mine }: { until: number | null;
   const sec = frozenSec ?? (now === null || until === null ? null : Math.max(0, Math.ceil((until - now) / 1000)));
   const share = sec === null ? 1 : Math.min(1, sec / totalSec);
   return (
-    <div className={styles.clock} data-urgent={sec !== null && sec <= 5 ? true : undefined} data-mine={mine || undefined} aria-hidden="true">
-      <span className={cx(styles.clockValue, "mono")}>{sec === null ? "--" : sec}</span>
-      <span className={styles.clockLabel}>sec left</span>
+    <div
+      className={styles.clock}
+      data-urgent={sec !== null && sec <= (totalSec > 99 ? 30 : 5) ? true : undefined}
+      data-mine={mine || undefined}
+      aria-hidden="true"
+    >
+      <span className={cx(styles.clockValue, "mono")}>
+        {sec === null ? "--" : totalSec > 99 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` : sec}
+      </span>
+      <span className={styles.clockLabel}>{totalSec > 99 && label === "sec left" ? "left" : label}</span>
       <span className={styles.clockBar}>
         <span style={{ transform: `scaleX(${share})` }} />
       </span>
