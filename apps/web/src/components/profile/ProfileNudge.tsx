@@ -66,7 +66,7 @@ export function ProfileNudge({ trust, enabled, variant = "card" }: ProfileNudgeP
   const { items, dismiss } = useProfileNudges(trust, enabled);
   if (items.length === 0) return null;
   return (
-    <section className={cx(styles.nudge, styles[variant])} aria-label="Complete your profile">
+    <section className={cx(variant === "card" && "glass", styles.nudge, styles[variant])} aria-label="Complete your profile">
       {variant === "card" && <h2 className={styles.title}>Complete your profile</h2>}
       <ul className={styles.list}>
         {items.map((id) => (

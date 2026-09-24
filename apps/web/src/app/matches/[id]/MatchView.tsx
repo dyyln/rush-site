@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
 import { Throbber } from "@/components/ui/Throbber";
@@ -113,7 +114,7 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
   return (
     <div className="container page">
-      <header className={styles.header}>
+      <header className={cx(styles.header, "title-band")}>
         <div className="row">
           <Badge tone={status.tone}>
             {m.status === "live" && <Throbber />}
@@ -287,13 +288,13 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   return (
     <>
       {a && b && (
-        <section className={styles.scoreboard} aria-label="Score">
+        <Card padded={false} className={styles.scoreboard} aria-label="Score">
           <TeamScore team={a} side={sideOf(0)} />
           <span className={styles.dash} aria-hidden="true">
             :
           </span>
           <TeamScore team={b} side={sideOf(1)} />
-        </section>
+        </Card>
       )}
       {a && b && rounds.length > 0 && (
         <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={m.mode === "rush3v3"} kills={kills} roster={roster} />

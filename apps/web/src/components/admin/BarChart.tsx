@@ -44,7 +44,7 @@ export function BarChart({ title, sub, points, stepSec, color, height = 200, ref
   const hx = hover !== null ? PAD.left + slot * hover + slot / 2 : 0;
 
   return (
-    <figure className={styles.viz} style={{ margin: 0 }}>
+    <figure className={cx("glass", styles.viz)} style={{ margin: 0 }}>
       <div className={styles.head}>
         <figcaption>
           <p className={styles.title}>{title}</p>

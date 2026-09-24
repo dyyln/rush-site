@@ -33,7 +33,7 @@ const byName = <T extends { displayName: string }>(list: readonly T[]) =>
 // A titled block. On desktop the list scrolls inside a max height and the header stays pinned
 function Section({ id, title, count, actions, children }: { id: string; title: ReactNode; count?: number; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className={styles.section} aria-labelledby={id}>
+    <Card tone="flat" padded={false} aria-labelledby={id}>
       <div className={styles.sectionScroll}>
         <div className={styles.sectionHead}>
           <h2 id={id}>{title}</h2>
@@ -42,7 +42,7 @@ function Section({ id, title, count, actions, children }: { id: string; title: R
         </div>
         {children}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -281,7 +281,7 @@ export function FriendsView() {
         </Section>
 
         {data && (
-          <section className={styles.section} aria-labelledby="steam-heading">
+          <Card tone="flat" padded={false} aria-labelledby="steam-heading">
             <div className={styles.sectionScroll}>
               <div className={styles.sectionHead}>
                 <h2 id="steam-heading" style={{ flex: 1 }}>
@@ -329,7 +329,7 @@ export function FriendsView() {
                 )
               )}
             </div>
-          </section>
+          </Card>
         )}
 
         <Section id="add-heading" title="Add a friend">

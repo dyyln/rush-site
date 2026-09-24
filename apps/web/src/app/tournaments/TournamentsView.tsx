@@ -5,6 +5,7 @@ import { useState } from "react";
 import { MODES, type Mode } from "@rushsite/shared";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
@@ -89,7 +90,7 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
   const status = STATUS_LABEL[t.status];
   const fill = Math.min(1, t.entrantCount / t.maxEntrants);
   return (
-    <article className={styles.card}>
+    <Card as="article" tone="flat" padded={false} className={styles.card}>
       <div className={styles.cardTop}>
         {t.status === "running" ? <LiveBadge /> : <Badge tone={status.tone}>{status.label}</Badge>}
         <Badge>{t.cadence}</Badge>
@@ -135,6 +136,6 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
       <span className={styles.fill} aria-hidden="true">
         <span style={{ width: `${fill * 100}%` }} />
       </span>
-    </article>
+    </Card>
   );
 }

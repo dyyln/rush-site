@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TIERS, type TierDistribution } from "@rushsite/shared";
+import { Card } from "@/components/ui/Card";
 import styles from "./TierDistributionBar.module.css";
 
 type Props = {
@@ -23,11 +24,11 @@ function topText(percentile: number): string {
 // Stacked bar of placed players per tier with your position marked
 export function TierDistributionBar({ data, loading }: Props) {
   if (!data) {
-    return <div className={`${styles.wrap} ${styles.placeholder}`} aria-busy={loading ? "true" : undefined} />;
+    return <Card as="div" tone="flat" padded={false} className={`${styles.wrap} ${styles.placeholder}`} aria-busy={loading ? "true" : undefined} />;
   }
   const you = data.you;
   return (
-    <section className={styles.wrap} aria-label="Tier distribution">
+    <Card tone="flat" padded={false} className={styles.wrap} aria-label="Tier distribution">
       <div className={styles.head}>
         <p className={styles.title}>
           Tier distribution <span className="muted mono">{data.total.toLocaleString("en-GB")} placed</span>
@@ -85,6 +86,6 @@ export function TierDistributionBar({ data, loading }: Props) {
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }

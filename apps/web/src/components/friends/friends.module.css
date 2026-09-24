@@ -335,11 +335,6 @@ a.name:hover {
   max-width: 880px;
 }
 
-.section {
-  border: var(--card-border);
-  border-radius: var(--card-radius);
-  background: var(--color-surface-1);
-}
 
 .sectionScroll {
   padding: 0 var(--space-4) var(--space-3);
@@ -353,7 +348,8 @@ a.name:hover {
   margin: 0 calc(-1 * var(--space-4));
   padding: var(--space-2) var(--space-4);
   border-radius: var(--card-radius) var(--card-radius) 0 0;
-  background: var(--color-surface-1);
+  /* Pinned over scrolling rows, so near opaque */
+  background: var(--glass-strong);
 }
 
 .sectionHead h2 {

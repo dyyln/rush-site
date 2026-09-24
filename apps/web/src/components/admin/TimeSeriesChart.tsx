@@ -61,7 +61,7 @@ export function TimeSeriesChart({ title, sub, series, stepSec, format = compact,
   const tipFlip = hover !== null && hx + 180 > width;
 
   return (
-    <figure className={styles.viz} style={{ margin: 0 }}>
+    <figure className={cx("glass", styles.viz)} style={{ margin: 0 }}>
       <div className={styles.head}>
         <figcaption>
           <p className={styles.title}>{title}</p>

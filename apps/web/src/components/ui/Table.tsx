@@ -29,7 +29,7 @@ type TableProps<T> = {
 
 export function Table<T>({ caption, captionHidden = true, columns, rows, rowKey, empty, highlight, loading }: TableProps<T>) {
   return (
-    <div className={styles.wrap} aria-busy={loading || undefined}>
+    <div className={cx("glass", styles.wrap)} aria-busy={loading || undefined}>
       <table className={styles.table}>
         <caption className={captionHidden ? "visually-hidden" : styles.caption}>{caption}</caption>
         <thead>

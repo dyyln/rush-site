@@ -24,9 +24,6 @@
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-5) var(--space-4);
-  background: var(--color-surface-2);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
 }
 .team {
   display: flex;

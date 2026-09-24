@@ -17,9 +17,6 @@
   gap: var(--space-2);
   height: 100%;
   padding: var(--space-4);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
-  background: var(--color-surface-1);
 }
 .card:hover,
 .card:focus-within {

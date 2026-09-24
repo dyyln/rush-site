@@ -66,7 +66,7 @@ function LiveRow({ m }: { m: LiveMatch }) {
     t ? (t.players.length > 0 ? t.players.join(", ") : t.name) : fallback;
   const label = `${MODE_COPY[m.mode].label}${m.mapId ? `, ${mapName(m.mode, m.mapId)}` : ""}: ${side(a, "Team A")} ${a?.score ?? 0} to ${b?.score ?? 0} ${side(b, "Team B")}`;
   return (
-    <Link href={`/matches/${m.id}`} className={styles.liveRow} aria-label={label}>
+    <Link href={`/matches/${m.id}`} className={`glass ${styles.liveRow}`} aria-label={label}>
       <span className={styles.liveMeta}>
         <Badge tone="win">Live</Badge>
         <span className={styles.liveMode}>{MODE_COPY[m.mode].label}</span>

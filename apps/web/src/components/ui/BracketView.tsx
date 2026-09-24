@@ -120,7 +120,7 @@ function MatchBox({ match, byId, mode, highlight, onPath, isNext }: MatchBoxProp
   const note = resolutionText(match);
   const series = match.bestOf > 1 && (match.maps?.length ?? 0) > 0;
   return (
-    <div className={cx(styles.match, live && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
+    <div className={cx("glass", styles.match, live && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
       {onPath && <span className="visually-hidden">{placed ? "Your match. " : "On your route. "}</span>}
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;

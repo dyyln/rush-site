@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import type { MatchKill, MatchRound } from "@/lib/types";
 import { ChevronIcon } from "./icons";
@@ -150,7 +151,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
 
       <div id={panelId} className={styles.panelWrap}>
         {current && (
-          <div className={styles.panel} role="region" aria-label={`Round ${current.round}`}>
+          <Card as="div" padded={false} className={styles.panel} role="region" aria-label={`Round ${current.round}`}>
             {caret !== null && <span className={styles.caret} style={{ left: `${caret}px` }} aria-hidden="true" />}
             <div className={styles.panelHead}>
               <RoundTitle r={current} side={sideOf(current.winnerTeam)} score={scoreOf(current)} rush={rush} />
@@ -170,7 +171,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
               </div>
             </div>
             {kills ? <KillFeed kills={killsOf(current.round)} roster={roster} highlight={highlight} /> : <NoKills />}
-          </div>
+          </Card>
         )}
       </div>
 
