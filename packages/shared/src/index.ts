@@ -1,6 +1,7 @@
 export * from "./config/brand.js"
 export * from "./config/modes.js"
 export * from "./config/tiers.js"
+export * from "./config/divisions.js"
 export * from "./config/queue.js"
 export * from "./config/chat.js"
 export * from "./config/launch-export.js"
