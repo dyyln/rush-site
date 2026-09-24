@@ -8,6 +8,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Timer } from "@/components/ui/Timer";
 import { VetoBoard } from "@/components/ui/VetoBoard";
 import { VetoSummary } from "@/components/play/VetoSummary";
+import { AcceptOverlay } from "./AcceptOverlay";
 import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
 import { RoomVetoBoard } from "@/components/rush/RoomVetoBoard";
 import { cancelCopy } from "@/lib/errors";
@@ -32,8 +33,8 @@ export function AcceptPanel({
   team?: Named[];
   viewer?: string | null;
 }) {
-  const acceptedIds = new Set(accept.acceptedSteamIds ?? []);
-  const open = participant && !accept.responded;
+  // Players get the blocking in-game style overlay. Spectators keep an inline panel
+  if (participant) return <AcceptOverlay accept={accept} mode={mode} onRespond={onRespond} team={team} viewer={viewer} />;
   return (
     <Card tone="accent" eyebrow="Match found" title={modeLabel(mode)}>
       <div className={styles.accept}>
@@ -47,38 +48,7 @@ export function AcceptPanel({
               <li key={i} className={i < accept.accepted ? styles.pipOn : undefined} />
             ))}
           </ol>
-          {participant && accept.acceptedSteamIds && team.length > 1 && (
-            <ul className={styles.names} aria-label="Your team">
-              {team.map((p) => {
-                const ok = acceptedIds.has(p.steamId);
-                return (
-                  <li key={p.steamId} data-ok={ok || undefined}>
-                    <span aria-hidden="true">{ok ? "✓" : "…"}</span>
-                    <span>
-                      {p.name}
-                      {p.steamId === viewer ? " (you)" : ""}
-                    </span>
-                    <span className="visually-hidden">{ok ? ", accepted" : ", not yet"}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {open ? (
-            <div className={styles.acceptActions}>
-              <Button size="lg" onClick={() => onRespond(true)} autoFocus>
-                Accept
-              </Button>
-              <Button size="lg" variant="ghost" onClick={() => onRespond(false)}>
-                Decline
-              </Button>
-            </div>
-          ) : participant ? (
-            <p className={styles.waiting}>Accepted. Waiting for the others.</p>
-          ) : (
-            <p className="muted">Players are accepting the match.</p>
-          )}
-          {open && <p className="muted">Declining or letting the timer run out puts you on a short queue cooldown.</p>}
+          <p className="muted">Players are accepting the match.</p>
         </div>
       </div>
     </Card>

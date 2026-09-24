@@ -3,14 +3,23 @@
   flex-direction: column;
 }
 
+/* Glass strip under the header. --glass-strong is the most opaque glass, so muted
+   text in .availability keeps 4.5:1 whatever the scene behind it. The severity shows
+   as a thin left edge and the icon colour, set through --banner-tone */
 .banner {
+  --banner-tone: var(--color-info);
+  position: relative;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: inset 3px 0 0 var(--banner-tone), var(--glass-highlight);
 }
 .info {
-  background: var(--color-info-subtle);
+  --banner-tone: var(--color-info);
 }
 .warn {
-  background: var(--color-warn-subtle);
+  --banner-tone: var(--color-warn);
 }
 
 .inner {
@@ -25,11 +34,8 @@
 .icon {
   flex: none;
 }
-.info .icon {
-  color: var(--color-info);
-}
-.warn .icon {
-  color: var(--color-warn);
+.banner .icon {
+  color: var(--banner-tone);
 }
 
 .text {
@@ -56,7 +62,7 @@
 }
 .close:hover {
   color: var(--color-text);
-  background: rgb(255 255 255 / 0.05);
+  background: var(--color-surface-3);
 }
 .close:focus-visible {
   outline: none;

@@ -19,6 +19,7 @@ import { DemoActions } from "@/components/match/DemoActions";
 import { MatchSummary } from "@/components/match/MatchSummary";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
+import { MatchRushTrack } from "@/components/match/RushRoomTrack";
 import { MatchReportOutcomes } from "@/components/review/MatchReportOutcomes";
 import { ShareButton } from "@/components/match/ShareButton";
 import { RematchButton } from "@/components/challenges/RematchButton";
@@ -32,6 +33,7 @@ import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
 import { mapName, modeLabel } from "@/lib/modes";
+import { useBackdrop } from "@/lib/useBackdrop";
 import type { MatchDetail, MatchPlayer, MatchStatus } from "@/lib/types";
 import { useMatchRoom } from "@/lib/useMatchRoom";
 import { useSession } from "@/lib/session";
@@ -58,6 +60,7 @@ export function MatchView({ id }: { id: string }) {
   const router = useRouter();
   const { detail, room, stage, error, respond, vote } = useMatchRoom(id);
   const match = useLiveExtras(detail);
+  useBackdrop(detail?.mode);
 
   // Old uuid links move to the room id so the address bar shows the name
   const slug = detail?.slug;
@@ -296,6 +299,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
           <TeamScore team={b} side={sideOf(1)} />
         </Card>
       )}
+      {isRushMode(m.mode) && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
       {a && b && rounds.length > 0 && (
         <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={isRushMode(m.mode)} kills={kills} roster={roster} />
       )}

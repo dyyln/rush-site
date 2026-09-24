@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Chakra_Petch, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { BRAND_NAME } from "@rushsite/shared";
+import { Backdrop } from "@/components/layout/Backdrop";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: PREFS_BOOT_SCRIPT }} />
       </head>
       <body>
+        <Backdrop />
         <a href="#main" className="skip-link">
           Skip to content
         </a>

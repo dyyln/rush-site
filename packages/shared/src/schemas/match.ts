@@ -4,6 +4,7 @@ import { ModeSchema } from "./mode.js"
 import { TierIdSchema } from "../config/tiers.js"
 import { ServerDriverNameSchema } from "../drivers.js"
 import { VetoKindSchema, VetoStateSchema } from "./veto.js"
+import { RushRoomsSchema } from "./agent.js"
 
 export const MatchStatusSchema = z.enum([
   "accepting",
@@ -56,6 +57,8 @@ export const MatchDetailTeamSchema = z.object({
   displayName: z.string().optional(),
   score: z.number().int().nonnegative(),
   players: z.array(MatchDetailPlayerSchema),
+  // Side the team plays, as in match.json. Left out means teams[0] is CT and teams[1] is T. Rush never swaps
+  side: z.enum(["ct", "t"]).optional(),
 })
 export type MatchDetailTeam = z.infer<typeof MatchDetailTeamSchema>
 
@@ -77,6 +80,8 @@ export const MatchMapSchema = z.object({
   playedIn: z.string().optional(),
   // Stat lines for this map only
   players: z.array(MatchDetailPlayerSchema).optional(),
+  // Rush only. Room ids for the 7 slots of this map, T castle first. See MatchDetail.rushRooms
+  rushRooms: RushRoomsSchema.optional(),
 })
 export type MatchMap = z.infer<typeof MatchMapSchema>
 
@@ -116,6 +121,7 @@ export const MatchDetailSchema = z.object({
   startedAt: IsoDateSchema.nullable(),
   endedAt: IsoDateSchema.nullable(),
   teams: z.array(MatchDetailTeamSchema),
+  // round.arena carries the room each round was played in
   rounds: z.array(MatchRoundSchema),
   // Challenges and rematches. No rating change
   unrated: z.boolean().optional(),

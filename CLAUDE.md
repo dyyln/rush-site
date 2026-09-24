@@ -103,9 +103,11 @@ Providers: **Hetzner dedicated for base load, DatHost for surge.** Start with **
 
 Mockups exist for Play (mode picker, party, queue), Tournaments, Leaderboard, Profile, and a Credits page kept for later.
 
-- **Look**: dark and tactical, with one muted purple accent. No gradients, no emoji.
+- **Look**: dark and tactical, with one muted purple accent, styled after the CS2 in-game menus. No emoji.
+- **Glass over a scene**: a blurred, tinted game capture sits behind every page, one per mode (`html[data-backdrop]`, set by `useBackdrop`). Panels are translucent glass: the global `glass` class (which `Card` applies) adds the blur, a top highlight and an inner vignette that darkens towards the edges. Nested glass drops the blur. Floating popovers and tooltips use the near-opaque `--glass-strong`. Corners are near square. No decorative gradients beyond the vignette.
+- **Text on the scene**: only full-strength text may sit directly on the backdrop. Muted and accent text go on glass, which is why page titles sit on a glass band (`.page-header` / `.title-band`). `check:contrast` in apps/web checks every backdrop against the tokens, run it when adding or changing a backdrop.
 - **Colours**:
-  - background `#0F0E13`, surfaces `#17151F` / `#1F1C2A`, border `#2C2838`
+  - background `#0F0E13`, glass surfaces are translucent tints of `#17151F` / `#1F1C2A`, borders are white at low alpha. Solid fallbacks apply without backdrop-filter support or with reduced transparency
   - text `#ECEDEF`, muted text `#9AA0AB`
   - accent `#9B8AC4`, accent hover `#B3A4D6`, credits `#E0C36A`. Team colours on match pages are purple (A) vs amber (B), safe for colour blindness, never green vs red
   - win `#3DD68C`, loss `#FF7A7A`, trust/info `#7FD1E0`

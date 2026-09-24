@@ -38,7 +38,7 @@ export function SiteHeader() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className={styles.link}
+                    className={styles.tab}
                     aria-current={active ? "page" : undefined}
                     onClick={() => setOpen(false)}
                   >
