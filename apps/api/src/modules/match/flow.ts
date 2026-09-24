@@ -817,6 +817,7 @@ export class MatchFlow {
         await this.sendMatchUpdate(matchId, round ? roundView(round, isSeries(m)) : undefined)
         return
       }
+      case "rush_rooms_failed":
       case "rush_rooms_mismatch":
         // Recorded in the event log above. Nothing else acts on it until the room veto is switched on
         return

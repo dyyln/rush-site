@@ -1,5 +1,5 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, findRushRoom, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import { teamSize } from "./modes";
 import { MOCK_TRUST } from "./trust";
 import type {
@@ -532,6 +532,8 @@ function enrichMockSummary(t: TournamentSummary) {
 // Match pages. One live match that gains a round every few seconds, the rest finished
 export const MOCK_LIVE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a1";
 export const MOCK_DONE_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000b2";
+// Live 3v3 Rush that gains a round every few seconds, for the room track
+export const MOCK_LIVE_RUSH_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000d4";
 // Finished with the viewer playing and no demo uploaded
 export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
 
@@ -542,28 +544,46 @@ export const MOCK_MATCH_HINTS = new Map<string, { mode: Mode; mapId: string }>()
 const LIVE_START = Date.now();
 const LIVE_START_ROUNDS = 9;
 
-const MIDS = RUSH_ROOMS.midRooms.map((r) => r.displayName);
-
-// Plays out a whole match from a seed. Aim is first to 13, Rush first to 8 of 15
-function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[] } {
+// Plays out a whole match from a seed. Aim is first to 13, Rush follows the rush_001 script
+function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[]; rooms?: number[] } {
+  if (isRushMode(mode)) return playOutRush(seed);
   const r = rng(seed);
-  const target = isRushMode(mode) ? 8 : 16;
+  const target = 16;
   const score = [0, 0];
   const winners: number[] = [];
-  const arenas: string[] = [];
   const bias = 0.45 + r() * 0.15;
-  let room = 3;
   while (score[0]! < target && score[1]! < target) {
     const w = r() < bias ? 0 : 1;
     score[w]!++;
     winners.push(w);
-    if (isRushMode(mode)) {
-      arenas.push(room === 0 ? RUSH_ROOMS.castles.t.displayName : room === 6 ? RUSH_ROOMS.castles.ct.displayName : room === 3 ? RUSH_ROOMS.startRooms[Math.floor(r() * 4)]!.displayName : MIDS[Math.floor(r() * MIDS.length)]!);
-      room = Math.max(0, Math.min(6, room + (w === 0 ? 1 : -1)));
-      if (score[0] === 7 && score[1] === 7) room = -1;
-    }
   }
-  return { winners, arenas };
+  return { winners, arenas: [] };
+}
+
+// Team 0 plays CT and team 1 T, the match.json default. A T win moves play one room toward the CT castle.
+// Ends on a win in the enemy castle or 8 wins, with Convoy at 7-7
+function playOutRush(seed: number): { winners: number[]; arenas: string[]; rooms: number[] } {
+  const r = rng(seed);
+  const mids = [...RUSH_ROOMS.midRooms].sort(() => r() - 0.5).slice(0, 4).map((x) => x.id);
+  const start = RUSH_ROOMS.startRooms[Math.floor(r() * RUSH_ROOMS.startRooms.length)]!.id;
+  const rooms = [RUSH_ROOMS.castles.t.id, mids[0]!, mids[1]!, start, mids[2]!, mids[3]!, RUSH_ROOMS.castles.ct.id];
+  const bias = 0.4 + r() * 0.2;
+  const score = [0, 0];
+  const winners: number[] = [];
+  const arenas: string[] = [];
+  let pos = 3;
+  let decider = false;
+  for (;;) {
+    const w = r() < bias ? 0 : 1;
+    arenas.push(decider ? RUSH_ROOMS.decider.displayName : findRushRoom(rooms[pos]!)!.displayName);
+    winners.push(w);
+    score[w]!++;
+    if (decider || score[w]! >= 8) break;
+    pos += w === 1 ? 1 : -1;
+    if (pos < 0 || pos > 6) break;
+    if (score[0] === 7 && score[1] === 7) decider = true;
+  }
+  return { winners, arenas, rooms };
 }
 
 function players(mode: Mode, seed: number, offset: number, rounds: number, meFirst = false): MatchPlayer[] {
@@ -621,6 +641,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
     endedAt: done ? new Date(startedAt + (n + 1) * 60_000).toISOString() : null,
     teams,
     rounds,
+    ...(plan.rooms ? { rushRooms: plan.rooms } : {}),
   };
   return { ...base, ...mockMatchExtras(base, seed, { demo }) };
 }
@@ -647,6 +668,7 @@ function mockRoomDetail(): MatchDetail {
     mode: mockRoomMode,
     mapId: null,
     status: "accepting",
+    accept: { deadline: Date.now() + 20_000, windowSec: 20, accepted: 0, required: size * 2, responded: false },
     driver: null,
     startedAt: null,
     endedAt: null,
@@ -670,6 +692,12 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
       ...build(id, "aim1v1", "aim_redline", 42, played, LIVE_START - 10 * 60_000, true),
       tournament: { id: MOCK_TOURNAMENT_IDS[1]!, name: "Daily Aim Cup", bracketMatchId: "r4m0", bestOf: 3, gameNumber: 2 },
     };
+  }
+  if (id === MOCK_LIVE_RUSH_MATCH_ID) {
+    // Loops like the live aim match: starts two rounds in and holds the result for a few rounds
+    const total = playOut("rush3v3", 5).winners.length;
+    const played = 2 + (Math.floor((now - LIVE_START) / MOCK_ROUND_MS) % Math.max(1, total - 2 + 3));
+    return build(id, "rush3v3", RUSH_MAP.id, 5, played, LIVE_START - 5 * 60_000, true);
   }
   if (id === MOCK_DONE_MATCH_ID) return build(id, "rush3v3", RUSH_MAP.id, 7, null, now - 3 * 3_600_000);
   if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);

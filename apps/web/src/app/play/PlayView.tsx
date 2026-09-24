@@ -34,9 +34,11 @@ import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { activeMatch, usePlay } from "@/lib/usePlay";
 import { StartCountdown } from "@/components/play/StartCountdown";
+import { ModeMapPool, mapPoolId } from "@/components/play/ModeMapPool";
 import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
+import { useBackdrop } from "@/lib/useBackdrop";
 import { CooldownLine } from "./CooldownLine";
 import styles from "./play.module.css";
 
@@ -67,6 +69,7 @@ export function PlayView() {
     },
   });
   const [selected, setSelected] = useState<Mode[]>([]);
+  useBackdrop(selected);
   const [minTrust, setMinTrust] = useState<TrustLevel>("new");
   useEffect(() => {
     if (user?.settings?.minTrust) setMinTrust(user.settings.minTrust);
@@ -279,7 +282,7 @@ export function PlayView() {
                             checked={checked}
                             disabled={readOnly || !!reason || !isLeader || locked}
                             onChange={() => toggle(mode)}
-                            aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats`}
+                            aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats ${mapPoolId(mode)}`}
                           />
                           <span className={styles.modeTop}>
                             <span className={styles.modeName}>
@@ -312,17 +315,20 @@ export function PlayView() {
                               </span>
                             )}
                           </span>
-                          <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
-                            {copy.blurb}
-                          </span>
-                          <span id={`mode-${mode}-reason`} className={styles.reason}>
-                            {reason ?? ""}
-                          </span>
-                          {user && <Standing profile={me} mode={mode} />}
-                          <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>
-                            {st ? `${st.playersInQueue} in queue · ${st.matchesInProgress} in progress` : "\u00a0"}
-                            {q && <span className="visually-hidden">, you are searching</span>}
-                          </span>
+                          {/* Disabled cards keep the reason in view, so they never reveal the map strip */}
+                          <ModeMapPool mode={mode} reveal={!reason}>
+                            <span id={`mode-${mode}-desc`} className={styles.modeBlurb}>
+                              {copy.blurb}
+                            </span>
+                            <span id={`mode-${mode}-reason`} className={styles.reason}>
+                              {reason ?? ""}
+                            </span>
+                            {user && <Standing profile={me} mode={mode} />}
+                            <span id={`mode-${mode}-stats`} className={`${styles.stats} mono`}>
+                              {st ? `${st.playersInQueue} in queue · ${st.matchesInProgress} in progress` : "\u00a0"}
+                              {q && <span className="visually-hidden">, you are searching</span>}
+                            </span>
+                          </ModeMapPool>
                         </label>
                       </li>
                     );

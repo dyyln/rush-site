@@ -23,6 +23,7 @@ import { Throbber } from "@/components/ui/Throbber";
 import { Timer } from "@/components/ui/Timer";
 import { Toast, useToast } from "@/components/ui/Toast";
 import { VetoBoard } from "@/components/ui/VetoBoard";
+import { RushRoomVetoPreview } from "@/components/match/RushRoomVetoPreview";
 import { MOCK_ME, MOCK_NOW, MOCK_TOURNAMENT_IDS, mockLeaderboard, mockParty, mockProfile, mockSteamId, mockTournamentDetail } from "@/lib/mock";
 import type { LeaderboardRow } from "@/lib/types";
 import styles from "./design.module.css";
@@ -64,6 +65,7 @@ const SECTIONS = [
   "Modal",
   "Map card",
   "Veto board",
+  "Rush room veto",
   "Party panel",
   "Queue status",
   "Bracket view",
@@ -448,16 +450,16 @@ export function DesignGuide() {
               <MapCard mapId="aim_map" name="aim_map" onSelect={() => {}} />
             </li>
             <li>
-              <MapCard mapId="aim_redline" name="aim_redline" voted votes={2} onSelect={() => {}} />
+              <MapCard mapId="aim_redline" name="aim_redline" voted voters={[{ steamId: "a", name: "You", me: true }, { steamId: "b", name: "nollie" }]} voterTotal={3} onSelect={() => {}} />
             </li>
             <li>
               <MapCard mapId="aim_usp" name="aim_usp" votes={1} onSelect={() => {}} disabled />
             </li>
             <li>
-              <MapCard mapId="aim_deagle7k" name="aim_deagle7k" state="banned" note="By opponents" />
+              <MapCard mapId="aim_deagle7k" name="aim_deagle7k" state="banned" by={{ label: "Team B", side: "enemy" }} />
             </li>
             <li>
-              <MapCard mapId="awp_india" name="awp_india" state="picked" note="By your team" />
+              <MapCard mapId="awp_india" name="awp_india" state="picked" by={{ label: "your team", side: "own" }} />
             </li>
             <li>
               <MapCard mapId="aim_ag_texture2" name="aim_ag_texture2" state="decider" />
@@ -489,6 +491,10 @@ export function DesignGuide() {
               <VetoBoard mode="aim2v2" state={vetoFixture("done")} mySteamId={MOCK_ME.steamId} stepDeadline={null} />
             </div>
           </Specimen>
+        </Section>
+
+        <Section title="Rush room veto">
+          <RushRoomVetoPreview />
         </Section>
 
         <Section title="Party panel">

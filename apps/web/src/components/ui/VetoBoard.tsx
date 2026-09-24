@@ -5,7 +5,7 @@ import { useMapPool } from "@/lib/mapPool";
 import { mapName } from "@/lib/modes";
 import { VetoSummary } from "@/components/play/VetoSummary";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
-import { MapCard, type MapCardState } from "./MapCard";
+import { MapCard, type MapCardState, type MapCardVoter } from "./MapCard";
 import { Timer } from "./Timer";
 import { cx } from "./cx";
 import styles from "./VetoBoard.module.css";
@@ -37,11 +37,25 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote && frozenSec === undefined);
   const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
 
-  function cardState(mapId: string): { state: MapCardState; note?: string; tag?: string } {
+  const teamLabel = (t: 0 | 1) => (t === myTeam ? "your team" : `Team ${t === 0 ? "A" : "B"}`);
+  const actingSide = step ? (step.team === myTeam ? "own" : "enemy") : "own";
+
+  // Acting team members who voted for this map, in team order
+  function votersFor(mapId: string): MapCardVoter[] {
+    if (!actingTeam) return [];
+    return actingTeam.steamIds
+      .filter((id) => state.votes[id] === mapId)
+      .map((id) => ({ steamId: id, name: id === mySteamId ? "You" : (names[id] ?? "Player"), me: id === mySteamId }));
+  }
+
+  function cardState(mapId: string): { state: MapCardState; by?: { label: string; side: "own" | "enemy" }; tag?: string } {
     const h = state.history.find((e) => e.mapId === mapId);
     if (h) {
-      const who = h.team === myTeam ? "your team" : "opponents";
-      return { state: h.action === "ban" ? "banned" : "picked", note: `By ${who}`, tag: h.noVotes ? "auto" : undefined };
+      return {
+        state: h.action === "ban" ? "banned" : "picked",
+        by: { label: teamLabel(h.team), side: h.team === myTeam ? "own" : "enemy" },
+        tag: h.noVotes ? "auto" : h.tieBroken ? "tie" : undefined,
+      };
     }
     if (state.done && state.maps.includes(mapId)) return { state: "decider" };
     return { state: "available" };
@@ -117,10 +131,13 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
                 mapId={mapId}
                 name={mapName(mode, mapId)}
                 state={cs.state}
-                note={cs.note}
+                by={cs.by}
                 tag={cs.tag}
                 voted={myVote === mapId}
                 votes={cs.state === "available" ? voteCounts.get(mapId) : undefined}
+                voters={cs.state === "available" && actingTeam ? votersFor(mapId) : undefined}
+                voterTotal={actingTeam?.steamIds.length}
+                voterSide={actingSide}
                 onSelect={selectable ? () => onVote?.(mapId) : undefined}
                 actionLabel={step?.action === "pick" ? "Pick" : "Ban"}
               />

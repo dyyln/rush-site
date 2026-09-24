@@ -18,25 +18,74 @@ body {
   font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
+  /* Numbers keep their width, so timers, scores and counts don't jitter as they change.
+     Plex Sans' tabular figures read fine in prose, and the UI is mostly numbers */
+  font-variant-numeric: tabular-nums;
   overflow-x: hidden;
 }
 
-/* The scene. Fixed layers under all content, tint on top of the image */
-body::before,
-body::after {
-  content: "";
+/* Thin dark scrollbars that sit on glass. Chrome 121+ and Firefox use the standard
+   properties, older WebKit falls back to the pseudo-elements */
+html {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+* {
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The scene, rendered by components/layout/Backdrop. Fixed under all content and never
+   hit-tested. Two image layers crossfade when data-backdrop changes, the tint sits on top */
+.backdrop {
   position: fixed;
   inset: 0;
   z-index: -1;
+  overflow: hidden;
   pointer-events: none;
 }
-body::before {
-  background: var(--backdrop-image) center / cover no-repeat;
+.backdrop-scene {
+  position: absolute;
+  /* Bleed past the viewport so the blurred edges don't fade in, plus room for the parallax */
+  inset: calc(-3 * var(--backdrop-blur) - var(--parallax-max));
   filter: blur(var(--backdrop-blur));
-  /* Bleed past the viewport so the blurred edges don't fade in */
-  inset: calc(-3 * var(--backdrop-blur));
 }
-body::after {
+.backdrop-scene[data-parallax] {
+  will-change: transform;
+}
+.backdrop-layer {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop-image) center / cover no-repeat;
+  opacity: 0;
+  /* The outgoing layer stays put until the incoming one has faded in over it */
+  transition: opacity 0s linear var(--duration-scene);
+}
+.backdrop-layer[data-front] {
+  z-index: 1;
+  opacity: 1;
+  transition: opacity var(--duration-scene) var(--ease);
+}
+.backdrop-tint {
+  position: absolute;
+  inset: 0;
   background: var(--backdrop-tint);
 }
 
@@ -99,6 +148,14 @@ table {
 
 .mono {
   font-family: var(--font-mono);
+}
+/* Changing numbers. Body already sets tabular figures, these hosts keep them even when
+   a module switches the prose back to proportional */
+.mono,
+time,
+output,
+[role="timer"],
+.rating-num {
   font-variant-numeric: tabular-nums;
 }
 
@@ -160,7 +217,33 @@ table {
 .glass {
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
+  /* Spelled out rather than var(--glass-shadow) so hover can swap the parts per element */
+  box-shadow: var(--glass-edge, var(--glass-highlight)), var(--glass-wash, inset 0 0 0 0 transparent), var(--glass-vignette);
+}
+
+/* Per-element hover parts. Not inherited, so glass nested in a hovered tile stays as is */
+@property --glass-wash {
+  syntax: "*";
+  inherits: false;
+}
+@property --glass-edge {
+  syntax: "*";
+  inherits: false;
+}
+
+/* Interactive glass brightens on hover. Done through the shadow's custom properties, so a
+   module that sets its own box-shadow (selected rings, focus rings) keeps it untouched */
+:where(a.glass, button.glass, label.glass, .glass:has(> :is(a[href], button):only-child)) {
+  transition: box-shadow var(--duration-fast) var(--ease);
+}
+@media (hover: hover) {
+  a.glass[href]:hover,
+  button.glass:hover:not(:disabled, [aria-disabled="true"]),
+  label.glass:hover:not(:has(input:disabled)),
+  .glass:has(> :is(a[href], button:not(:disabled)):only-child:hover) {
+    --glass-wash: var(--glass-hover-wash);
+    --glass-edge: var(--glass-hover-highlight);
+  }
 }
 .glass .glass {
   -webkit-backdrop-filter: none;
@@ -177,6 +260,23 @@ table {
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-shadow);
+}
+
+/* Panels settle in when a page mounts. Animated on the glass itself: fading a wrapper
+   would make it the backdrop root and the blur inside would pop in at the end.
+   Tiles that re-render as a different element mid-page opt out with data-enter="off" */
+@media (prefers-reduced-motion: no-preference) {
+  .page .glass:not([data-enter="off"]),
+  .page .page-header,
+  .page .title-band {
+    animation: panel-in 260ms var(--ease) both;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .page-header p {

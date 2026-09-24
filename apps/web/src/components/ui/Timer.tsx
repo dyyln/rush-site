@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { mmss } from "@/lib/format";
+import { CountdownRing } from "./CountdownRing";
 import { cx } from "./cx";
 import styles from "./Timer.module.css";
 
@@ -41,27 +42,17 @@ export function Timer({ until, since, totalSec, label, size = "sm", frozenSec }:
   const text = now === null && frozenSec === undefined ? "--:--" : mmss(sec);
 
   if (totalSec && size === "lg") {
-    const r = 44;
-    const c = 2 * Math.PI * r;
-    const frac = Math.max(0, Math.min(1, sec / totalSec));
+    // Whole seconds drive the fraction, so a frozen preview and the live timer draw the same ring
     return (
-      <div className={cx(styles.ring, urgent && styles.urgent)} role="timer" aria-label={label ? `${label}: ${sec} seconds` : undefined}>
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r={r} className={styles.track} />
-          <circle
-            cx="50"
-            cy="50"
-            r={r}
-            className={styles.progress}
-            strokeDasharray={c}
-            strokeDashoffset={c * (1 - frac)}
-            transform="rotate(-90 50 50)"
-          />
-        </svg>
-        <span className={cx(styles.ringText, "mono", totalSec >= 60 && styles.ringTextLong)} aria-hidden="true">
-          {totalSec >= 60 ? text : sec}
-        </span>
-      </div>
+      <CountdownRing
+        remainingMs={sec * 1000}
+        totalMs={totalSec * 1000}
+        urgent={urgent}
+        stroke={6}
+        label={label ? `${label}: ${sec} seconds` : undefined}
+      >
+        <span className={cx(styles.ringText, "mono", totalSec >= 60 && styles.ringTextLong)}>{totalSec >= 60 ? text : sec}</span>
+      </CountdownRing>
     );
   }
 

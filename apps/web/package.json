@@ -6,7 +6,8 @@
     "dev": "next dev -p 3107",
     "build": "next build",
     "start": "next start -p 3107",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:contrast": "python scripts/check-backdrop-contrast.py"
   },
   "dependencies": {
     "@rushsite/shared": "workspace:*",

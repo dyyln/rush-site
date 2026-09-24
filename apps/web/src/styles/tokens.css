@@ -4,7 +4,7 @@
      --color-bg stays opaque: focus rings and badge cut-outs need a solid colour */
   --color-bg: #0f0e13;
   --color-surface-1: rgb(18 16 26 / 0.62);
-  --color-surface-2: rgb(34 30 46 / 0.58);
+  --color-surface-2: rgb(30 27 42 / 0.66);
   --color-surface-3: rgb(255 255 255 / 0.08);
   --color-border: rgb(255 255 255 / 0.09);
   --color-border-strong: rgb(255 255 255 / 0.17);
@@ -23,8 +23,24 @@
   /* Softens the upscaled 720p capture. Drop to 0 with a 1440p or 4K image */
   --backdrop-blur: 6px;
   --backdrop-tint: rgb(10 9 14 / 0.66);
+  /* How far the scene drifts with the mouse, on fine pointers only */
+  --parallax-max: 12px;
   /* Edge of outlined controls. At least 3:1 on every surface */
   --color-border-control: #7a7292;
+
+  /* Hover on interactive glass: a lit inner rim and a brighter top edge. Not a fill wash:
+     any white fill over surface-2 drops accent text below 4.5:1 on the brightest scenes */
+  --glass-hover-wash: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  --glass-hover-highlight: inset 0 1px 0 rgb(255 255 255 / 0.2);
+
+  /* Loading placeholders: a white wash with a highlight sweeping across */
+  --skeleton-wash: var(--color-surface-3);
+  --skeleton-sheen: rgb(255 255 255 / 0.07);
+
+  /* Scrollbars. Thumb is at least 3:1 against the track on every surface */
+  --scrollbar-thumb: #7a7292;
+  --scrollbar-thumb-hover: #9b8ac4;
+  --scrollbar-track: rgb(10 9 14 / 0.55);
 
   /* Disabled. Neutral grey with no purple tint */
   --color-disabled-surface: #1b1b1f;
@@ -99,9 +115,10 @@
   --space-8: 4rem;
 
   /* Shape */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  /* Near square, like the in-game menus */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
   --radius-full: 999px;
 
   /* Cards. Every card-like surface uses this border and radius */
@@ -120,6 +137,8 @@
   /* Motion */
   --duration-fast: 120ms;
   --duration-normal: 200ms;
+  /* Crossfade between page scenes */
+  --duration-scene: 400ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
   /* Layers */
@@ -129,6 +148,11 @@
   --z-toast: 60;
 
   color-scheme: dark;
+}
+
+/* Scene per mode, set by useBackdrop. Aim falls back to the default until it has its own capture */
+:root[data-backdrop="rush"] {
+  --backdrop-image: url("/backdrops/rush-tower.webp");
 }
 
 /* Colourblind team palette. Set from Settings */
@@ -162,6 +186,8 @@
     --glass-blur: none;
     --glass-vignette: 0 0 0 transparent;
     --backdrop-tint: rgb(10 9 14 / 0.9);
+    --skeleton-sheen: rgb(255 255 255 / 0.05);
+    --scrollbar-track: #17151f;
   }
 }
 
@@ -169,5 +195,7 @@
   :root {
     --duration-fast: 0ms;
     --duration-normal: 0ms;
+    --duration-scene: 0ms;
+    --parallax-max: 0px;
   }
 }

@@ -88,6 +88,12 @@ export function steamLoginUrl(returnTo = "/play"): string {
   return buildUrl("/auth/steam", { returnTo: target });
 }
 
+// Open mock cups start relative to the real clock, like the home page, so start countdowns run
+function onMockClock<T extends { status: TournamentStatus; startsAt: string }>(t: T): T {
+  if (t.status !== "open") return t;
+  return { ...t, startsAt: new Date(Date.parse(t.startsAt) + Date.now() - mock.MOCK_NOW).toISOString() };
+}
+
 export const api = {
   challenges: challengeApi((method, path, body) => request(method, path, { body })),
   friends: friendsApi((method, path, body) => request(method, path, { body })),
@@ -214,7 +220,7 @@ export const api = {
         return mocked(
           mock.MOCK_TOURNAMENTS.filter(
             (t) => (!opts.status || opts.status.includes(t.status)) && (!opts.mode || t.mode === opts.mode),
-          ),
+          ).map(onMockClock),
         );
       }
       const res = await request<{ tournaments: TournamentSummary[] }>("GET", "/tournaments", {
@@ -223,7 +229,10 @@ export const api = {
       return res.tournaments;
     },
     async detail(id: string): Promise<TournamentDetail> {
-      if (isMock) return mocked(mock.mockTournamentDetail(id), "Tournament not found");
+      if (isMock) {
+        const t = mock.mockTournamentDetail(id);
+        return mocked(t && onMockClock(t), "Tournament not found");
+      }
       return (await request<{ tournament: TournamentDetail }>("GET", `/tournaments/${id}`)).tournament;
     },
     // Returns null when the bracket is still at knownVersion
