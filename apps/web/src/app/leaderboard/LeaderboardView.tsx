@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { LEADERBOARD_MIN_MATCHES, MODES, type Mode } from "@rushsite/shared";
+import { isTestMode, LEADERBOARD_MIN_MATCHES, RANKED_MODES, type Mode } from "@rushsite/shared";
 import { useFriends } from "@/components/friends/store";
 import { TierDistributionBar } from "@/components/stats/TierDistributionBar";
 import { statsApi, type FriendRow, type FriendsLeaderboard } from "@/components/stats/statsApi";
@@ -113,7 +113,7 @@ export function LeaderboardView() {
   const searchId = useId();
   const { user, loading: sessionLoading } = useSession();
   const raw = params.get("mode");
-  const mode: Mode = isMode(raw) ? raw : "rush3v3";
+  const mode: Mode = isMode(raw) && !isTestMode(raw) ? raw : "rush3v3";
   const board: Board = params.get("board") === "friends" ? "friends" : "global";
   const page = Math.max(0, Number(params.get("page") ?? 0) || 0);
   const q = (params.get("q") ?? "").trim();
@@ -247,7 +247,7 @@ export function LeaderboardView() {
         label="Mode"
         value={mode}
         onChange={(m) => go({ mode: m })}
-        items={MODES.map((m) => ({ key: m, label: MODE_COPY[m].label }))}
+        items={RANKED_MODES.map((m) => ({ key: m, label: MODE_COPY[m].label }))}
       >
         <div className="stack">
           <TierDistributionBar data={dist.data ?? null} loading={dist.status === "loading"} />

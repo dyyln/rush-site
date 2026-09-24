@@ -25,8 +25,8 @@ public enum MatchPhase
 //
 // Rush (valve_rush). Valve's rush_001.js runs round rules and the match end.
 // The plugin never touches mp_ round convars or pauses. It does hold each config team on its
-// configured side (teams[0] CT and teams[1] T by default) and holds warmup until all six are
-// in and on their side. Both are server fill, not rule changes.
+// configured side (teams[0] CT and teams[1] T by default) and holds warmup until every player
+// is in and on their side. Both are server fill, not rule changes.
 //
 // Both flows enforce the whitelist and password, record and upload the demo, track rounds and stats,
 // and emit round_end, match_end and match_abandoned.

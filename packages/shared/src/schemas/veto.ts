@@ -10,6 +10,8 @@ export type TeamIndex = z.infer<typeof TeamIndexSchema>
 export const VetoStepSchema = z.object({
   action: VetoActionSchema,
   team: TeamIndexSchema,
+  // Index into VetoState.phases. The step only offers that phase's pool
+  phase: z.number().int().nonnegative().optional(),
 })
 export type VetoStep = z.infer<typeof VetoStepSchema>
 
@@ -42,6 +44,8 @@ export const VetoStateSchema = z.object({
   done: z.boolean(),
   // Final play order once done. Picks in order, then the remaining maps as deciders
   maps: z.array(z.string()),
+  // Separate pools for steps that carry a phase, such as Rush mid rooms then start rooms
+  phases: z.array(z.object({ id: z.string(), pool: z.array(z.string()) })).optional(),
 })
 export type VetoState = z.infer<typeof VetoStateSchema>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReviewDecideResponse, ReviewFlag, ReviewMatchPlayer } from "@rushsite/shared";
+import { isRushMode, type ReviewDecideResponse, type ReviewFlag, type ReviewMatchPlayer } from "@rushsite/shared";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Table, type Column } from "@/components/ui/Table";
@@ -95,7 +95,7 @@ export function ReviewCase({
                 teamA={a.name}
                 teamB={b.name}
                 sideA={sideOf(0)}
-                rush={m.mode === "rush3v3"}
+                rush={isRushMode(m.mode)}
                 kills={m.kills}
                 roster={buildRoster(m, ownIndex)}
                 highlight={flag.player.steamId}

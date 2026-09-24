@@ -1,4 +1,4 @@
-import { ModeSchema, type Mode } from "@rushsite/shared"
+import { isTestMode, ModeSchema, type Mode } from "@rushsite/shared"
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import type { AppContext } from "../../context.js"
@@ -14,9 +14,10 @@ import { createAvailabilitySource, serviceStatus } from "./status.js"
 const MeQuery = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) })
 const LiveQuery = z.object({ limit: z.coerce.number().int().min(1).max(24).default(6) })
 
+// Leaderboard modes. Test modes are unrated and have none
 function modeParam(params: unknown): Mode {
   const mode = ModeSchema.safeParse((params as { mode?: string }).mode)
-  if (!mode.success) throw notFound("unknown_mode")
+  if (!mode.success || isTestMode(mode.data)) throw notFound("unknown_mode")
   return mode.data
 }
 

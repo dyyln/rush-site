@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { MODES, type Mode } from "@rushsite/shared";
+import { RANKED_MODES as MODES, type Mode } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";

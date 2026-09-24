@@ -10,7 +10,19 @@ import {
   VetoStateSchema,
 } from "./index.js"
 import { ClientMessageSchema, ServerMessageSchema, serverMessage } from "../ws.js"
-import { ALL_RUSH_ROOMS, allowedModesForParty, findRushRoom, MODE_CONFIGS, RUSH_ROOMS, RUSH_RULES, unresolvedConfig } from "../config/modes.js"
+import { CreateCupSchema } from "./cups.js"
+import {
+  ALL_RUSH_ROOMS,
+  allowedModesForParty,
+  findRushRoom,
+  isRushMode,
+  isTestMode,
+  MODE_CONFIGS,
+  RANKED_MODES,
+  RUSH_ROOMS,
+  RUSH_RULES,
+  unresolvedConfig,
+} from "../config/modes.js"
 import { tierForRating, TIERS } from "../config/tiers.js"
 import { cooldownSeconds, maxRatingDiffAfter, canMixBuckets } from "../config/queue.js"
 import { createVeto } from "../veto/bo3.js"
@@ -266,8 +278,16 @@ describe("schemas", () => {
 })
 
 describe("config", () => {
-  it("has the three modes with expected pools", () => {
-    expect(Object.keys(MODE_CONFIGS)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
+  it("has the three ranked modes and the Rush test mode with expected pools", () => {
+    expect(Object.keys(MODE_CONFIGS)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
+    expect(RANKED_MODES).toEqual(["aim1v1", "aim2v2", "rush3v3"])
+    expect(isTestMode("rush1v1")).toBe(true)
+    expect(isTestMode("rush3v3")).toBe(false)
+    expect(isRushMode("rush1v1")).toBe(true)
+    expect(isRushMode("aim1v1")).toBe(false)
+    expect(MODE_CONFIGS.rush1v1).toMatchObject({ teamSize: 1, vetoFormat: "none", winCondition: "valve_rush" })
+    expect(MODE_CONFIGS.rush1v1.maps).toEqual(MODE_CONFIGS.rush3v3.maps)
+    expect(MODE_CONFIGS.rush1v1.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush1v1.cfg" })
     expect(MODE_CONFIGS.aim1v1.maps).toHaveLength(6)
     expect(MODE_CONFIGS.rush3v3.maps).toEqual([{ id: "rush_001", displayName: "Complex", mapName: "rush_001" }])
     expect(MODE_CONFIGS.rush3v3.cs2).toEqual({ gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg" })
@@ -278,8 +298,14 @@ describe("config", () => {
     expect(MODE_CONFIGS.rush3v3.vetoFormat).toBe("none")
   })
 
+  it("keeps test modes out of cups", () => {
+    const cup = { name: "Test Cup", startsAt: "2026-09-25T18:00:00Z", maxEntrants: 8, minTrust: "verified" }
+    expect(CreateCupSchema.safeParse({ ...cup, mode: "rush3v3" }).success).toBe(true)
+    expect(CreateCupSchema.safeParse({ ...cup, mode: "rush1v1" }).success).toBe(false)
+  })
+
   it("allows modes by party size", () => {
-    expect(allowedModesForParty(1)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
+    expect(allowedModesForParty(1)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
     expect(allowedModesForParty(2)).toEqual(["aim2v2", "rush3v3"])
     expect(allowedModesForParty(3)).toEqual(["rush3v3"])
     expect(allowedModesForParty(4)).toEqual([])

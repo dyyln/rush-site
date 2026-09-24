@@ -1,5 +1,5 @@
 // Stateful fake admin backend for NEXT_PUBLIC_MOCK=1. Actions change the state and a ticker keeps it moving.
-import { AIM_MAPS, MODES, MODE_CONFIGS, RUSH_MAP, type Mode, type TrustLevel } from "@rushsite/shared";
+import { AIM_MAPS, isRushMode, MODES, MODE_CONFIGS, RUSH_MAP, type Mode, type TrustLevel } from "@rushsite/shared";
 import { MOCK_ME, mockSteamId, mockUser, rng } from "@/lib/mock";
 import type {
   AdminEventKind,
@@ -38,7 +38,7 @@ function card(i: number): UserCard {
 }
 
 function mapFor(mode: Mode): string {
-  return mode === "rush3v3" ? RUSH_MAP.id : pick(AIM_MAPS).id;
+  return isRushMode(mode) ? RUSH_MAP.id : pick(AIM_MAPS).id;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -101,9 +101,9 @@ function newMatch(now: number, status: string, ageSec: number): MatchDetailView 
   const port = ACTIVE.includes(status) ? freePort() : 27015 + int(0, 15);
   const hasServer = ["starting", "ready", "live", "finished", "abandoned"].includes(status);
   const finished = status === "finished";
-  const scoreA = finished ? (mode === "rush3v3" ? int(3, 8) : int(6, 16)) : 0;
+  const scoreA = finished ? (isRushMode(mode) ? int(3, 8) : int(6, 16)) : 0;
   const winA = rand() > 0.5;
-  const top = mode === "rush3v3" ? 8 : 16;
+  const top = isRushMode(mode) ? 8 : 16;
   const score = finished ? { team_a: winA ? top : Math.min(scoreA, top - 1), team_b: winA ? Math.min(scoreA, top - 1) : top } : null;
   const createdAt = now - ageSec * 1000;
   return {
@@ -300,7 +300,7 @@ function advance(m: MatchDetailView, next: string, now: number) {
   }
   if (next === "finished") {
     const winA = rand() > 0.5;
-    const top = m.mode === "rush3v3" ? 8 : 16;
+    const top = isRushMode(m.mode) ? 8 : 16;
     const other = int(top === 8 ? 2 : 5, top - 1);
     m.winnerTeam = winA ? "team_a" : "team_b";
     m.score = { team_a: winA ? top : other, team_b: winA ? other : top };

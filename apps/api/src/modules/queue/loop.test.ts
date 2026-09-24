@@ -8,11 +8,12 @@ afterEach(async () => {
 })
 
 describe("mode order", () => {
-  it("puts every mode first once every three ticks", () => {
-    expect(modeOrder(0)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
-    expect(modeOrder(1)).toEqual(["aim2v2", "rush3v3", "aim1v1"])
-    expect(modeOrder(2)).toEqual(["rush3v3", "aim1v1", "aim2v2"])
-    expect(modeOrder(3)).toEqual(modeOrder(0))
+  it("puts every mode first once every four ticks", () => {
+    expect(modeOrder(0)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
+    expect(modeOrder(1)).toEqual(["aim2v2", "rush3v3", "rush1v1", "aim1v1"])
+    expect(modeOrder(2)).toEqual(["rush3v3", "rush1v1", "aim1v1", "aim2v2"])
+    expect(modeOrder(3)).toEqual(["rush1v1", "aim1v1", "aim2v2", "rush3v3"])
+    expect(modeOrder(4)).toEqual(modeOrder(0))
   })
 
   // Six rush solos where one of them also waits in 1v1 next to a 1v1 only solo

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { RUSH_ROOM_POOL, RUSH_ROOM_VETO, type RoomVetoFormat } from "../config/rush-veto.js"
-import type { VetoTeam } from "../schemas/veto.js"
-import { resolveStep, vote } from "./bo3.js"
-import { createRoomVeto, nextPickSlot, roomSlots, roomVetoSteps, rushRoomsFromVeto } from "./rooms.js"
+import { RUSH_MID_POOL, RUSH_ROOM_VETO, RUSH_START_POOL, type RoomVetoFormat } from "../config/rush-veto.js"
+import type { VetoState, VetoTeam } from "../schemas/veto.js"
+import { castVote, resolveStep, stepAvailable, vote } from "./bo3.js"
+import { createRoomVeto, currentRoomPhase, isValidRushPath, nextPickSlot, roomSlots, roomVetoSteps, rushRoomsFromVeto } from "./rooms.js"
 
 const A1 = "76561198000000001"
 const A2 = "76561198000000002"
@@ -12,15 +12,29 @@ const teams: [VetoTeam, VetoTeam] = [
   { id: "A", steamIds: [A1, A2] },
   { id: "B", steamIds: [B1, B2] },
 ]
+const solo: [VetoTeam, VetoTeam] = [
+  { id: "A", steamIds: [A1] },
+  { id: "B", steamIds: [B1] },
+]
 const first = () => 0
 const format = RUSH_ROOM_VETO.format
 
-// Every member of the acting team votes for the first available room
-function playOut(format: RoomVetoFormat) {
-  let s = createRoomVeto(teams, format)
+// Small seeded rng so the property test is repeatable
+function seeded(seed: number) {
+  let s = seed
+  return () => {
+    s = (s * 1103515245 + 12345) % 2 ** 31
+    return s / 2 ** 31
+  }
+}
+
+// Every member of the acting team votes for a room the chooser returns
+function playOut(t: [VetoTeam, VetoTeam], f: RoomVetoFormat, choose: (s: VetoState) => string = (s) => stepAvailable(s)[0]!, rng = first) {
+  let s = createRoomVeto(t, f)
   while (!s.done) {
     const team = s.teams[s.steps[s.stepIndex]!.team]
-    for (const id of team.steamIds) s = vote(s, id, s.available[0]!, first)
+    const room = choose(s)
+    for (const id of team.steamIds) s = vote(s, id, room, rng)
   }
   return s
 }
@@ -30,48 +44,67 @@ describe("room veto config", () => {
     expect(RUSH_ROOM_VETO.enabled).toBe(false)
   })
 
-  it("pools the 4 start and 12 mid rooms, without castles or the decider", () => {
-    expect(RUSH_ROOM_POOL).toHaveLength(16)
-    expect(RUSH_ROOM_POOL).not.toContain("401")
-    expect(RUSH_ROOM_POOL).not.toContain("301")
-    expect(RUSH_ROOM_POOL).not.toContain("convoy")
+  it("runs mid rooms then the start room from Valve's separate pools", () => {
+    expect(format.phases.map((p) => p.id)).toEqual(["mid", "start"])
+    expect(format.phases[0]!.pool).toEqual(RUSH_MID_POOL)
+    expect(format.phases[1]!.pool).toEqual(RUSH_START_POOL)
+    expect(RUSH_MID_POOL).toHaveLength(12)
+    expect(RUSH_START_POOL).toHaveLength(4)
   })
 })
 
 describe("roomVetoSteps", () => {
-  it("alternates teams and adds bans until one room is left", () => {
+  it("runs 8 mid steps then 3 start bans with teams alternating throughout", () => {
     const steps = roomVetoSteps(format)
-    // 16 rooms, 4 picks and 1 leftover leaves 11 bans
-    expect(steps).toHaveLength(15)
-    expect(steps.filter((s) => s.action === "pick")).toHaveLength(4)
-    expect(steps.slice(0, 10).map((s) => s.action)).toEqual(["ban", "ban", "pick", "pick", "ban", "ban", "pick", "pick", "ban", "ban"])
+    expect(steps).toHaveLength(11)
+    expect(steps.slice(0, 8).map((s) => s.action)).toEqual(["ban", "ban", "pick", "pick", "ban", "ban", "pick", "pick"])
+    expect(steps.slice(0, 8).every((s) => s.phase === 0)).toBe(true)
+    expect(steps.slice(8).map((s) => [s.action, s.phase])).toEqual([
+      ["ban", 1],
+      ["ban", 1],
+      ["ban", 1],
+    ])
     steps.forEach((s, i) => expect(s.team).toBe(i % 2))
   })
 
-  it("gives each team two picks", () => {
+  it("gives each team two mid picks", () => {
     const steps = roomVetoSteps(format)
     expect(steps.filter((s) => s.action === "pick" && s.team === 0)).toHaveLength(2)
     expect(steps.filter((s) => s.action === "pick" && s.team === 1)).toHaveLength(2)
-  })
-
-  it("keeps the sequence as it is without banToOne", () => {
-    expect(roomVetoSteps({ ...format, banToOne: false })).toHaveLength(10)
-  })
-
-  it("adds two bans for a 13 room pool", () => {
-    expect(roomVetoSteps({ ...format, pool: RUSH_ROOM_POOL.slice(0, 13) })).toHaveLength(12)
   })
 
   it("starts with the given team", () => {
     expect(roomVetoSteps(format, 1)[0]!.team).toBe(1)
   })
 
-  it("rejects a pool too small for the sequence", () => {
-    expect(() => roomVetoSteps({ ...format, pool: RUSH_ROOM_POOL.slice(0, 9) })).toThrow()
+  it("rejects more picks than slots", () => {
+    const bad = { phases: [{ ...format.phases[0]!, pickSlots: [[1], [5, 4]] as const }, format.phases[1]!] }
+    expect(() => roomVetoSteps(bad)).toThrow()
   })
 
-  it("rejects more picks than slots", () => {
-    expect(() => roomVetoSteps({ ...format, pickSlots: [[1], [5, 4]] })).toThrow()
+  it("rejects a phase with more steps than rooms", () => {
+    const bad = { phases: [{ ...format.phases[1]!, sequence: ["ban", "ban", "ban", "ban"] as const, banToOne: false }] }
+    expect(() => roomVetoSteps(bad)).toThrow()
+  })
+})
+
+describe("phases", () => {
+  it("only offers the current phase's pool", () => {
+    let s = createRoomVeto(teams, format)
+    expect(stepAvailable(s)).toEqual([...RUSH_MID_POOL])
+    expect(() => castVote(s, A1, "101")).toThrow()
+    for (let i = 0; i < 8; i++) s = resolveStep(s, first)
+    expect(stepAvailable(s)).toEqual([...RUSH_START_POOL])
+    expect(() => castVote(s, s.teams[s.steps[s.stepIndex]!.team].steamIds[0]!, RUSH_MID_POOL[11]!)).toThrow()
+  })
+
+  it("reports the running phase", () => {
+    let s = createRoomVeto(teams, format)
+    expect(currentRoomPhase(s, format)?.phase.label).toBe("Mid rooms")
+    for (let i = 0; i < 8; i++) s = resolveStep(s, first)
+    expect(currentRoomPhase(s, format)?.phase.label).toBe("Start room")
+    for (let i = 0; i < 3; i++) s = resolveStep(s, first)
+    expect(currentRoomPhase(s, format)).toBeNull()
   })
 })
 
@@ -81,18 +114,25 @@ describe("roomSlots", () => {
     expect(slots.map((s) => s.room)).toEqual(["401", null, null, null, null, null, "301"])
   })
 
-  it("places picks from each team's castle and the leftover in the start slot", () => {
-    const s = playOut(format)
+  it("places mid picks next to each team's castle and the last start room in slot 3", () => {
+    const s = playOut(teams, format)
     const slots = roomSlots(s, format)
     const picks = s.history.filter((h) => h.action === "pick")
-    // A picks first into slot 1 then 2, B into 5 then 4
     expect(slots[1]).toMatchObject({ room: picks[0]!.mapId, source: "pick", team: 0 })
     expect(slots[5]).toMatchObject({ room: picks[1]!.mapId, source: "pick", team: 1 })
     expect(slots[2]).toMatchObject({ room: picks[2]!.mapId, team: 0 })
     expect(slots[4]).toMatchObject({ room: picks[3]!.mapId, team: 1 })
-    expect(s.available).toHaveLength(1)
-    expect(slots[3]).toMatchObject({ room: s.available[0], source: "leftover" })
-    expect(slots.every((x) => x.room !== null)).toBe(true)
+    const startLeft = s.available.filter((r) => RUSH_START_POOL.includes(r))
+    expect(startLeft).toHaveLength(1)
+    expect(slots[3]).toMatchObject({ room: startLeft[0], source: "leftover" })
+    // Unpicked mid rooms stay unused
+    expect(s.available.filter((r) => RUSH_MID_POOL.includes(r))).toHaveLength(4)
+  })
+
+  it("leaves the start slot open until the start phase is over", () => {
+    let s = createRoomVeto(teams, format)
+    for (let i = 0; i < 10; i++) s = resolveStep(s, first)
+    expect(roomSlots(s, format)[3]!.room).toBeNull()
   })
 
   it("tells where the current pick lands", () => {
@@ -103,14 +143,6 @@ describe("roomSlots", () => {
     s = resolveStep(s, first)
     expect(nextPickSlot(s, format)).toBe(5)
   })
-
-  it("fills open slots with leftovers when the sequence leaves more rooms", () => {
-    const f = { ...format, banToOne: false }
-    const s = playOut(f)
-    const slots = roomSlots(s, f)
-    expect(slots[3]!.source).toBe("leftover")
-    expect(slots.every((x) => x.room !== null)).toBe(true)
-  })
 })
 
 describe("room votes", () => {
@@ -118,25 +150,44 @@ describe("room votes", () => {
     let s = createRoomVeto(teams, format)
     s = vote(s, A1, "201")
     s = vote(s, A2, "202", () => 0.99)
-    const h = s.history[0]!
-    expect(h.tieBroken).toBe(true)
-    expect(h.mapId).toBe("202")
+    expect(s.history[0]).toMatchObject({ tieBroken: true, mapId: "202" })
   })
 
   it("bans at random when nobody votes before the timer", () => {
     const s = resolveStep(createRoomVeto(teams, format), () => 0)
-    expect(s.history[0]).toMatchObject({ noVotes: true, action: "ban", mapId: RUSH_ROOM_POOL[0] })
+    expect(s.history[0]).toMatchObject({ noVotes: true, action: "ban", mapId: RUSH_MID_POOL[0] })
+  })
+
+  it("works with one player a team", () => {
+    const s = playOut(solo, format)
+    expect(s.done).toBe(true)
+    expect(isValidRushPath(rushRoomsFromVeto(s, format))).toBe(true)
   })
 })
 
-describe("rushRoomsFromVeto", () => {
-  it("gives seven room ids in slot order", () => {
-    const s = playOut(format)
-    const rooms = rushRoomsFromVeto(s, format)
-    expect(rooms).toHaveLength(7)
-    expect(rooms[0]).toBe(401)
-    expect(rooms[6]).toBe(301)
-    expect(new Set(rooms).size).toBe(7)
+describe("server pool rule", () => {
+  it("every veto result passes it", () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = seeded(seed)
+      const t = seed % 2 === 0 ? teams : solo
+      const s = playOut(t, format, (st) => {
+        const avail = stepAvailable(st)
+        return avail[Math.floor(rng() * avail.length)]!
+      }, rng)
+      const ids = rushRoomsFromVeto(s, format)
+      expect(isValidRushPath(ids)).toBe(true)
+      expect(ids[3]! >= 101 && ids[3]! <= 104).toBe(true)
+      expect(new Set(ids).size).toBe(7)
+    }
+  })
+
+  it("rejects paths the server would drop", () => {
+    expect(isValidRushPath([401, 201, 202, 101, 203, 204, 301])).toBe(true)
+    expect(isValidRushPath([401, 201, 202, 205, 203, 204, 301])).toBe(false)
+    expect(isValidRushPath([401, 101, 202, 102, 203, 204, 301])).toBe(false)
+    expect(isValidRushPath([401, 201, 201, 101, 203, 204, 301])).toBe(false)
+    expect(isValidRushPath([301, 201, 202, 101, 203, 204, 401])).toBe(false)
+    expect(isValidRushPath([401, 201, 202, 101, 203, 301])).toBe(false)
   })
 
   it("throws before the veto is done", () => {

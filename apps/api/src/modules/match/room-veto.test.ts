@@ -1,4 +1,4 @@
-import { RUSH_ROOM_POOL, type VetoState, type VetoStatePayload } from "@rushsite/shared"
+import { RUSH_MID_POOL, RUSH_ROOM_POOL, RUSH_START_POOL, isValidRushPath, stepAvailable, type Mode, type VetoState, type VetoStatePayload } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterEach, describe, expect, it } from "vitest"
 import { createHarness, makeUsers, withServers, type Harness } from "../../../test/helpers.js"
@@ -14,13 +14,13 @@ describe("rush room veto", () => {
   })
 
   async function setup(flag: "true" | "false") {
-    h = await createHarness({ rng: () => 0, env: { RUSH_ROOM_VETO: flag } })
+    h = await createHarness({ rng: () => 0, env: { RUSH_ROOM_VETO: flag, RUSH1V1_TEST_QUEUE: "true" } })
     await withServers(h)
   }
 
-  async function acceptedRush() {
-    const ids = await makeUsers(h.db, 6)
-    for (const id of ids) await h.ctx.queue.join(id, ["rush3v3"])
+  async function acceptedRush(mode: Mode = "rush3v3") {
+    const ids = await makeUsers(h.db, mode === "rush1v1" ? 2 : 6)
+    for (const id of ids) await h.ctx.queue.join(id, [mode])
     const [matchId] = await matchmakeAll(h.ctx.queue, h.ctx.flow, h.clock.now())
     for (const id of ids) await h.ctx.flow.respond(id, matchId!, true)
     return matchId!
@@ -33,7 +33,7 @@ describe("rush room veto", () => {
   const match = async (matchId: string) => (await h.db.select().from(matches).where(eq(matches.id, matchId)))[0]!
 
   // Every member of the acting team votes for the same room
-  async function playStep(matchId: string, pick: (s: VetoState) => string = (s) => s.available[0]!) {
+  async function playStep(matchId: string, pick: (s: VetoState) => string = (s) => stepAvailable(s)[0]!) {
     const { state } = (await load(matchId))!
     const team = state.teams[state.steps[state.stepIndex]!.team]
     const room = pick(state)
@@ -55,8 +55,10 @@ describe("rush room veto", () => {
     const matchId = await acceptedRush()
     const first = (await load(matchId))!
     expect(first.row.format).toBe(ROOM_VETO_FORMAT)
-    expect(first.state.pool).toEqual([...RUSH_ROOM_POOL])
-    expect(first.state.steps).toHaveLength(15)
+    expect([...first.state.pool].sort()).toEqual([...RUSH_ROOM_POOL].sort())
+    // 8 mid room steps, then 3 start room bans
+    expect(first.state.steps).toHaveLength(11)
+    expect(first.state.phases?.map((p) => p.id)).toEqual(["mid", "start"])
     expect((await match(matchId)).status).toBe("veto")
     const sent = h.notifier.ofType("veto_state").map((s) => s.msg.payload as VetoStatePayload)
     expect(sent.length).toBeGreaterThan(0)
@@ -67,15 +69,17 @@ describe("rush room veto", () => {
     const page = await matchView(h.ctx, matchId, viewer)
     expect(page!.veto!.kind).toBe("rooms")
 
-    for (let i = 0; i < 15; i++) await playStep(matchId)
+    for (let i = 0; i < 11; i++) await playStep(matchId)
     const done = (await load(matchId))!.state
     expect(done.done).toBe(true)
-    expect(done.available).toHaveLength(1)
+    const start = done.available.filter((r) => RUSH_START_POOL.includes(r))
+    expect(start).toHaveLength(1)
     const picks = done.history.filter((x) => x.action === "pick").map((x) => Number(x.mapId))
 
     const m = await match(matchId)
-    // T castle, A pick, A pick, leftover start, B pick, B pick, CT castle
-    expect(m.rushRooms).toEqual([401, picks[0], picks[2], Number(done.available[0]), picks[3], picks[1], 301])
+    // T castle, A pick, A pick, last start room, B pick, B pick, CT castle
+    expect(m.rushRooms).toEqual([401, picks[0], picks[2], Number(start[0]), picks[3], picks[1], 301])
+    expect(isValidRushPath(m.rushRooms!)).toBe(true)
     expect(m.mapId).toBe("rush_001")
     expect(m.status).toBe("starting")
     expect(h.agent.started[0]!.rushRooms).toEqual(m.rushRooms)
@@ -90,17 +94,17 @@ describe("rush room veto", () => {
     const [p1, p2, p3] = state.teams[state.steps[0]!.team].steamIds
     await h.ctx.flow.vote(p1!, matchId, "205")
     await h.ctx.flow.vote(p2!, matchId, "205")
-    await h.ctx.flow.vote(p3!, matchId, "101")
+    await h.ctx.flow.vote(p3!, matchId, "201")
     state = (await load(matchId))!.state
     expect(state.history[0]).toMatchObject({ action: "ban", mapId: "205", tieBroken: false })
 
     const team = state.teams[state.steps[1]!.team].steamIds
     await h.ctx.flow.vote(team[0]!, matchId, "210")
-    await h.ctx.flow.vote(team[1]!, matchId, "103")
+    await h.ctx.flow.vote(team[1]!, matchId, "203")
     await h.ctx.flow.vote(team[2]!, matchId, "202")
     state = (await load(matchId))!.state
     // Three way tie. rng 0 takes the first of the leaders in pool order
-    expect(state.history[1]).toMatchObject({ mapId: "103", tieBroken: true })
+    expect(state.history[1]).toMatchObject({ mapId: "202", tieBroken: true })
   })
 
   it("bans at random when the step timer runs out with no votes", async () => {
@@ -109,7 +113,7 @@ describe("rush room veto", () => {
     h.clock.advance(21_000)
     await h.ctx.flow.timersTick()
     const { state } = (await load(matchId))!
-    expect(state.history[0]).toMatchObject({ action: "ban", noVotes: true, mapId: RUSH_ROOM_POOL[0] })
+    expect(state.history[0]).toMatchObject({ action: "ban", noVotes: true, mapId: RUSH_MID_POOL[0] })
     expect(state.stepIndex).toBe(1)
   })
 
@@ -122,5 +126,26 @@ describe("rush room veto", () => {
     const replay = h.notifier.ofType("veto_state").map((s) => s.msg.payload as VetoStatePayload)
     expect(replay).toHaveLength(1)
     expect(replay[0]!.kind).toBe("rooms")
+  })
+  it("refuses a start room during the mid room phase", async () => {
+    await setup("true")
+    const matchId = await acceptedRush()
+    const { state } = (await load(matchId))!
+    const voter = state.teams[state.steps[0]!.team].steamIds[0]!
+    await expect(h.ctx.flow.vote(voter, matchId, "101")).rejects.toMatchObject({ code: "veto_rejected" })
+  })
+
+  it("runs the same veto for the 1v1 Rush test mode", async () => {
+    await setup("true")
+    const matchId = await acceptedRush("rush1v1")
+    const first = (await load(matchId))!
+    expect(first.row.format).toBe(ROOM_VETO_FORMAT)
+    expect(first.state.teams[0].steamIds).toHaveLength(1)
+    // A spread of rooms from the phase pool each step
+    for (let i = 0; i < 11; i++) await playStep(matchId, (s) => stepAvailable(s)[(i * 5) % stepAvailable(s).length]!)
+    const m = await match(matchId)
+    expect(m.mapId).toBe("rush_001")
+    expect(isValidRushPath(m.rushRooms!)).toBe(true)
+    expect(h.agent.started[0]!.rushRooms).toEqual(m.rushRooms)
   })
 })

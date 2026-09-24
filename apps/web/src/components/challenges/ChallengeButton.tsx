@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
-import { MODES, type Mode } from "@rushsite/shared";
+import { isTestMode, type Mode } from "@rushsite/shared";
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api";
 import { MODE_COPY, teamSize } from "@/lib/modes";
 import { useSession } from "@/lib/session";
+import { offeredModes, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { challengeError } from "./useChallenges";
 import styles from "./challenges.module.css";
 
@@ -23,6 +24,7 @@ export function ChallengeButton({ target, defaultMode = "aim1v1", variant = "sec
   const { user } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const modes = offeredModes(useServiceStatus());
   const [mode, setMode] = useState<Mode>(defaultMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,10 +66,11 @@ export function ChallengeButton({ target, defaultMode = "aim1v1", variant = "sec
       >
         <fieldset className={styles.modes}>
           <legend className="visually-hidden">Mode</legend>
-          {MODES.map((m) => (
+          {modes.map((m) => (
             <label key={m} className={styles.mode}>
               <input type="radio" name={name} value={m} checked={mode === m} onChange={() => setMode(m)} />
               <span>{MODE_COPY[m].label}</span>
+              {isTestMode(m) && <span className={styles.modeHint}>Test, unrated</span>}
               {teamSize(m) > 1 && <span className={styles.modeHint}>Full party of {teamSize(m)}</span>}
             </label>
           ))}

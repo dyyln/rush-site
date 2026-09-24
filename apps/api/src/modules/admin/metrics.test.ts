@@ -14,7 +14,7 @@ beforeEach(async () => {
 })
 afterEach(() => undefined)
 
-const depth = (aim1v1 = 0, aim2v2 = 0, rush3v3 = 0) => ({ aim1v1, aim2v2, rush3v3 })
+const depth = (aim1v1 = 0, aim2v2 = 0, rush3v3 = 0) => ({ aim1v1, aim2v2, rush3v3, rush1v1: 0 })
 
 async function seedMatch(mode: "aim1v1" | "rush3v3", foundAt: Date, waits: number[]) {
   const startedAt = foundAt
@@ -52,7 +52,7 @@ describe("metric sampling", () => {
     await seedMatch("rush3v3", new Date(T0 - 3 * MIN), [10])
 
     const first = await sampleMetrics(db, { at: new Date(T0), queueDepth: depth(3, 0, 6), activeSockets: 12 })
-    expect(first.written).toBe(6)
+    expect(first.written).toBe(7)
     // The same minute again is a no-op
     expect((await sampleMetrics(db, { at: new Date(T0 + 10_000), queueDepth: depth(9), activeSockets: 1 })).written).toBe(0)
 

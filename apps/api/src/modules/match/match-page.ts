@@ -1,4 +1,4 @@
-import { tierForRating, type MatchDetail, type MatchRound, type MatchStatus, type ServerDriverName } from "@rushsite/shared"
+import { isTestMode, tierForRating, type MatchDetail, type MatchRound, type MatchStatus, type ServerDriverName } from "@rushsite/shared"
 import { asc, eq } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { matchPlayers, matchRounds, matches, tournaments } from "../../db/schema.js"
@@ -88,7 +88,7 @@ export async function buildMatchPage(
         }),
     })),
     rounds: rounds.map((r) => roundView(r, series)),
-    ...(m.source === "challenge" ? { unrated: true } : {}),
+    ...(m.source === "challenge" || isTestMode(m.mode) ? { unrated: true } : {}),
   }
 
   if (series) {

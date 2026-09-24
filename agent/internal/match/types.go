@@ -1,13 +1,15 @@
 // Package match holds the request types from docs/CONTRACTS.md, mode settings, validation and cfg rendering.
 package match
 
-// Mode is one of the three platform modes.
+// Mode is one of the platform modes.
 type Mode string
 
 const (
 	Aim1v1  Mode = "aim1v1"
 	Aim2v2  Mode = "aim2v2"
 	Rush3v3 Mode = "rush3v3"
+	// Rush1v1 is the unrated Rush test queue.
+	Rush1v1 Mode = "rush1v1"
 )
 
 // MapEntry mirrors the shared MapEntry type.

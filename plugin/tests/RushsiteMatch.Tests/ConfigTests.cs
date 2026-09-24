@@ -21,6 +21,17 @@ public class ConfigTests
     }
 
     [Fact]
+    public void ParsesRushTestModeWithOnePlayerASide()
+    {
+        var cfg = TestData.Rush1v1();
+        Assert.Equal("rush1v1", cfg.Mode);
+        Assert.Equal(2, cfg.AllowedSteamIds.Count);
+        Assert.Equal(WinConditionKind.ValveRush, cfg.ParsedWinCondition.Kind);
+        Assert.False(cfg.ParsedWinCondition.PluginManagesMatch);
+        Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(Json("rush1v1", "first_to_13", 1)));
+    }
+
+    [Fact]
     public void ParsesFirstTo13()
     {
         var cfg = TestData.Aim1v1();

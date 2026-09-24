@@ -1,6 +1,6 @@
 "use client";
 
-import { RUSH_ROOM_VETO, VETO_STEP_SEC, nextPickSlot, roomSlots, type RoomVetoFormat, type TeamIndex, type VetoState } from "@rushsite/shared";
+import { RUSH_ROOM_VETO, VETO_STEP_SEC, currentRoomPhase, nextPickSlot, roomSlots, type RoomVetoFormat, type TeamIndex, type VetoState } from "@rushsite/shared";
 import type { TeamSide } from "@/components/ui/TeamMarker";
 import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
@@ -40,12 +40,18 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
   Object.values(state.votes).forEach((r) => counts.set(r, (counts.get(r) ?? 0) + 1));
   const pending = step ? state.teams[step.team].steamIds.filter((id) => !(id in state.votes)) : [];
   const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
+  const running = currentRoomPhase(state, format);
+  const phaseIdx = running?.index ?? null;
+  // Steps and rooms of the running phase only. Earlier phases live in the layout
+  const phaseSteps = state.steps.map((s, i) => ({ s, i })).filter(({ s }) => (s.phase ?? 0) === phaseIdx);
+  const phasePool = running ? state.pool.filter((r) => running.phase.pool.includes(r)) : [];
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote);
 
   function info(room: string): CardInfo {
     const h = state.history.find((e) => e.mapId === room);
     if (h) return { state: h.action === "ban" ? "banned" : "picked", team: h.team, slot: slots.find((s) => s.room === room)?.slot, auto: h.noVotes };
-    if (state.done) return { state: "start", slot: slots.find((s) => s.room === room)?.slot };
+    const slot = slots.find((s) => s.room === room);
+    if (slot?.source === "leftover") return { state: "start", slot: slot.slot };
     return { state: "available" };
   }
 
@@ -67,7 +73,9 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
     <section className={styles.board} aria-labelledby="room-veto-heading">
       <header className={styles.header}>
         <div>
-          <p className="eyebrow">Room veto{step ? `, step ${state.stepIndex + 1} of ${state.steps.length}` : ""}</p>
+          <p className="eyebrow">
+            Room veto{running ? `, ${running.phase.label.toLowerCase()}, step ${phaseSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${phaseSteps.length}` : ""}
+          </p>
           <h2 id="room-veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
             {headline}
           </h2>
@@ -83,10 +91,24 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         {!state.done && stepDeadline !== null && <Timer until={stepDeadline} totalSec={VETO_STEP_SEC} label={myTurn ? "Your turn" : "Their turn"} size="lg" />}
       </header>
 
+      <ol className={styles.phases} aria-label="Veto phases">
+        {format.phases.map((p, idx) => {
+          const current = idx === phaseIdx;
+          const done = state.done || (phaseIdx !== null && idx < phaseIdx);
+          return (
+            <li key={p.id} className={cx(styles.phase, current && styles.phaseCurrent, done && styles.phaseDone)} aria-current={current ? "step" : undefined}>
+              <span className="mono">{idx + 1}</span> {p.label}
+              {done && <span className="visually-hidden">, done</span>}
+            </li>
+          );
+        })}
+      </ol>
+
       <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} />
 
+      {phaseSteps.length > 0 && (
       <ol className={styles.steps} aria-label="Veto steps">
-        {state.steps.map((s, i) => {
+        {phaseSteps.map(({ s, i }) => {
           const done = i < state.stepIndex || state.done;
           const current = i === state.stepIndex && !state.done;
           const h = state.history[i];
@@ -99,9 +121,11 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
           );
         })}
       </ol>
+      )}
 
+      {phasePool.length > 0 && (
       <ul className={styles.grid} role="list">
-        {state.pool.map((room) => {
+        {phasePool.map((room) => {
           const c = info(room);
           const selectable = myTurn && c.state === "available" && !!onVote;
           const votes = c.state === "available" ? counts.get(room) : undefined;
@@ -112,7 +136,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
               : c.state === "picked"
                 ? `Picked by ${teamName(c.team!).toLowerCase()}${c.slot !== undefined ? ` for ${rushSlotLabel(c.slot)}` : ""}`
                 : c.state === "start"
-                  ? "Last room left, plays as the start"
+                  ? "Last room left, plays as the start room"
                   : voted
                     ? "Your vote"
                     : "";
@@ -155,6 +179,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
           );
         })}
       </ul>
+      )}
 
       {step && pending.length > 0 && (
         <p className={styles.sub}>Waiting on {pending.map((id) => (id === mySteamId ? "you" : (names[id] ?? "a player"))).join(", ")}</p>

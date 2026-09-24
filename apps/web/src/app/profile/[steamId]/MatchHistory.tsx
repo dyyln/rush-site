@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { MODES, type Mode } from "@rushsite/shared";
+import { isTestMode, RANKED_MODES, type Mode } from "@rushsite/shared";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -41,7 +41,7 @@ function rowLabel(m: MatchSummary): string {
   const score =
     m.result === "abandoned" ? "" : isSeries(m) ? `, maps ${m.scoreFor} to ${m.scoreAgainst}` : `, ${m.scoreFor} to ${m.scoreAgainst}`;
   const maps = mapsText(m);
-  return `${RESULT_LABEL[m.result]}${score}. ${series}${modeLabel(m.mode)}${maps ? ` on ${maps}` : ""}. ${m.kills} kills, ${m.deaths} deaths. Rating ${signed(m.ratingDelta)}. ${shortDate(m.playedAt)}`;
+  return `${RESULT_LABEL[m.result]}${score}. ${series}${modeLabel(m.mode)}${maps ? ` on ${maps}` : ""}. ${m.kills} kills, ${m.deaths} deaths. ${isTestMode(m.mode) ? "Unrated" : `Rating ${signed(m.ratingDelta)}`}. ${shortDate(m.playedAt)}`;
 }
 
 type State = { rows: MatchSummary[]; cursor: string | null; status: "idle" | "loading" | "more" | "error" };
@@ -110,7 +110,7 @@ export function MatchHistory({ steamId, first, firstCursor }: { steamId: string;
             setAttempt(0);
             setFilter(v);
           }}
-          options={[{ value: "all" as Filter, label: "All" }, ...MODES.map((m) => ({ value: m as Filter, label: MODE_COPY[m].short }))]}
+          options={[{ value: "all" as Filter, label: "All" }, ...RANKED_MODES.map((m) => ({ value: m as Filter, label: MODE_COPY[m].short }))]}
         />
       </div>
 
@@ -139,6 +139,7 @@ export function MatchHistory({ steamId, first, firstCursor }: { steamId: string;
                     <span>
                       {MODE_COPY[m.mode].short}
                       {isSeries(m) && <span className={styles.seriesTag}>Bo{m.bestOf}</span>}
+                      {isTestMode(m.mode) && <span className={styles.seriesTag}>Test</span>}
                     </span>
                     <span className={`${styles.historyMaps} mono`}>{mapsText(m)}</span>
                   </span>
@@ -146,7 +147,11 @@ export function MatchHistory({ steamId, first, firstCursor }: { steamId: string;
                   <span className={`${styles.num} ${styles.hideMobile} mono`}>
                     {m.kills}/{m.deaths}
                   </span>
-                  <span className={`${styles.num} mono ${m.ratingDelta >= 0 ? styles.up : styles.down}`}>{signed(m.ratingDelta)}</span>
+                  {isTestMode(m.mode) ? (
+                    <span className={`${styles.num} mono muted`}>Unrated</span>
+                  ) : (
+                    <span className={`${styles.num} mono ${m.ratingDelta >= 0 ? styles.up : styles.down}`}>{signed(m.ratingDelta)}</span>
+                  )}
                   <span className={`${styles.num} ${styles.hideMobile} ${styles.historyDate}`}>{shortDate(m.playedAt)}</span>
                 </Link>
               </li>

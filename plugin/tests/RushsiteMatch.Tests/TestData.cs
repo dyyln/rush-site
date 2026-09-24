@@ -60,6 +60,7 @@ internal static class TestData
     """));
 
     public static MatchConfig Rush() => MatchConfigLoader.Parse(Json());
+    public static MatchConfig Rush1v1() => MatchConfigLoader.Parse(Json("rush1v1", "valve_rush", 1));
     public static MatchConfig Aim1v1() => MatchConfigLoader.Parse(Json("aim1v1", "first_to_13", 1));
     public static MatchConfig Aim2v2() => MatchConfigLoader.Parse(Json("aim2v2", "first_to_13", 2));
 }

@@ -25,6 +25,7 @@ const tiers = (a: Friend["tiers"]["aim1v1"], b: Friend["tiers"]["aim1v1"], c: Fr
   aim1v1: a,
   aim2v2: b,
   rush3v3: c,
+  rush1v1: "unranked",
 });
 
 type Store = {

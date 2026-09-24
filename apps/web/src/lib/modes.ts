@@ -1,7 +1,7 @@
-import { MODE_CONFIGS, MODES, type Mode } from "@rushsite/shared";
+import { isTestMode, MODE_CONFIGS, MODES, RANKED_MODES, type Mode } from "@rushsite/shared";
 import { knownMap } from "./mapPoolStore";
 
-export { MODES };
+export { isTestMode, MODES, RANKED_MODES };
 
 type ModeCopy = { label: string; name: string; short: string; format: string; blurb: string; players: string };
 
@@ -29,6 +29,14 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     format: "3v3",
     players: "3 vs 3",
     blurb: "Valve's Rush on Complex",
+  },
+  rush1v1: {
+    label: "1v1 Rush Test",
+    name: "Rush",
+    short: "Rush 1v1",
+    format: "1v1",
+    players: "1 vs 1",
+    blurb: "Unrated test queue for Rush with two players",
   },
 };
 

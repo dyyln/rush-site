@@ -7,6 +7,7 @@ import {
   VetoError,
   createVeto,
   getModeConfig,
+  isRushMode,
   resolveStep,
   unresolvedConfig,
   vote as castVetoVote,
@@ -24,7 +25,6 @@ import {
   type VetoState,
   type VetoStatePayload,
   type VetoKind,
-  RUSH_MAP,
   RUSH_ROOM_VETO,
   createRoomVeto,
   rushRoomsFromVeto,
@@ -461,7 +461,7 @@ export class MatchFlow {
   }
 
   private roomVetoOn(m: MatchRow): boolean {
-    return m.mode === "rush3v3" && !isSeries(m) && (this.d.options.rushRoomVeto ?? RUSH_ROOM_VETO.enabled)
+    return isRushMode(m.mode) && !isSeries(m) && (this.d.options.rushRoomVeto ?? RUSH_ROOM_VETO.enabled)
   }
 
   // Runs inside the accept transaction. Starts the veto or goes straight to allocation
@@ -575,9 +575,10 @@ export class MatchFlow {
     if (state.done && format === ROOM_VETO_FORMAT) {
       // Rush plays one map. The rooms go to the server in slot order
       const rushRooms = rushRoomsFromVeto(state, RUSH_ROOM_VETO.format)
+      const rushMap = getModeConfig(m.mode).maps[0]!.id
       await tx
         .update(matches)
-        .set({ status: "allocating", maps: [RUSH_MAP.id], mapId: RUSH_MAP.id, rushRooms, allocationStartedAt: new Date(this.now()) })
+        .set({ status: "allocating", maps: [rushMap], mapId: rushMap, rushRooms, allocationStartedAt: new Date(this.now()) })
         .where(eq(matches.id, m.id))
     } else if (state.done) {
       const maps = isSeries(m) ? padMaps(state.maps, m.bestOf ?? 1) : state.maps

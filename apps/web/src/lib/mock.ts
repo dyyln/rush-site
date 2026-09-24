@@ -1,5 +1,5 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import { teamSize } from "./modes";
 import { MOCK_TRUST } from "./trust";
 import type {
@@ -99,7 +99,7 @@ export function mockUserBySteamId(steamId: string): User {
 
 // Leaderboard
 
-const BASE_RATING: Record<Mode, number> = { aim1v1: 2480, aim2v2: 2390, rush3v3: 2310 };
+const BASE_RATING: Record<Mode, number> = { aim1v1: 2480, aim2v2: 2390, rush3v3: 2310, rush1v1: 1500 };
 
 export function mockLeaderboard(mode: Mode, offset = 0, limit = 50): Leaderboard {
   const total = 240;
@@ -148,7 +148,7 @@ function mockModeStats(steamId: string, mode: Mode): ModeStats {
   }
   const matches = 40 + Math.floor(r() * 200);
   const wins = Math.floor(matches * (0.45 + r() * 0.15));
-  const maps = mode === "rush3v3" ? [RUSH_MAP] : AIM_MAPS;
+  const maps = isRushMode(mode) ? [RUSH_MAP] : AIM_MAPS;
   const bestMaps = maps
     .map((m) => {
       const n = 5 + Math.floor(r() * 40);
@@ -184,8 +184,8 @@ const MOCK_FIRST_PAGE = 20;
 function mockMatches(steamId: string): MatchSummary[] {
   const r = rng(hash(steamId + "matches"));
   return Array.from({ length: MOCK_HISTORY }, (_, i) => {
-    const mode = MODES[Math.floor(r() * MODES.length)]!;
-    const aim = mode !== "rush3v3";
+    const mode = RANKED_MODES[Math.floor(r() * RANKED_MODES.length)]!;
+    const aim = !isRushMode(mode);
     const win = r() > 0.45;
     const loserScore = Math.floor(r() * (aim ? 15 : 7));
     const mapId = aim ? AIM_MAPS[Math.floor(r() * AIM_MAPS.length)]!.id : RUSH_MAP.id;
@@ -238,7 +238,7 @@ export function mockUserMatches(steamId: string, opts: { mode?: Mode; cursor?: s
 export function mockProfile(steamId: string): Profile {
   return {
     user: mockUserBySteamId(steamId),
-    modes: MODES.map((m) => mockModeStats(steamId, m)),
+    modes: RANKED_MODES.map((m) => mockModeStats(steamId, m)),
     badges: [
       {
         id: "b1",
@@ -470,7 +470,7 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
 
 // First to 13 in aim with the odd overtime, 8 round wins in Rush
 function mockRoundScore(mode: Mode, winner: "a" | "b", r: () => number): { a: number; b: number } {
-  const rush = mode === "rush3v3";
+  const rush = isRushMode(mode);
   const overtime = !rush && r() < 0.15;
   const win = rush ? 8 : overtime ? 16 : 13;
   const lose = rush ? Math.floor(r() * 8) : overtime ? 14 : Math.floor(r() * 12);
@@ -478,7 +478,7 @@ function mockRoundScore(mode: Mode, winner: "a" | "b", r: () => number): { a: nu
 }
 
 function mockCupMap(mode: Mode, i: number): string {
-  return mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[i % AIM_MAPS.length]!.id;
+  return isRushMode(mode) ? RUSH_MAP.id : AIM_MAPS[i % AIM_MAPS.length]!.id;
 }
 
 // Bumped by the mock realtime client to simulate bracket changes
@@ -547,7 +547,7 @@ const MIDS = RUSH_ROOMS.midRooms.map((r) => r.displayName);
 // Plays out a whole match from a seed. Aim is first to 13, Rush first to 8 of 15
 function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[] } {
   const r = rng(seed);
-  const target = mode === "rush3v3" ? 8 : 16;
+  const target = isRushMode(mode) ? 8 : 16;
   const score = [0, 0];
   const winners: number[] = [];
   const arenas: string[] = [];
@@ -557,7 +557,7 @@ function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[
     const w = r() < bias ? 0 : 1;
     score[w]!++;
     winners.push(w);
-    if (mode === "rush3v3") {
+    if (isRushMode(mode)) {
       arenas.push(room === 0 ? RUSH_ROOMS.castles.t.displayName : room === 6 ? RUSH_ROOMS.castles.ct.displayName : room === 3 ? RUSH_ROOMS.startRooms[Math.floor(r() * 4)]!.displayName : MIDS[Math.floor(r() * MIDS.length)]!);
       room = Math.max(0, Math.min(6, room + (w === 0 ? 1 : -1)));
       if (score[0] === 7 && score[1] === 7) room = -1;
@@ -601,7 +601,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
       round: i + 1,
       winnerTeam: w,
       score: { ...score },
-      arena: mode === "rush3v3" ? plan.arenas[i] ?? RUSH_ROOMS.decider.displayName : undefined,
+      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.displayName : undefined,
       endedAt: new Date(startedAt + (i + 1) * 60_000).toISOString(),
     });
   }
@@ -677,7 +677,7 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
   const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];
   const hint = MOCK_MATCH_HINTS.get(id);
   const mode = hint?.mode ?? modes[seed % 3]!;
-  const mapId = hint?.mapId ?? (mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[seed % AIM_MAPS.length]!.id);
+  const mapId = hint?.mapId ?? (isRushMode(mode) ? RUSH_MAP.id : AIM_MAPS[seed % AIM_MAPS.length]!.id);
   return build(id, mode, mapId, seed, null, now - (seed % 72) * 3_600_000, false, seed % 4 !== 0);
 }
 
@@ -700,9 +700,9 @@ function roundKills(m: MatchDetail, seed: number, roundIndex: number): MatchKill
   const winIdx = m.teams.findIndex((t) => t.name === round.winnerTeam);
   const winners = m.teams[winIdx === -1 ? 0 : winIdx]!.players;
   const losers = m.teams[winIdx === 1 ? 0 : 1]!.players;
-  const pool = m.mode === "rush3v3" ? RUSH_WEAPONS : (AIM_WEAPONS[m.mapId ?? ""] ?? AIM_DEFAULT);
+  const pool = isRushMode(m.mode) ? RUSH_WEAPONS : (AIM_WEAPONS[m.mapId ?? ""] ?? AIM_DEFAULT);
   // Winners kill every loser in aim. In rush tower control can end the round early
-  const loserDeaths = m.mode === "rush3v3" ? 1 + Math.floor(r() * losers.length) : losers.length;
+  const loserDeaths = isRushMode(m.mode) ? 1 + Math.floor(r() * losers.length) : losers.length;
   const winnerDeaths = Math.floor(r() * winners.length);
   const aliveW = winners.map((p) => p.steamId);
   const aliveL = losers.map((p) => p.steamId);

@@ -87,6 +87,10 @@
   line-height: 1.1;
   letter-spacing: 0.01em;
 }
+.testTag {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
 .format {
   display: inline-flex;
   vertical-align: middle;

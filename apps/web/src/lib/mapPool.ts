@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { configPool, RUSH_MAP, type PublicMap } from "@rushsite/shared";
+import { configPool, isRushMode, MODES, RUSH_MAP, type PublicMap } from "@rushsite/shared";
 import { api } from "./api";
 import { isMock } from "./env";
 import { knownMaps, setKnownMaps, subscribeKnownMaps } from "./mapPoolStore";
@@ -9,7 +9,7 @@ let loading: Promise<void> | null = null;
 function fallback(): PublicMap[] {
   return [
     ...configPool().map((m) => ({ id: m.id, displayName: m.displayName, modes: m.modes, previewUrl: null, workshopId: m.workshopId })),
-    { id: RUSH_MAP.id, displayName: RUSH_MAP.displayName, modes: ["rush3v3"], previewUrl: null, workshopId: null },
+    { id: RUSH_MAP.id, displayName: RUSH_MAP.displayName, modes: MODES.filter(isRushMode), previewUrl: null, workshopId: null },
   ];
 }
 

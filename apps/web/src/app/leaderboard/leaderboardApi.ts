@@ -19,7 +19,7 @@ export type MyRank = {
 // Short queries match the name prefix, longer ones match anywhere. Same rule as the api
 export const CONTAINS_MIN_LEN = 3;
 
-const MOCK_MY_RANK: Record<Mode, number> = { aim1v1: 137, aim2v2: 61, rush3v3: 98 };
+const MOCK_MY_RANK: Record<Mode, number> = { aim1v1: 137, aim2v2: 61, rush3v3: 98, rush1v1: 1 };
 
 function mockBoard(mode: Mode): Leaderboard {
   const board = mockLeaderboard(mode, 0, 1000);

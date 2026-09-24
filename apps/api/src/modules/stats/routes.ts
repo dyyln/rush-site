@@ -1,6 +1,8 @@
 import {
   LEADERBOARD_MIN_MATCHES,
+  isTestMode,
   MODES,
+  RANKED_MODES,
   computeStreak,
   ModeSchema,
   getModeConfig,
@@ -52,7 +54,14 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
     await ctx.maps.ensureFresh()
     return MODES.map((mode) => {
       const cfg = getModeConfig(mode)
-      return { mode, teamSize: cfg.teamSize, vetoFormat: cfg.vetoFormat, winCondition: cfg.winCondition, maps: ctx.maps.entries(mode) }
+      return {
+        mode,
+        teamSize: cfg.teamSize,
+        vetoFormat: cfg.vetoFormat,
+        winCondition: cfg.winCondition,
+        maps: ctx.maps.entries(mode),
+        ...(cfg.test ? { test: true } : {}),
+      }
     })
   })
 
@@ -67,7 +76,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
   // Global per mode. Players need the minimum match count to place
   app.get("/leaderboard/:mode", async (req) => {
     const mode = ModeSchema.safeParse((req.params as { mode: string }).mode)
-    if (!mode.success) throw notFound("unknown_mode")
+    if (!mode.success || isTestMode(mode.data)) throw notFound("unknown_mode")
     const page = Page.safeParse(req.query)
     if (!page.success) throw badRequest("invalid_query", "bad offset or limit", page.error.issues)
     const { limit, offset } = page.data
@@ -165,7 +174,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       .orderBy(asc(ratingEvents.seq))
 
     const modes = await Promise.all(
-      MODES.map(async (mode) => {
+      RANKED_MODES.map(async (mode) => {
         const r = ratingRows.find((x) => x.mode === mode)
         const s = shots.find((x) => x.mode === mode)
         const rating = r?.rating ?? 1500

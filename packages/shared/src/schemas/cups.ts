@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { isTestMode } from "../config/modes.js"
 import { ModeSchema } from "./mode.js"
 import { TrustLevelSchema } from "./trust.js"
 
@@ -27,6 +28,9 @@ export type CupScheduleCadence = z.infer<typeof CupScheduleCadenceSchema>
 export const StartTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM in UTC")
 export const BestOfFinalSchema = z.union([z.literal(1), z.literal(3), z.literal(5)])
 export const CUP_MAX_ENTRANTS = 128
+// Cups run on ranked modes only
+const CupModeSchema = ModeSchema.refine((m) => !isTestMode(m), "Test modes have no cups")
+
 export const MaxEntrantsSchema = z.number().int().min(2).max(CUP_MAX_ENTRANTS)
 
 export const CupScheduleSchema = z.object({
@@ -51,7 +55,7 @@ export type CupSchedule = z.infer<typeof CupScheduleSchema>
 
 const ScheduleFields = z.object({
   name: z.string().trim().min(3).max(60).optional(),
-  mode: ModeSchema,
+  mode: CupModeSchema,
   cadence: CupScheduleCadenceSchema,
   weekday: z.number().int().min(0).max(6).nullable().optional(),
   startTime: StartTimeSchema,
@@ -75,7 +79,7 @@ export type CupScheduleCreate = z.input<typeof CupScheduleCreateSchema>
 export const CupSchedulePatchSchema = z
   .object({
     name: z.string().trim().min(3).max(60),
-    mode: ModeSchema,
+    mode: CupModeSchema,
     cadence: CupScheduleCadenceSchema,
     weekday: z.number().int().min(0).max(6).nullable(),
     startTime: StartTimeSchema,
@@ -89,7 +93,7 @@ export type CupSchedulePatch = z.infer<typeof CupSchedulePatchSchema>
 
 // POST /admin/tournaments creates a one-off cup
 export const CreateCupSchema = z.object({
-  mode: ModeSchema,
+  mode: CupModeSchema,
   name: z.string().trim().min(3).max(60),
   startsAt: z.iso.datetime({ offset: true }),
   maxEntrants: MaxEntrantsSchema,

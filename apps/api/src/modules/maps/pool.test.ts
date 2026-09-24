@@ -150,7 +150,7 @@ describe("map pool", () => {
       previewUrl: "https://images.steamusercontent.com/ugc/42/preview/",
       workshopId: "42",
     })
-    expect(maps.find((m) => m.id === "rush_001")?.modes).toEqual(["rush3v3"])
+    expect(maps.find((m) => m.id === "rush_001")?.modes).toEqual(["rush3v3", "rush1v1"])
   })
 })
 

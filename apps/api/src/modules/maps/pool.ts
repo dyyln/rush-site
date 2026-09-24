@@ -1,10 +1,12 @@
 import {
   MODE_CONFIGS,
+  MODES,
   POOL_MODES,
   RUSH_MAP,
   configPool,
   findMap,
   isPoolMode,
+  isRushMode,
   minPoolSize,
   poolMapEntry,
   type MapEntry,
@@ -178,7 +180,7 @@ export class MapPoolService implements MapPoolReader {
     for (const m of configPool()) {
       if (!out.some((x) => x.id === m.id)) out.push({ id: m.id, displayName: m.displayName, modes: [], previewUrl: null, workshopId: m.workshopId })
     }
-    out.push({ id: RUSH_MAP.id, displayName: RUSH_MAP.displayName, modes: ["rush3v3"], previewUrl: null, workshopId: null })
+    out.push({ id: RUSH_MAP.id, displayName: RUSH_MAP.displayName, modes: MODES.filter(isRushMode), previewUrl: null, workshopId: null })
     return out
   }
 

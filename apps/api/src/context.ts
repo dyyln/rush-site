@@ -3,7 +3,7 @@ import { BRAND_NAME, CHAT_SLOW_MODE_FLAG, type ServerDriver } from "@rushsite/sh
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
-import type { Env } from "./env.js"
+import { disabledModes, type Env } from "./env.js"
 import { AdminRegistry } from "./lib/admins.js"
 import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
@@ -122,7 +122,10 @@ export function buildContext(deps: ContextDeps): AppContext {
   const parties = new PartyService(db, users, notifier)
   const cooldowns = new CooldownService(db, now)
   const allowUnresolvedModes = env.NODE_ENV !== "production" && env.ALLOW_UNRESOLVED_MODES
-  const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, { allowUnresolvedModes })
+  const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, {
+    allowUnresolvedModes,
+    disabledModes: disabledModes(env),
+  })
   const storage = deps.storage ?? createDemoStorage(env)
   const agent = deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn)
   const allocator = new Allocator(
@@ -146,7 +149,12 @@ export function buildContext(deps: ContextDeps): AppContext {
     log,
     now,
     options: {
-      maxDurationMin: { aim1v1: env.MATCH_MAX_MIN_AIM, aim2v2: env.MATCH_MAX_MIN_AIM, rush3v3: env.MATCH_MAX_MIN_RUSH },
+      maxDurationMin: {
+        aim1v1: env.MATCH_MAX_MIN_AIM,
+        aim2v2: env.MATCH_MAX_MIN_AIM,
+        rush3v3: env.MATCH_MAX_MIN_RUSH,
+        rush1v1: env.MATCH_MAX_MIN_RUSH,
+      },
       silenceSec: env.MATCH_SILENCE_SEC,
       intervalSec: env.WATCHDOG_INTERVAL_SEC,
     },

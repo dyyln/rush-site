@@ -155,6 +155,13 @@
       "when": 1790244265348,
       "tag": "0021_chat_original_body",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790246466554,
+      "tag": "0022_rush1v1_test_mode",
+      "breakpoints": true
     }
   ]
 }

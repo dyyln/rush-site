@@ -56,6 +56,7 @@ const MODE_WORDS: Record<Mode, RegExp> = {
   aim1v1: /\b1\s*v\s*1\b/i,
   aim2v2: /\b2\s*v\s*2\b/i,
   rush3v3: /\b(3\s*v\s*3|rush)\b/i,
+  rush1v1: /\b(rush\s*1\s*v\s*1|1\s*v\s*1\s*rush)\b/i,
 };
 
 function availabilityPhrase(reason?: string): string {
@@ -69,7 +70,7 @@ function availabilityPhrase(reason?: string): string {
 // Modes the text names that cannot queue right now
 function blockedModes(text: string, status: ServiceStatus | null) {
   if (!status) return [];
-  return status.modes.filter((m) => !m.available && MODE_WORDS[m.mode].test(text));
+  return status.modes.filter((m) => !m.available && m.reason !== "disabled" && MODE_WORDS[m.mode].test(text));
 }
 
 // Site wide notices from GET /announcements. Dismissal is remembered per announcement id

@@ -120,6 +120,13 @@ public class RushRoomsControllerTests
     }
 
     [Fact]
+    public void RushTestModeSendsRoomsToo()
+    {
+        New(MatchConfigLoader.Parse(Json("rush1v1", "valve_rush", 1).Replace("\"winCondition\"", Rooms + "\"winCondition\"")));
+        Assert.Equal("say rushsite_rooms 203,207,102,211,205", Assert.Single(RoomCommands));
+    }
+
+    [Fact]
     public void NoRoomsMeansValvesDraw()
     {
         New(Rush());

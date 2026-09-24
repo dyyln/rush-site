@@ -7,6 +7,8 @@ import {
   RUSH_MAP,
   RUSH_ROOM_VETO,
   createRoomVeto,
+  isRushMode,
+  stepAvailable,
   type ModeStatsPayload,
   type QueueModeStatus,
   type QueueStatusPayload,
@@ -275,9 +277,10 @@ export class MockRealtime extends Emitter implements Realtime {
   private afterAccept(mode: Mode) {
     this.vetoKind = "maps";
     // The mock always runs the Rush room veto so it can be clicked through
-    if (mode === "rush3v3") {
-      const us = [MOCK_ME.steamId, mockSteamId(4), mockSteamId(5)];
-      const them = [mockSteamId(20), mockSteamId(21), mockSteamId(22)];
+    if (isRushMode(mode)) {
+      const size = MODE_CONFIGS[mode].teamSize;
+      const us = [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4))];
+      const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
       this.vetoKind = "rooms";
       this.veto = createRoomVeto(
         [
@@ -338,7 +341,8 @@ export class MockRealtime extends Emitter implements Realtime {
       .forEach((id, i) =>
         this.later(1200 + i * 700, () => {
           if (v.stepIndex !== step0) return;
-          const pick = v.available[(i + step0) % v.available.length]!;
+          const avail = stepAvailable(v);
+          const pick = avail[(i + step0) % avail.length]!;
           this.vote(id, pick);
         }),
       );
@@ -351,7 +355,7 @@ export class MockRealtime extends Emitter implements Realtime {
     const v = this.veto;
     if (!v || v.done) return;
     const team = v.teams[v.steps[v.stepIndex]!.team];
-    if (!team.steamIds.includes(steamId) || !v.available.includes(mapId)) return;
+    if (!team.steamIds.includes(steamId) || !stepAvailable(v).includes(mapId)) return;
     v.votes = { ...v.votes, [steamId]: mapId };
     if (team.steamIds.every((id) => id in v.votes)) this.resolve();
     else this.pushVetoQuiet();
@@ -376,7 +380,8 @@ export class MockRealtime extends Emitter implements Realtime {
     const counts = new Map<string, number>();
     Object.values(v.votes).forEach((m) => counts.set(m, (counts.get(m) ?? 0) + 1));
     const max = Math.max(0, ...counts.values());
-    const leaders = max === 0 ? v.available : v.available.filter((m) => counts.get(m) === max);
+    const avail = stepAvailable(v);
+    const leaders = max === 0 ? avail : avail.filter((m) => counts.get(m) === max);
     const mapId = leaders[Math.floor(Math.random() * leaders.length)]!;
     const step = v.steps[v.stepIndex]!;
     v.history.push({
@@ -440,8 +445,8 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 }
 
-const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41 };
-const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70 };
+const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41, rush1v1: 3 };
+const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70, rush1v1: 30 };
 
 // Idle at start. Start queue from the page to see the queued state
 function initialQueue(): { mode: Mode; queuedAt: number }[] {
@@ -468,6 +473,7 @@ const BASE_STATS: Record<Mode, { queue: number; live: number }> = {
   aim1v1: { queue: 23, live: 18 },
   aim2v2: { queue: 14, live: 9 },
   rush3v3: { queue: 41, live: 12 },
+  rush1v1: { queue: 3, live: 1 },
 };
 
 // Counts drift a little every tick so the cards look live

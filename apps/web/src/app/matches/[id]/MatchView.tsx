@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { connectDeadlineOf, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
+import { connectDeadlineOf, isRushMode, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -162,7 +162,7 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
-      {m.mode === "rush3v3" && stage !== "veto" && (
+      {isRushMode(m.mode) && stage !== "veto" && (
         <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} />
       )}
 
@@ -296,7 +296,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
         </section>
       )}
       {a && b && rounds.length > 0 && (
-        <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={m.mode === "rush3v3"} kills={kills} roster={roster} />
+        <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={isRushMode(m.mode)} kills={kills} roster={roster} />
       )}
       <PlayerTables m={m} sideOf={sideOf} topDamage={topDamage} />
     </>
