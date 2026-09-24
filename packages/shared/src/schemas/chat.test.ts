@@ -14,4 +14,10 @@ describe("ChatPostSchema", () => {
   it("refuses a message that is only line breaks", () => {
     expect(ChatPostSchema.safeParse({ body: "\n\r\n\t" }).success).toBe(false)
   })
+
+  it("takes letters, digits, spaces and keyboard punctuation only", () => {
+    expect(ChatPostSchema.safeParse({ body: "gg, wp! 2:1 (close) @kestrel #1 50% ~ok" }).success).toBe(true)
+    expect(ChatPostSchema.safeParse({ body: "nice \u{1F525}" }).success).toBe(false)
+    expect(ChatPostSchema.safeParse({ body: "sch\u00f6n" }).success).toBe(false)
+  })
 })

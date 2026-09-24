@@ -49,6 +49,11 @@ export const ChatDeletedPayloadSchema = z.object({
 export type ChatDeletedPayload = z.infer<typeof ChatDeletedPayloadSchema>
 
 // POST /chat/messages
+// Chat takes printable ASCII only: letters, digits, spaces and keyboard punctuation. No emoji,
+// accented letters or look-alike Unicode
+export const CHAT_TEXT = /^[\x20-\x7E]*$/
+export const CHAT_TEXT_HINT = "Only letters, numbers and basic punctuation."
+
 export const ChatPostSchema = z.object({
   channel: ChatChannelSchema.default(CHAT_GLOBAL_CHANNEL),
   body: z
@@ -60,7 +65,13 @@ export const ChatPostSchema = z.object({
         .replace(/[\u0000-\u001f\u007f]/g, "")
         .trim(),
     )
-    .pipe(z.string().min(1, "message is empty").max(CHAT_MAX_LENGTH, `at most ${CHAT_MAX_LENGTH} characters`)),
+    .pipe(
+      z
+        .string()
+        .min(1, "message is empty")
+        .max(CHAT_MAX_LENGTH, `at most ${CHAT_MAX_LENGTH} characters`)
+        .regex(CHAT_TEXT, CHAT_TEXT_HINT),
+    ),
 })
 export type ChatPost = z.input<typeof ChatPostSchema>
 

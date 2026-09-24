@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
-import { CHAT_GLOBAL_CHANNEL, CHAT_MAX_LENGTH, TIERS, type ChatMessage, type ChatMuteStatus, type TierId } from "@rushsite/shared";
+import { CHAT_GLOBAL_CHANNEL, CHAT_MAX_LENGTH, CHAT_TEXT_HINT, TIERS, type ChatMessage, type ChatMuteStatus, type TierId } from "@rushsite/shared";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { TierEmblem } from "@/components/ui/TierEmblem";
 import { useSession } from "@/lib/session";
@@ -105,6 +105,8 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<(Refusal & { announce: string }) | null>(null);
+  // Set when typing or pasting dropped characters chat does not take
+  const [dropped, setDropped] = useState(false);
   const [slowModeSec, setSlowModeSec] = useState(0);
   // Re-renders the countdown each second
   const [, setTick] = useState(0);
@@ -316,8 +318,11 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
                 placeholder="Message global chat"
                 value={draft}
                 onChange={(e) => {
-                  // Pasted line breaks become spaces, like the server does
-                  setDraft(e.target.value.replace(/[\r\n\u2028\u2029]+/g, " "));
+                  // Pasted line breaks become spaces, like the server does. Anything outside printable ASCII is dropped with a note
+                  const spaced = e.target.value.replace(/[\r\n\u2028\u2029]+/g, " ");
+                  const clean = spaced.replace(/[^\x20-\x7E]/g, "");
+                  setDropped(clean !== spaced);
+                  setDraft(clean);
                   // Timed refusals stay up so the countdown is not lost while typing
                   if (sendError && sendError.until === null) setSendError(null);
                 }}
@@ -351,7 +356,12 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
                 </span>
               </>
             )}
-            {slowModeSec > 0 && !sendError && <p className={styles.slowNote}>Slow mode is on. One message every {slowModeSec}s.</p>}
+            {dropped && !sendError && (
+              <p className={styles.slowNote} role="status">
+                {CHAT_TEXT_HINT}
+              </p>
+            )}
+            {slowModeSec > 0 && !sendError && !dropped && <p className={styles.slowNote}>Slow mode is on. One message every {slowModeSec}s.</p>}
           </form>
         )}
       </div>
