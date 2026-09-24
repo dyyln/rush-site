@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isTestMode, MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode, type TrustLevel } from "@rushsite/shared";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
@@ -30,7 +30,7 @@ import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { TRUST_NAMES } from "@/lib/trust";
-import { MODE_COPY, modeLabel } from "@/lib/modes";
+import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { activeMatch, usePlay } from "@/lib/usePlay";
 import { StartCountdown } from "@/components/play/StartCountdown";
@@ -47,9 +47,6 @@ const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
 ];
 
 const MAX_PARTY = Math.max(...MODES.map((m) => MODE_CONFIGS[m].teamSize));
-
-// Matches this tab already sent to their room. Coming back to Play then shows a link instead of bouncing
-const routedToRoom = new Set<string>();
 
 export function PlayView() {
   const { user, loading } = useSession();
@@ -123,11 +120,11 @@ export function PlayView() {
   const active = activeMatch(play.match);
   const inMatch = !!active;
 
-  // The match room holds accept, veto, connect and the result. Play only sends the player there
+  // The match room holds accept, veto, connect and the result. Play always sends the player there
+  // Replace keeps Play out of the history so Back does not bounce into the room again
   useEffect(() => {
-    if (!active || !user || routedToRoom.has(active.matchId)) return;
-    routedToRoom.add(active.matchId);
-    router.push(roomPath(active));
+    if (!active || !user) return;
+    router.replace(roomPath(active));
   }, [active?.matchId, active?.slug, user?.steamId]);
 
   // Mirror the live queue into the picker so it shows what is actually queued
@@ -259,16 +256,6 @@ export function PlayView() {
 
       <div className="grid-2">
         <div className="stack">
-          {active && user && (
-            <Card tone="accent" eyebrow="You are in a match" title={modeLabelFor(play.match) ?? "Your match"}>
-              <div className="stack">
-                <p className="muted">Accept, veto, connect info and the result are all in the match room.</p>
-                <p>
-                  <ButtonLink href={roomPath(active)}>Open match room</ButtonLink>
-                </p>
-              </div>
-            </Card>
-          )}
 
           {!inMatch && (
             <>
@@ -471,15 +458,6 @@ export function PlayView() {
 
     </div>
   );
-}
-
-// Mode of the active match when a message carried it
-function modeLabelFor(m: ReturnType<typeof usePlay>["match"]): string | null {
-  if (m.phase === "found") return modeLabel(m.found.mode);
-  if (m.phase === "veto") return modeLabel(m.veto.mode);
-  if (m.phase === "starting") return modeLabel(m.mode);
-  if (m.phase === "ready") return m.veto ? modeLabel(m.veto.mode) : null;
-  return null;
 }
 
 function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
