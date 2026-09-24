@@ -126,25 +126,45 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
           <img src={MODE_ART[m.mode]} alt="" className={styles.heroArt} />
         )}
         <span className={styles.heroShade} aria-hidden="true" />
-        {/* Status on the left, actions on the right, so they share a row on wide screens */}
+        {/* Title with its status badges on the left, actions on the right */}
         <div className={styles.headTop}>
-          <div className={styles.heroMeta}>
-            <Badge tone={status.tone}>
-              {m.status === "live" && <Throbber />}
-              {status.label}
-            </Badge>
-            {m.unrated && <Badge tone="info">Unrated</Badge>}
-            {m.tournament && (
-              <span className={styles.cup}>
-                <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
-                {!series && m.tournament.bestOf > 1 && (
-                  <span>
+          <div className={styles.heroTitle}>
+            <div className={styles.titleLine}>
+              <h1 className={styles.title}>
+                {modeLabel(m.mode)}
+                {/* Rush has one map, so its name adds nothing */}
+                {currentMapId && !series && !isRushMode(m.mode) && (
+                  <>
                     {" "}
-                    · Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
-                  </span>
+                    <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
+                  </>
                 )}
-              </span>
-            )}
+              </h1>
+              <Badge tone={status.tone}>
+                {m.status === "live" && <Throbber />}
+                {status.label}
+              </Badge>
+              {m.unrated && <Badge tone="info">Unrated</Badge>}
+            </div>
+            <p className={styles.heroMeta}>
+              {m.slug && (
+                <span className={roomStyles.roomId}>
+                  <span>Room</span>
+                  <span className="mono">{m.slug}</span>
+                </span>
+              )}
+              {m.tournament && (
+                <span className={styles.cup}>
+                  <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
+                  {!series && m.tournament.bestOf > 1 && (
+                    <span>
+                      {" "}
+                      · Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
+                    </span>
+                  )}
+                </span>
+              )}
+            </p>
           </div>
           <div className={actionStyles.actions}>
             {finished && (
@@ -156,24 +176,6 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
             <ShareButton matchId={m.slug ?? m.id} />
             {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
           </div>
-        </div>
-        <div className={styles.heroTitle}>
-          <h1 className={styles.title}>
-            {modeLabel(m.mode)}
-            {/* Rush has one map, so its name adds nothing */}
-            {currentMapId && !series && !isRushMode(m.mode) && (
-              <>
-                {" "}
-                <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
-              </>
-            )}
-          </h1>
-          {m.slug && (
-            <p className={roomStyles.roomId}>
-              <span>Room</span>
-              <span className="mono">{m.slug}</span>
-            </p>
-          )}
         </div>
         {scored && (
           <div className={styles.heroScore}>
