@@ -60,6 +60,14 @@
   color: var(--color-text);
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.7);
 }
+/* Guests get no tabs, so the name stands on its own as the wordmark beside the logo */
+.lead[data-guest] {
+  align-self: center;
+}
+.lead[data-guest] .brand {
+  font-size: var(--text-3xl);
+  letter-spacing: 0.12em;
+}
 .tabs {
   display: flex;
   gap: var(--space-5);
@@ -86,7 +94,9 @@
   text-decoration: none;
   text-shadow: 0 2px 12px rgb(0 0 0 / 0.6);
   white-space: nowrap;
-  transition: opacity var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
 }
 .tab:hover {
   opacity: 0.9;

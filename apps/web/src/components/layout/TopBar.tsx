@@ -36,7 +36,7 @@ export function TopBar() {
         <Link href="/" className={styles.logo} aria-label={`${BRAND_NAME} home`}>
           <Logo size={64} />
         </Link>
-        <div className={styles.lead}>
+        <div className={styles.lead} data-guest={!user && !loading ? true : undefined}>
           <p className={styles.brand} aria-hidden="true">
             {BRAND_NAME}
           </p>
