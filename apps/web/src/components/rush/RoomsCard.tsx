@@ -13,12 +13,12 @@ function slotsFromIds(ids: number[]): RoomSlot[] {
 }
 
 // The rooms a Rush match plays, from the room veto
-export function RoomsCard({ rushRooms, veto, sideOf }: { rushRooms?: number[]; veto?: VetoState | null; sideOf: (team: TeamIndex) => TeamSide }) {
+export function RoomsCard({ rushRooms, veto, sideOf, flip }: { rushRooms?: number[]; veto?: VetoState | null; sideOf: (team: TeamIndex) => TeamSide; flip?: boolean }) {
   const slots = veto?.done ? roomSlots(veto, RUSH_ROOM_VETO.format) : rushRooms?.length ? slotsFromIds(rushRooms) : null;
   if (!slots) return null;
   return (
     <Card eyebrow="Rush" title="Rooms">
-      <ComplexLayout slots={slots} sideOf={sideOf} />
+      <ComplexLayout slots={slots} sideOf={sideOf} flip={flip} />
     </Card>
   );
 }

@@ -61,12 +61,15 @@ export function VetoPanel({
   viewer,
   names,
   onVote,
+  flip,
 }: {
   mode: Mode;
   veto: MatchVetoView | null;
   viewer: string | null;
   names: Record<string, string>;
   onVote: (mapId: string) => void;
+  // Rush: left team defends the CT castle
+  flip?: boolean;
 }) {
   if (!veto || !viewer) {
     return (
@@ -78,7 +81,7 @@ export function VetoPanel({
   return (
     <Card tone="accent">
       {veto.kind === "rooms" ? (
-        <RoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+        <RoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} flip={flip} />
       ) : (
         <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
       )}

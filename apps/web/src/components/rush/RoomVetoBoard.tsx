@@ -18,12 +18,14 @@ type Props = {
   onVote?: (room: string) => void;
   names?: Record<string, string>;
   format?: RoomVetoFormat;
+  // Left team defends the CT castle, see ComplexLayout
+  flip?: boolean;
 };
 
 type CardInfo = { state: "available" | "banned" | "picked" | "start"; team?: TeamIndex; slot?: number; auto?: boolean };
 
 // Rush room ban and pick. Every player on the acting team votes, the most votes win and ties are random
-export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = {}, format = RUSH_ROOM_VETO.format }: Props) {
+export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = {}, format = RUSH_ROOM_VETO.format, flip }: Props) {
   const inA = state.teams[0].steamIds.includes(mySteamId);
   const inB = state.teams[1].steamIds.includes(mySteamId);
   const myTeam: TeamIndex | null = inA ? 0 : inB ? 1 : null;
@@ -113,7 +115,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         })}
       </ol>
 
-      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} />
+      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} flip={flip} />
 
       {phaseSteps.length > 0 && (
       <ol className={styles.steps} aria-label="Veto steps">

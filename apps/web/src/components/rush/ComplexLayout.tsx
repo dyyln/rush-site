@@ -13,13 +13,15 @@ type Props = {
   nextSlot?: number | null;
   // Rooms not chosen yet are drawn at random by the map
   pendingLabel?: string;
+  // Draws CT castle on the left, when the left team defends it, so that team attacks left to right
+  flip?: boolean;
 };
 
 // The seven rooms of the Complex from T castle to CT castle
-export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "Open" }: Props) {
+export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "Open", flip = false }: Props) {
   return (
-    <ol className={styles.layout} aria-label="Rooms from T castle to CT castle">
-      {slots.map((s) => {
+    <ol className={styles.layout} aria-label={flip ? "Rooms from CT castle to T castle" : "Rooms from T castle to CT castle"}>
+      {(flip ? [...slots].reverse() : slots).map((s) => {
         const side = s.team !== undefined ? sideOf(s.team) : undefined;
         const how = s.source === "castle" ? "Fixed" : s.source === "leftover" ? "Last room left" : s.source === "pick" ? (side === undefined ? "Picked" : side === "own" ? "Your pick" : "Their pick") : pendingLabel;
         return (

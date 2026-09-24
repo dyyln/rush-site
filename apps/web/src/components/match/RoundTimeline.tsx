@@ -237,8 +237,8 @@ const PATH_PAD = 6;
 // room it was played in, and a line to the next round. Cells are equal width, so a line to the
 // middle of the next cell runs from 50 to 150 on a 0-100 box
 function PathCell({ path, slot, next, side, pending }: { path: RushRoundPath; slot: number | undefined; next?: number; side?: TeamSide; pending?: boolean }) {
-  const y = (s: number) => PATH_PAD + s * PATH_ROW;
-  const height = y(path.slots - 1) + PATH_PAD;
+  const y = (s: number) => PATH_PAD + (path.flip ? path.slots - 1 - s : s) * PATH_ROW;
+  const height = PATH_PAD * 2 + (path.slots - 1) * PATH_ROW;
   return (
     <span className={styles.path} style={{ height }} aria-hidden="true">
       <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" width="100%" height={height}>

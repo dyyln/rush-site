@@ -136,8 +136,19 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
   const ctTeam = tTeam === teams[0] ? teams[1] : teams[0];
   const defender = (i: number) => (i === 0 ? tTeam : i === LAST_SLOT ? ctTeam : null);
   // While live, every room between play and a castle is held by that castle's team. The room in play is contested
-  const front = typeof current === "number" ? current : null;
+  // Every room between play and a castle is held by that castle's team. The room in play, and once
+  // over the room play ended in, is split between the two. A finished Convoy takes its winner's colour
+  const ended = !building && !playing && track.over ? endedIn(track) : null;
+  // During a live Convoy decider the rooms either side of the room it replaced keep their holders
+  const front = typeof current === "number" ? current : current === "decider" ? replacedByDecider(track) : ended;
+  const finalWinner = ended === null ? null : ([...track.slots.flatMap((sl) => sl.visits), ...track.decider].sort((x, y) => y.round - x.round)[0]?.team ?? null);
+  // The room in play, or the room play ended in, stays split between the two
   const holder = (i: number) => (front === null || i === front ? null : i < front ? tTeam : ctTeam);
+  // The left team's castle goes on the left (on top on phones), so it attacks left to right
+  const flip = tTeam !== teams[0];
+  const shownSlots = flip ? [...track.slots].reverse() : track.slots;
+  const [leftTeam, rightTeam] = flip ? [ctTeam, tTeam] : [tTeam, ctTeam];
+  const splitStyle = front !== null ? ({ "--split-a": `var(--team-${leftTeam.side})`, "--split-b": `var(--team-${rightTeam.side})` } as CSSProperties) : undefined;
 
   // Keeps the current room in view where the track scrolls
   useEffect(() => {
@@ -177,9 +188,9 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
       <ol
         className={styles.track}
         ref={listRef}
-        style={front !== null ? ({ "--split-t": `var(--team-${tTeam.side})`, "--split-ct": `var(--team-${ctTeam.side})` } as CSSProperties) : undefined}
+        style={splitStyle}
       >
-        {track.slots.map((slot) => {
+        {shownSlots.map((slot) => {
           const isCurrent = current === slot.index;
           const isLast = !playing && track.last === slot.index;
           const def = defender(slot.index);
@@ -193,7 +204,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
               data-side={def?.side}
               data-current={isCurrent || undefined}
               data-control={held?.side}
-              data-contested={(isCurrent && front !== null) || undefined}
+              data-contested={slot.index === front || undefined}
               data-last={isLast || undefined}
               data-empty={(building && !slot.room) || undefined}
               data-latest={(building && building.latestSlot === slot.index) || undefined}
@@ -240,7 +251,14 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
       </ol>
       </div>
       {(track.decider.length > 0 || current === "decider") && (
-        <div className={styles.decider} data-current={current === "decider" || undefined} aria-current={current === "decider" ? "step" : undefined}>
+        <div
+          className={styles.decider}
+          data-current={current === "decider" || undefined}
+          data-control={(track.last === "decider" && ended !== null && finalWinner?.side) || undefined}
+          data-contested={current === "decider" || undefined}
+          style={splitStyle}
+          aria-current={current === "decider" ? "step" : undefined}
+        >
           <span className="visually-hidden">Decider at 7-7: </span>
           <span className={styles.frame}>
             <RoomImage room={String(RUSH_ROOMS.decider.id)} />
@@ -265,6 +283,21 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
 
 
 // Match page wrapper. mapNumber picks one map of a series, where each map is its own Rush match
+// The room play ended in. A match decided in Convoy ended in the room Convoy replaced at 7-7,
+// one step on from the last regular round in the direction that round moved play
+function endedIn(track: RushTrack): number | null {
+  if (typeof track.last === "number") return track.last;
+  return track.last === "decider" ? replacedByDecider(track) : null;
+}
+
+// The room Convoy took the place of at 7-7
+function replacedByDecider(track: RushTrack): number | null {
+  const regular = track.slots.flatMap((sl) => sl.visits.map((v) => ({ v, slot: sl.index }))).sort((x, y) => y.v.round - x.v.round)[0];
+  if (!regular) return null;
+  const step = regular.v.toward === "ct" ? 1 : regular.v.toward === "t" ? -1 : 0;
+  return Math.max(0, Math.min(LAST_SLOT, regular.slot + step));
+}
+
 // Rooms, live state and teams for one map of a Rush match, as the track and the round graph need them
 function rushInputs(m: MatchDetail, mapNumber: number | undefined, sideOf: (i: number) => TeamSide) {
   const [a, b] = m.teams;
@@ -285,9 +318,19 @@ export function MatchRushTrack({ m, rounds, mapNumber, sideOf }: { m: MatchDetai
   return <RushRoomTrack rooms={inputs.rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} />;
 }
 
+// True when the left team (teams[0]) defends the CT castle, so every room row draws CT castle first
+export function rushFlip(m: MatchDetail): boolean {
+  const [a, b] = m.teams;
+  if (!a || !b) return false;
+  const stub = (play: RushSide | undefined): RushTrackTeam => ({ name: "", label: "", side: "own", play });
+  return playOf([stub(a.side), stub(b.side)], 0) === "ct";
+}
+
 // Where play was in each round, as a slot from 0 (T castle) to 6 (CT castle), for the round graph.
+// The graph puts the left team's castle on top
 // pending is the slot of the round being played, which has no result yet
-export type RushRoundPath = { slotOf: ReadonlyMap<number, number>; pending: number | null; slots: number };
+// flip puts the CT castle on top, when the left team defends it, so that team's push reads downward
+export type RushRoundPath = { slotOf: ReadonlyMap<number, number>; pending: number | null; slots: number; flip: boolean };
 
 export function rushRoundPath(m: MatchDetail, rounds: MatchRound[], mapNumber: number | undefined, sideOf: (i: number) => TeamSide): RushRoundPath | null {
   const inputs = rushInputs(m, mapNumber, sideOf);
@@ -298,5 +341,6 @@ export function rushRoundPath(m: MatchDetail, rounds: MatchRound[], mapNumber: n
   // Convoy at 7-7 replaces the room in play, drawn in the middle
   for (const v of track.decider) slotOf.set(v.round, START_SLOT);
   const now = inputs.live && !track.over ? track.current : null;
-  return { slotOf, pending: now === null ? null : now === "decider" ? START_SLOT : now, slots: RUSH_RULES.roomSlots };
+  const flip = playOf(inputs.teams, 0) === "ct";
+  return { slotOf, pending: now === null ? null : now === "decider" ? START_SLOT : now, slots: RUSH_RULES.roomSlots, flip };
 }

@@ -19,7 +19,7 @@ import { DemoActions } from "@/components/match/DemoActions";
 import { MatchSummary } from "@/components/match/MatchSummary";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
-import { MatchRushTrack, rushRoundPath } from "@/components/match/RushRoomTrack";
+import { MatchRushTrack, rushFlip, rushRoundPath } from "@/components/match/RushRoomTrack";
 import { MatchReportOutcomes } from "@/components/review/MatchReportOutcomes";
 import { ShareButton } from "@/components/match/ShareButton";
 import { RematchButton } from "@/components/challenges/RematchButton";
@@ -167,7 +167,7 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
       {isRushMode(m.mode) && stage !== "veto" && (
-        <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} />
+        <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} flip={rushFlip(m)} />
       )}
 
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
@@ -221,7 +221,7 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
         />
       ) : null;
     case "veto":
-      return <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} />;
+      return <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} flip={isRushMode(m.mode) && rushFlip(m)} />;
     case "allocating":
       return participant ? <AllocatingPanel mode={m.mode} step={room.status === "starting" ? "starting" : "allocating"} veto={room.veto} viewer={me} /> : null;
     case "connect":

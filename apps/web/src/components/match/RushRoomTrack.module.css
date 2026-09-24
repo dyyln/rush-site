@@ -227,10 +227,21 @@
 }
 
 .decider {
-  align-self: flex-start;
-  min-width: min(100%, 200px);
+  align-self: center;
+  margin-inline: auto;
+  width: min(100%, 220px);
   border-style: dashed;
   border-color: var(--color-border-strong);
+}
+.decider[data-control] {
+  border-style: solid;
+  border-width: 2px;
+}
+.decider[data-control="own"] {
+  border-color: var(--team-own);
+}
+.decider[data-control="enemy"] {
+  border-color: var(--team-enemy);
 }
 
 @keyframes pulse {
@@ -283,8 +294,8 @@
   }
 }
 
-/* Live control. Rooms behind play take the colour of the team holding them. The room in play
-   is split between the two, T side first (top on phones, left from 640px), and lifts slightly */
+/* Control. Rooms behind play take the colour of the team holding them. While live the room in play
+   is split between the two, left team's side first (top on phones, left from 640px), and lifts slightly */
 .track .slot[data-control] {
   border-width: 2px;
 }
@@ -294,16 +305,18 @@
 .track .slot[data-control="enemy"] {
   border-color: var(--team-enemy);
 }
-.track .slot[data-contested] {
+.track .slot[data-contested],
+.decider[data-contested] {
   --split-dir: 180deg;
   border-width: 3px;
   border-style: solid;
-  border-image: linear-gradient(var(--split-dir), var(--split-t) 50%, var(--split-ct) 50%) 1;
+  border-image: linear-gradient(var(--split-dir), var(--split-a) 50%, var(--split-b) 50%) 1;
   background: linear-gradient(rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.07)), var(--color-surface-2);
   box-shadow: none;
 }
 @media (min-width: 640px) {
-  .track .slot[data-contested] {
+  .track .slot[data-contested],
+  .decider[data-contested] {
     --split-dir: 90deg;
   }
 }
