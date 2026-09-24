@@ -155,6 +155,22 @@ public sealed class MatchMessages
 
     public static string DisconnectedCenter(string name, TimeSpan left) => $"{name} disconnected. {Clock(left)} to return";
 
+    // One entry of the live countdown. Joined is false for a player who has not been in yet.
+    public sealed record Missing(string Name, TimeSpan Left, bool Joined);
+
+    // Center screen countdown for the players still missing, soonest forfeit first. At most three names.
+    public static string MissingCenter(IReadOnlyList<Missing> missing)
+    {
+        if (missing.Count == 1)
+        {
+            var m = missing[0];
+            return m.Joined ? $"{m.Name} left. {Clock(m.Left)} to return or forfeit" : $"Waiting for {m.Name} to join. {Clock(m.Left)}";
+        }
+        var shown = missing.OrderBy(m => m.Left).Take(3).Select(m => $"{m.Name} {Clock(m.Left)}");
+        var more = missing.Count > 3 ? $" and {missing.Count - 3} more" : "";
+        return $"Waiting for {string.Join(", ", shown)}{more}";
+    }
+
     public string StillAway(string name, TimeSpan left) =>
         Line($"{Hi(name)} has {Warn(Clock(left))} left to return or they forfeit.");
 

@@ -25,6 +25,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<string> MatchConfigPath = new(MatchConfigLoader.ConVarName, "Path to match.json. Relative paths resolve against game/csgo.", "");
     public FakeConVar<int> ConnectGrace = new("rushsite_connect_grace", "Seconds a player may take to first connect before the match is abandoned.", 300);
     public FakeConVar<int> DisconnectGrace = new("rushsite_disconnect_grace", "Seconds a player may stay disconnected before the match is abandoned.", 180);
+    public FakeConVar<bool> MissingCountdown = new("rushsite_missing_countdown", "Show a center screen countdown every second while a match player is missing.", true);
     public FakeConVar<int> StartCountdown = new("rushsite_start_countdown", "Seconds of countdown once every player is in and on their side. Then warmup ends.", 10);
     public FakeConVar<float> AimSpawnImmunity = new("rushsite_aim_spawn_immunity", "Aim modes. Seconds of spawn immunity, sets mp_respawn_immunitytime.", 2f);
     public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout into empty weapon slots on spawn.", true);
@@ -166,6 +167,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
         {
             ConnectGrace = TimeSpan.FromSeconds(ConnectGrace.Value),
             DisconnectGrace = TimeSpan.FromSeconds(DisconnectGrace.Value),
+            MissingCountdown = MissingCountdown.Value,
             StartCountdown = TimeSpan.FromSeconds(Math.Max(0, StartCountdown.Value)),
             AimSpawnImmunity = TimeSpan.FromSeconds(Math.Max(0, AimSpawnImmunity.Value)),
             AimLoadout = AimLoadout.Value,

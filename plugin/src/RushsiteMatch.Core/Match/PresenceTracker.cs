@@ -23,6 +23,9 @@ public sealed class PresenceTracker
 
     public IReadOnlyList<string> Missing => _players.Where(p => !_connected.Contains(p)).ToList();
 
+    // True once the player has been in. Such a player gets the disconnect grace, others the connect grace.
+    public bool HasEverConnected(string steamId) => _everConnected.Contains(steamId);
+
     // Returns true when this is a change.
     public bool Connect(string steamId)
     {

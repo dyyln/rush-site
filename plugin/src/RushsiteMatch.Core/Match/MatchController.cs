@@ -580,6 +580,25 @@ public sealed class MatchController
         }
     }
 
+    // Live countdown on every screen while a match player is missing, on the same clocks CheckAbandon uses.
+    // Players on the server who are waiting for Steam are not missing, so they are left out.
+    private void ShowMissingCountdown(DateTimeOffset now)
+    {
+        if (!_settings.MissingCountdown || _mapLoadingSince is not null) return;
+        var onServer = OnServerNotCounted();
+        var missing = new List<MatchMessages.Missing>();
+        foreach (var id in _presence.Missing)
+        {
+            if (onServer.Contains(id) || _presence.MissingSince(id) is not DateTimeOffset since) continue;
+            var joined = _presence.HasEverConnected(id);
+            var left = (joined ? _settings.DisconnectGrace : _settings.ConnectGrace) - (now - since);
+            // A player who was never on the server has no name yet, so the team stands in for it.
+            var name = _names.TryGetValue(id, out var n) ? n : $"a player from {_msg.TeamLabel(_cfg.TeamOf(id) ?? "")}";
+            if (left > TimeSpan.Zero) missing.Add(new MatchMessages.Missing(name, left, joined));
+        }
+        if (missing.Count > 0) _game.PrintCenterToAll(MatchMessages.MissingCenter(missing));
+    }
+
     public void OnPlayerTeam(string steamId, Side side)
     {
         if (!_cfg.IsAllowed(steamId)) return;
@@ -1013,6 +1032,7 @@ public sealed class MatchController
                 SyncConnectedPlayers();
                 if (CheckAbandon(now)) return;
                 AnnounceAway(now);
+                ShowMissingCountdown(now);
                 if (Phase == MatchPhase.Warmup && IsRush) TickRushWarmup(now);
                 if (IsRush && Phase is MatchPhase.Warmup or MatchPhase.Live) TickRushRoomsReply(now);
                 if (Phase == MatchPhase.Warmup && ManagesMatch) TickAimWarmup(now);
