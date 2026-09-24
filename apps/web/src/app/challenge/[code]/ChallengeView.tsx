@@ -1,33 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CHALLENGE_TTL_SEC, type Challenge, type ChallengePlayer, type ChallengeStatus } from "@rushsite/shared";
+import { type Challenge, type ChallengeStatus } from "@rushsite/shared";
 import { challengeError, goToMatch, useChallengeUpdates } from "@/components/challenges/useChallenges";
-import styles from "@/components/challenges/challenges.module.css";
-import { Avatar } from "@/components/ui/Avatar";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import shared from "@/components/challenges/challenges.module.css";
+import { DockButton, DockCountdown, DockLink, DockTimer } from "@/components/layout/Dock";
+import { useDockAction, type DockAction } from "@/components/layout/dockStore";
+import { BannerChip, BannerPerson, BannerSeat, BannerVs, InviteBanner } from "@/components/party/InviteBanner";
+import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Card } from "@/components/ui/Card";
-import { SignInLink } from "@/components/ui/SignInLink";
-import { Timer } from "@/components/ui/Timer";
-import { ApiError, api } from "@/lib/api";
-import { MODE_COPY, teamSize } from "@/lib/modes";
+import { ApiError, api, steamLoginUrl } from "@/lib/api";
+import { MODE_ART, MODE_COPY, teamSize } from "@/lib/modes";
 import { useSession } from "@/lib/session";
+import styles from "./challenge.module.css";
 
-const STATUS: Record<ChallengeStatus, { label: string; tone: BadgeTone }> = {
+const STATUS: Record<ChallengeStatus, { label: string; tone?: "accent" | "win" | "loss" }> = {
   open: { label: "Open", tone: "accent" },
   accepted: { label: "Accepted", tone: "win" },
   declined: { label: "Declined", tone: "loss" },
-  expired: { label: "Expired", tone: "neutral" },
-  cancelled: { label: "Withdrawn", tone: "neutral" },
+  expired: { label: "Expired" },
+  cancelled: { label: "Withdrawn" },
 };
 
+const toPlay = (
+  <DockLink href="/play" tone="quiet">
+    Go to Play
+  </DockLink>
+);
+
+// A challenge link. The banner shows who plays whom, the dock holds Accept or the wait
 export function ChallengeView({ code }: { code: string }) {
   const { user, loading } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [loadError, setLoadError] = useState<"not_found" | "failed" | null>(null);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
@@ -54,48 +62,12 @@ export function ChallengeView({ code }: { code: string }) {
     if (c.status === "accepted") goToMatch(router.push);
   }, !!user);
 
-  if (loadError) {
-    return (
-      <div className="container page">
-        <header className="page-header">
-          <h1>{loadError === "not_found" ? "Challenge not found" : "Could not load the challenge"}</h1>
-        </header>
-        <Card tone="raised">
-          <p className="muted">{loadError === "not_found" ? "The link is wrong or the challenge was removed." : "Try again in a moment."}</p>
-          <div className={styles.actions}>
-            <ButtonLink href="/play" variant="secondary">
-              Go to Play
-            </ButtonLink>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!challenge) {
-    return (
-      <div className="container page" aria-busy="true">
-        <header className="page-header">
-          <h1>Challenge</h1>
-        </header>
-        <p className="muted">Loading challenge</p>
-      </div>
-    );
-  }
-
-  const c = challenge;
-  const me = user?.steamId;
-  const isCreator = me === c.createdBy.steamId;
-  const canAnswer = !!me && !isCreator && (!c.target || c.target.steamId === me);
-  const size = teamSize(c.mode);
-  const open = c.status === "open";
-  const kind = c.rematchOfMatchId ? "Rematch" : "Challenge";
-
   async function act(which: "accept" | "decline") {
+    if (!challenge) return;
     setBusy(which);
     setError(null);
     try {
-      const next = which === "accept" ? await api.challenges.accept(c.code) : await api.challenges.decline(c.code);
+      const next = which === "accept" ? await api.challenges.accept(challenge.code) : await api.challenges.decline(challenge.code);
       setChallenge(next);
       setBusy(null);
       if (next.status === "accepted") goToMatch(router.push);
@@ -105,118 +77,167 @@ export function ChallengeView({ code }: { code: string }) {
     }
   }
 
+  const c = challenge;
+  const me = user?.steamId;
+  const isCreator = !!c && me === c.createdBy.steamId;
+  const canAnswer = !!c && !!me && !isCreator && (!c.target || c.target.steamId === me);
+  const open = c?.status === "open";
+  const kind = c?.rematchOfMatchId ? "Rematch" : "Challenge";
+  const expires = c ? Date.parse(c.expiresAt) : 0;
+
+  useDockAction(dockFor());
+
+  function dockFor(): DockAction {
+    if (loadError) return { label: "Challenge", value: loadError === "not_found" ? "Not found" : "Could not load", action: toPlay };
+    if (!c) return { label: "Challenge", value: "Loading", action: null };
+    const left = (
+      <>
+        <DockCountdown until={expires} /> left
+      </>
+    );
+    if (c.status === "accepted") {
+      return {
+        label: `${kind} accepted`,
+        value: "Match starting",
+        action: c.matchId ? (
+          <DockLink href={`/matches/${c.matchId}`} tone="win">
+            Open match
+          </DockLink>
+        ) : null,
+      };
+    }
+    if (!open) return { label: `${kind} ${STATUS[c.status].label.toLowerCase()}`, value: MODE_COPY[c.mode].label, action: toPlay };
+    if (loading) return { label: kind, value: left, action: null };
+    if (!user) {
+      return {
+        label: `${kind} · ${MODE_COPY[c.mode].format}`,
+        value: left,
+        action: (
+          <DockLink href={steamLoginUrl(pathname)} external>
+            Sign in to answer
+          </DockLink>
+        ),
+      };
+    }
+    if (isCreator) {
+      return {
+        label: "Waiting for opponent",
+        value: c.target ? c.target.displayName : "Anyone with the link",
+        action: <DockTimer until={expires} label="to accept" />,
+      };
+    }
+    if (canAnswer) {
+      return {
+        label: `${kind} · ${MODE_COPY[c.mode].format}`,
+        value: left,
+        action: (
+          <DockButton onClick={() => act("accept")} disabled={busy !== null}>
+            {busy === "accept" ? (
+              "Accepting"
+            ) : (
+              <span>
+                Accept<span className={styles.wide}> {kind.toLowerCase()}</span>
+              </span>
+            )}
+          </DockButton>
+        ),
+      };
+    }
+    return { label: kind, value: `For ${c.target?.displayName ?? "someone else"}`, action: toPlay };
+  }
+
+  if (loadError || !c) {
+    return (
+      <div className={`container ${styles.page}`} aria-busy={!loadError}>
+        <InviteBanner
+          art={MODE_ART.rush3v3}
+          kicker="Challenge"
+          title={loadError === "not_found" ? "Challenge not found" : loadError ? "Could not load" : "Challenge"}
+        />
+        {loadError && (
+          <Card>
+            <p className="muted">{loadError === "not_found" ? "The link is wrong or the challenge was removed." : "Try again in a moment."}</p>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  const size = teamSize(c.mode);
+  const targetIsMe = c.target?.steamId === me;
+  const title = !open ? `${kind} ${STATUS[c.status].label.toLowerCase()}` : c.target ? (targetIsMe ? "You are challenged" : `${kind} sent`) : "Open challenge";
+
   return (
-    <div className="container page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">{kind}</p>
-          <h1>
-            {c.createdBy.displayName} {c.target ? `challenges ${c.target.steamId === me ? "you" : c.target.displayName}` : "is looking for an opponent"}
-          </h1>
-        </div>
-      </header>
+    <div className={`container ${styles.page}`}>
+      <InviteBanner
+        art={MODE_ART[c.mode]}
+        kicker={kind}
+        title={title}
+        chips={
+          <>
+            <BannerChip tone={STATUS[c.status].tone}>{STATUS[c.status].label}</BannerChip>
+            <BannerChip>{MODE_COPY[c.mode].label}</BannerChip>
+            <BannerChip>{size > 1 ? `Parties of ${size}` : "Solo"}</BannerChip>
+            <BannerChip>Unrated</BannerChip>
+          </>
+        }
+      >
+        <BannerPerson person={c.createdBy} role={c.createdBy.steamId === me ? "You" : "Challenger"} />
+        <BannerVs />
+        {c.target ? <BannerPerson person={c.target} role={targetIsMe ? "You" : "Opponent"} /> : <BannerSeat label="Anyone with the link" role="Open seat" />}
+      </InviteBanner>
 
-      <Card tone={open ? "accent" : "raised"}>
-        <div className="stack">
-          <div className={styles.meta}>
-            <Badge tone={STATUS[c.status].tone}>{STATUS[c.status].label}</Badge>
-            <span className="eyebrow">{MODE_COPY[c.mode].label}</span>
-            <Badge tone="info">Unrated</Badge>
-            <span className="muted">
-              {MODE_COPY[c.mode].players}, {MODE_COPY[c.mode].blurb}
-            </span>
-          </div>
+      <Card className={styles.body}>
+        <p className="muted">{MODE_COPY[c.mode].blurb}.</p>
 
-          <div className={styles.versus}>
-            <PlayerChip p={c.createdBy} />
-            <span className={styles.vs} aria-hidden="true">
-              vs
-            </span>
-            {c.target ? <PlayerChip p={c.target} /> : <span className="muted">Anyone with the link</span>}
-          </div>
+        {size > 1 && open && (
+          <p className="muted">
+            {MODE_COPY[c.mode].format} is played by whole parties. Each side needs a party of {size}, and the party leader answers.
+            {c.rematchOfMatchId ? " A rematch needs the same players as the original match." : ""}
+          </p>
+        )}
 
-          {open && (
-            <Timer until={Date.parse(c.expiresAt)} totalSec={CHALLENGE_TTL_SEC} label="Time left to accept" />
-          )}
+        {c.status === "accepted" && c.matchId && (
+          <p>
+            Match starting. <Link href={`/matches/${c.matchId}`}>Open the match room</Link> for the veto and connect info.
+          </p>
+        )}
 
-          {size > 1 && open && (
-            <p className="muted">
-              {MODE_COPY[c.mode].format} is played by whole parties. Each side needs a party of {size}, and the party leader answers.
-              {c.rematchOfMatchId ? " A rematch needs the same players as the original match." : ""}
+        {c.rematchOfMatchId && (
+          <p className="muted">
+            Rematch of <Link href={`/matches/${c.rematchOfMatchId}`}>this match</Link>.
+          </p>
+        )}
+
+        {error && (
+          <p role="alert" className={shared.error}>
+            {error}
+          </p>
+        )}
+
+        {open && isCreator && (
+          <>
+            <p className="muted" aria-live="polite">
+              Waiting for {c.target ? c.target.displayName : "someone to accept"}. Keep this page open, it moves on to the veto when they accept.
             </p>
-          )}
-
-          {c.status === "accepted" && c.matchId && (
-            <p>
-              Match starting. <Link href={`/matches/${c.matchId}`}>Open the match room</Link> for the veto and connect info.
-            </p>
-          )}
-
-          {c.rematchOfMatchId && (
-            <p className="muted">
-              Rematch of <Link href={`/matches/${c.rematchOfMatchId}`}>this match</Link>.
-            </p>
-          )}
-
-          {error && (
-            <p role="alert" className={styles.error}>
-              {error}
-            </p>
-          )}
-
-          {open && !loading && !user && <SignInLink size="lg">Sign in to answer</SignInLink>}
-
-          {open && canAnswer && (
-            <div className={styles.actions}>
-              <Button size="lg" onClick={() => act("accept")} loading={busy === "accept"} disabled={busy !== null}>
-                Accept
-              </Button>
-              {c.target && (
-                <Button size="lg" variant="ghost" onClick={() => act("decline")} loading={busy === "decline"} disabled={busy !== null}>
-                  Decline
-                </Button>
-              )}
+            <label className="visually-hidden" htmlFor="challenge-link">
+              Challenge link
+            </label>
+            <div className={shared.linkRow}>
+              <input id="challenge-link" className={`${shared.linkInput} mono`} value={url} readOnly onFocus={(e) => e.currentTarget.select()} />
+              <CopyButton text={url}>Copy link</CopyButton>
             </div>
-          )}
+          </>
+        )}
 
-          {open && isCreator && (
-            <>
-              <p className="muted" aria-live="polite">
-                Waiting for {c.target ? c.target.displayName : "someone to accept"}. Keep this page open, it moves on to the veto when they accept.
-              </p>
-              <label className="visually-hidden" htmlFor="challenge-link">
-                Challenge link
-              </label>
-              <div className={styles.linkRow}>
-                <input id="challenge-link" className={`${styles.linkInput} mono`} value={url} readOnly onFocus={(e) => e.currentTarget.select()} />
-                <CopyButton text={url}>Copy link</CopyButton>
-              </div>
-              <div className={styles.actions}>
-                <Button variant="ghost" onClick={() => act("decline")} loading={busy === "decline"}>
-                  Withdraw
-                </Button>
-              </div>
-            </>
-          )}
-
-          {!open && c.status !== "accepted" && (
-            <div className={styles.actions}>
-              <ButtonLink href="/play" variant="secondary">
-                Go to Play
-              </ButtonLink>
-            </div>
-          )}
-        </div>
+        {open && (isCreator || (canAnswer && c.target)) && (
+          <div className={shared.actions}>
+            <Button variant="ghost" onClick={() => act("decline")} loading={busy === "decline"} disabled={busy !== null}>
+              {isCreator ? "Withdraw" : "Decline"}
+            </Button>
+          </div>
+        )}
       </Card>
     </div>
-  );
-}
-
-function PlayerChip({ p }: { p: ChallengePlayer }) {
-  return (
-    <Link href={`/profile/${p.steamId}`} className={styles.player}>
-      <Avatar name={p.displayName} src={p.avatarUrl} />
-      <span className={styles.playerName}>{p.displayName}</span>
-    </Link>
   );
 }
