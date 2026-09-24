@@ -1,0 +1,203 @@
+/* Rush series room pick. Shares the board, steps and grid with Rush.module.css */
+
+.flip {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+/* One track per map, stacked. The map being decided is outlined, finished ones step back */
+.maps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+}
+.mapCurrent {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.mapDone {
+  opacity: 0.8;
+}
+/* Left team, map number, right team. The number sits in the middle column */
+.mapHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.mapName {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+.mapTeam {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  grid-row: 1;
+}
+.mapTeam[data-end="left"] {
+  grid-column: 1;
+}
+.mapTeam[data-end="right"] {
+  grid-column: 3;
+  justify-self: end;
+  flex-direction: row-reverse;
+}
+.mapTeam[data-side="own"] {
+  color: var(--team-own);
+}
+.mapTeam[data-side="enemy"] {
+  color: var(--team-enemy);
+}
+.mapTeamName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* CT or T once chosen */
+.play {
+  padding: 0 var(--space-1);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  font-weight: 600;
+}
+.play[data-open] {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+
+/* Side choice: two big buttons */
+.sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-height: 96px;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  transition: border-color var(--duration-fast) var(--ease), background-color var(--duration-normal) var(--ease);
+}
+.side::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 2px;
+  background: var(--color-border-strong);
+}
+.side:disabled {
+  cursor: default;
+}
+.sideActive {
+  cursor: pointer;
+}
+.sideActive:hover,
+.sideActive:focus-visible {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+.sideVoted {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--color-accent);
+}
+.sideVoted::before {
+  background: var(--color-accent);
+}
+.sideName {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+.sideNote {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.voteRow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.dot {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-bg);
+}
+.dotOwn {
+  background: var(--team-own);
+}
+.dotEnemy {
+  background: var(--team-enemy);
+}
+.dotMe {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+  margin: 0 3px;
+}
+.yourVote {
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
+/* Twelve mid rooms in three rows, two on wide screens */
+@media (min-width: 600px) {
+  ul.grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+}
+@media (min-width: 1000px) {
+  ul.grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}

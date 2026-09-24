@@ -150,6 +150,50 @@
   }
 }
 
+/* One row of seven at every width. Names show from 600px, below that the image carries it */
+.layoutCompact {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.layoutCompact .slot {
+  grid-template-columns: 1fr;
+  align-items: start;
+  padding: 0;
+  min-height: 0;
+  border-left-width: 1px;
+  border-left-color: var(--color-border);
+  border-top: 3px solid var(--color-border-strong);
+}
+.layoutCompact .slot[data-side="own"] {
+  border-left-color: var(--color-border);
+  border-top-color: var(--team-own);
+}
+.layoutCompact .slot[data-side="enemy"] {
+  border-left-color: var(--color-border);
+  border-top-color: var(--team-enemy);
+}
+.layoutCompact .slot[data-source="leftover"] {
+  border-left-color: var(--color-border);
+  border-top-color: var(--color-text-muted);
+}
+/* Shorter tiles so three maps stack without taking the page */
+.layoutCompact .slotFrame > .image,
+.layoutCompact .slotFrame > .placeholder,
+.layoutCompact .slotEmpty {
+  aspect-ratio: 2 / 1;
+}
+.layoutCompact .slotNext {
+  border-color: var(--color-accent);
+}
+.layoutCompact .slotName {
+  font-size: var(--text-xs);
+  padding: 1px var(--space-1);
+}
+@media (max-width: 599px) {
+  .layoutCompact .slotName {
+    display: none;
+  }
+}
+
 /* Phase list */
 .phases {
   list-style: none;

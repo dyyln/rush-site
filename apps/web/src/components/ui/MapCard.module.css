@@ -103,6 +103,11 @@
   color: var(--color-accent-hover);
   transform: translate(-50%, -50%);
 }
+.stamp_taken {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  transform: translate(-50%, -50%);
+}
 @media (prefers-reduced-motion: no-preference) {
   .stamp {
     animation: stamp-in var(--duration-normal) var(--ease) both;
@@ -129,6 +134,9 @@
 }
 .label_banned {
   color: var(--color-loss);
+}
+.label_taken {
+  color: var(--color-text-muted);
 }
 .label_picked,
 .label_decider {
@@ -286,6 +294,17 @@
   color: var(--color-text-muted);
   text-decoration: line-through;
   text-decoration-color: var(--color-loss);
+}
+/* Played on an earlier map. Greyed like a ban, but no strike and no red */
+.taken {
+  background: var(--color-surface-1);
+}
+.taken .thumb {
+  filter: grayscale(1) brightness(0.55);
+  opacity: 0.7;
+}
+.taken .name {
+  color: var(--color-text-muted);
 }
 .picked,
 .decider {

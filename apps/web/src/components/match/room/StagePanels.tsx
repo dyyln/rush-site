@@ -11,6 +11,7 @@ import { VetoSummary } from "@/components/play/VetoSummary";
 import { AcceptOverlay } from "./AcceptOverlay";
 import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
 import { RoomVetoBoard } from "@/components/rush/RoomVetoBoard";
+import { SeriesRoomVetoBoard } from "@/components/rush/SeriesRoomVetoBoard";
 import { cancelCopy } from "@/lib/errors";
 import { mapName, modeLabel } from "@/lib/modes";
 import styles from "./Room.module.css";
@@ -68,7 +69,7 @@ export function VetoPanel({
   viewer: string | null;
   names: Record<string, string>;
   onVote: (mapId: string) => void;
-  // Rush: left team defends the CT castle
+  // Rush: left team defends the CT castle. The series room pick works it out per map
   flip?: boolean;
 }) {
   if (!veto || !viewer) {
@@ -80,7 +81,9 @@ export function VetoPanel({
   }
   return (
     <Card tone="accent">
-      {veto.kind === "rooms" ? (
+      {veto.kind === "series-rooms" ? (
+        <SeriesRoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      ) : veto.kind === "rooms" ? (
         <RoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} flip={flip} />
       ) : (
         <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
@@ -103,7 +106,7 @@ export function AllocatingPanel({
   return (
     <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={modeLabel(mode)}>
       <div className="stack">
-        {veto?.state.done && viewer && veto.kind !== "rooms" && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
+        {veto?.state.done && viewer && (veto.kind ?? "maps") === "maps" && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
         <ConnectSteps step={step} />
       </div>
     </Card>

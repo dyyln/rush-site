@@ -2,7 +2,8 @@ import { MapThumb } from "@/components/play/MapThumb";
 import { cx } from "./cx";
 import styles from "./MapCard.module.css";
 
-export type MapCardState = "available" | "banned" | "picked" | "decider";
+// taken is a room already played on an earlier map of a series. Out of the pool, but not banned
+export type MapCardState = "available" | "banned" | "picked" | "decider" | "taken";
 
 // One member of the acting team who voted for this map, shown as a dot
 export type MapCardVoter = {
@@ -45,6 +46,7 @@ const STAMP: Record<Exclude<MapCardState, "available">, string> = {
   banned: "Banned",
   picked: "Picked",
   decider: "Decider",
+  taken: "Taken",
 };
 
 function initial(name: string): string {

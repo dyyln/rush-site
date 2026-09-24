@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
-import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RoomSlot, type RushRoom } from "@rushsite/shared";
+import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type MatchMap, type RoomSlot, type RushRoom } from "@rushsite/shared";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
@@ -322,14 +322,20 @@ function replacedByDecider(): number {
   return START_SLOT;
 }
 
+// A series room pick sets the sides per map, and map 2 swaps them. Otherwise the team keeps its side
+function playOn(map: MatchMap | undefined, team: MatchDetail["teams"][number]): RushSide | undefined {
+  if (map?.ctTeam) return map.ctTeam === team.name ? "ct" : "t";
+  return team.side;
+}
+
 // Rooms, live state and teams for one map of a Rush match, as the track and the round graph need them
 function rushInputs(m: MatchDetail, mapNumber: number | undefined, sideOf: (i: number) => TeamSide) {
   const [a, b] = m.teams;
   if (!a || !b) return null;
   const map = mapNumber === undefined ? undefined : m.maps?.find((x) => x.mapNumber === mapNumber);
   const teams: readonly [RushTrackTeam, RushTrackTeam] = [
-    { name: a.name, label: a.displayName ?? a.name, side: sideOf(0), play: a.side },
-    { name: b.name, label: b.displayName ?? b.name, side: sideOf(1), play: b.side },
+    { name: a.name, label: a.displayName ?? a.name, side: sideOf(0), play: playOn(map, a) },
+    { name: b.name, label: b.displayName ?? b.name, side: sideOf(1), play: playOn(map, b) },
   ];
   return { rooms: map ? map.rushRooms : m.rushRooms, live: m.status === "live" && (!map || map.status === "live"), teams };
 }
@@ -360,12 +366,13 @@ export function MatchRushTrack({
   return <RushRoomTrack rooms={rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} picks={shownPicks} bare={bare} />;
 }
 
-// True when the left team (teams[0]) defends the CT castle, so every room row draws CT castle first
-export function rushFlip(m: MatchDetail): boolean {
+// True when the left team (teams[0]) defends the CT castle, so every room row draws CT castle first.
+// In a series pass the map, whose ctTeam can differ from map to map
+export function rushFlip(m: MatchDetail, map?: MatchMap): boolean {
   const [a, b] = m.teams;
   if (!a || !b) return false;
   const stub = (play: RushSide | undefined): RushTrackTeam => ({ name: "", label: "", side: "own", play });
-  return playOf([stub(a.side), stub(b.side)], 0) === "ct";
+  return playOf([stub(playOn(map, a)), stub(playOn(map, b))], 0) === "ct";
 }
 
 // Where play was in each round, as a slot from 0 (T castle) to 6 (CT castle), for the round graph.

@@ -15,12 +15,14 @@ type Props = {
   pendingLabel?: string;
   // Draws CT castle on the left, when the left team defends it, so that team attacks left to right
   flip?: boolean;
+  // Always one row of seven with no how line, for the series room pick where three maps stack
+  compact?: boolean;
 };
 
 // The seven rooms of the Complex from T castle to CT castle
-export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "Open", flip = false }: Props) {
+export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "Open", flip = false, compact = false }: Props) {
   return (
-    <ol className={styles.layout} aria-label={flip ? "Rooms from CT castle to T castle" : "Rooms from T castle to CT castle"}>
+    <ol className={cx(styles.layout, compact && styles.layoutCompact)} aria-label={flip ? "Rooms from CT castle to T castle" : "Rooms from T castle to CT castle"}>
       {(flip ? [...slots].reverse() : slots).map((s) => {
         const side = s.team !== undefined ? sideOf(s.team) : undefined;
         const how = s.source === "castle" ? "Fixed" : s.source === "leftover" ? "Last room left" : s.source === "pick" ? (side === undefined ? "Picked" : side === "own" ? "Your pick" : "Their pick") : pendingLabel;
@@ -39,7 +41,7 @@ export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "
               {s.room && <span className={styles.slotName}>{rushRoomName(s.room)}</span>}
             </span>
             {!s.room && <span className="visually-hidden">{s.slot === nextSlot ? "next pick" : pendingLabel}</span>}
-            {s.room && s.source !== "open" && s.source !== "castle" && <span className={styles.slotHow}>{how}</span>}
+            {!compact && s.room && s.source !== "open" && s.source !== "castle" && <span className={styles.slotHow}>{how}</span>}
           </li>
         );
       })}

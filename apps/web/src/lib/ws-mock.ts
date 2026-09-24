@@ -6,7 +6,12 @@ import {
   CONNECT_GRACE_SEC,
   RUSH_MAP,
   RUSH_ROOM_VETO,
+  RUSH_SERIES_ROOM_VETO,
+  castVote,
+  allVoted,
   createRoomVeto,
+  resolveStep,
+  seriesRushRoomsFromVeto,
   isRushMode,
   stepAvailable,
   type ModeStatsPayload,
@@ -20,7 +25,21 @@ import {
   type VetoState,
 } from "@rushsite/shared";
 import { hasLadderVeto } from "./modes";
-import { MOCK_ME, MOCK_ROOM_MATCH_ID, MOCK_ROOM_SLUG, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockMatchDetail, mockSteamId, mockTournamentDetail, setMockRoomMode } from "./mock";
+import {
+  MOCK_ME,
+  MOCK_ROOM_MATCH_ID,
+  MOCK_ROOM_SLUG,
+  MOCK_SERIES_VETO_ID,
+  MOCK_SERIES_VETO_SLUG,
+  MOCK_TOURNAMENTS,
+  bumpMockBracketVersion,
+  mockMatchDetail,
+  mockSeriesVeto,
+  mockSteamId,
+  mockTournamentDetail,
+  setMockRoomMode,
+  setMockSeriesVeto,
+} from "./mock";
 import { Emitter, type ClientPayload, type ConnectionState, type Realtime } from "./ws-core";
 
 type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]> = Extract<U, { type: T }>["payload"];
@@ -79,6 +98,7 @@ export class MockRealtime extends Emitter implements Realtime {
 
   private subscribe(matchId: string) {
     if (this.matchSubs.has(matchId)) return;
+    if (matchId === MOCK_SERIES_VETO_ID) this.seriesStart();
     let seen = mockMatchDetail(matchId).rounds.length;
     const t = setInterval(() => {
       const m = mockMatchDetail(matchId);
@@ -95,6 +115,10 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 
   private unsubscribe(matchId: string) {
+    if (matchId === MOCK_SERIES_VETO_ID) {
+      this.seriesTimers.forEach(clearTimeout);
+      this.seriesTimers = [];
+    }
     clearInterval(this.matchSubs.get(matchId));
     this.matchSubs.delete(matchId);
   }
@@ -135,7 +159,8 @@ export class MockRealtime extends Emitter implements Realtime {
         this.accept(msg.payload.accept);
         break;
       case "veto_vote":
-        this.vote(MOCK_ME.steamId, msg.payload.mapId);
+        if (msg.payload.matchId === MOCK_SERIES_VETO_ID) this.seriesVote(MOCK_ME.steamId, msg.payload.mapId);
+        else this.vote(MOCK_ME.steamId, msg.payload.mapId);
         break;
       case "subscribe_match":
         this.subscribe(msg.payload.matchId);
@@ -399,6 +424,103 @@ export class MockRealtime extends Emitter implements Realtime {
     v.done = v.stepIndex >= v.steps.length;
     v.maps = v.done ? [...v.available] : [];
     this.pushVeto();
+  }
+
+  // Rush series room pick on its own match, MOCK_SERIES_VETO_ID. Runs like the room veto above: teammates and
+  // opponents vote a moment after each step opens and a step resolves once its team has voted or time runs out.
+  // The state lives in mock.ts so a refetch of the match sees it
+  private seriesTimers: ReturnType<typeof setTimeout>[] = [];
+
+  private seriesLater(ms: number, fn: () => void) {
+    this.seriesTimers.push(setTimeout(fn, ms));
+  }
+
+  private seriesStart() {
+    const { state } = mockSeriesVeto();
+    if (state.done) return;
+    this.seriesPush(true);
+  }
+
+  // fresh opens the step: a new deadline and the bots' votes
+  private seriesPush(fresh: boolean) {
+    const cur = mockSeriesVeto();
+    const v = cur.state;
+    const deadline = v.done ? null : fresh ? Date.now() + STEP_SEC * 1000 : cur.stepDeadline;
+    setMockSeriesVeto(v, deadline);
+    this.emit("veto_state", {
+      matchId: MOCK_SERIES_VETO_ID,
+      slug: MOCK_SERIES_VETO_SLUG,
+      mode: "rush3v3",
+      state: structuredClone(v),
+      stepDeadline: deadline,
+      kind: "series-rooms",
+    });
+    if (v.done) {
+      this.seriesDone(v);
+      return;
+    }
+    if (!fresh) return;
+    this.seriesTimers.forEach(clearTimeout);
+    this.seriesTimers = [];
+    const step = v.steps[v.stepIndex]!;
+    const step0 = v.stepIndex;
+    v.teams[step.team].steamIds
+      .filter((id) => id !== MOCK_ME.steamId)
+      .forEach((id, i) =>
+        this.seriesLater(1500 + i * 800, () => {
+          const now = mockSeriesVeto().state;
+          if (now.stepIndex !== step0 || now.done) return;
+          const avail = stepAvailable(now);
+          this.seriesVote(id, avail[(i + step0) % avail.length]!);
+        }),
+      );
+    this.seriesLater(STEP_SEC * 1000, () => {
+      const now = mockSeriesVeto().state;
+      if (now.stepIndex === step0 && !now.done) this.seriesResolve();
+    });
+  }
+
+  private seriesVote(steamId: string, key: string) {
+    const v = mockSeriesVeto().state;
+    if (v.done) return;
+    const team = v.teams[v.steps[v.stepIndex]!.team];
+    if (!team.steamIds.includes(steamId) || !stepAvailable(v).includes(key)) return;
+    const next = castVote(v, steamId, key);
+    setMockSeriesVeto(next, mockSeriesVeto().stepDeadline);
+    if (allVoted(next)) this.seriesResolve();
+    else this.seriesPush(false);
+  }
+
+  private seriesResolve() {
+    setMockSeriesVeto(resolveStep(mockSeriesVeto().state), null);
+    this.seriesPush(true);
+  }
+
+  // Rooms and sides per map go out with a match update, then the server comes up for map 1
+  private seriesDone(v: VetoState) {
+    const names = v.teams.map((t) => t.id);
+    const maps = seriesRushRoomsFromVeto(v, RUSH_SERIES_ROOM_VETO.format).map((x) => ({
+      mapNumber: x.mapNumber,
+      mapId: RUSH_MAP.id,
+      status: "upcoming" as const,
+      winnerTeam: null,
+      score: Object.fromEntries(names.map((n) => [n, 0])),
+      rushRooms: x.rushRooms,
+      ctTeam: names[x.ctTeam]!,
+    }));
+    this.seriesLater(600, () => this.emit("match_update", { matchId: MOCK_SERIES_VETO_ID, status: "allocating", teams: [], maps }));
+    this.seriesLater(2500, () =>
+      this.emit("server_ready", {
+        matchId: MOCK_SERIES_VETO_ID,
+        slug: MOCK_SERIES_VETO_SLUG,
+        ip: "203.0.113.24",
+        port: 27018,
+        password: "mock-2c9d",
+        connect: "connect 203.0.113.24:27018; password mock-2c9d",
+        connectDeadline: Date.now() + CONNECT_GRACE_SEC * 1000,
+        mapId: RUSH_MAP.id,
+      }),
+    );
   }
 
   private ready(mode: Mode, mapId: string) {

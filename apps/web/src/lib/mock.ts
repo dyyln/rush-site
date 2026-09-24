@@ -1,5 +1,20 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type MatchMap, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import {
+  AIM_MAPS,
+  isRushMode,
+  MODES,
+  RANKED_MODES,
+  RUSH_MAP,
+  RUSH_ROOMS,
+  RUSH_SERIES_ROOM_VETO,
+  createSeriesRoomVeto,
+  seriesRushRoomsFromVeto,
+  tierForRating,
+  type MatchMap,
+  type Mode,
+  type PartyUpdatePayload,
+  type VetoState,
+} from "@rushsite/shared";
 import { teamSize } from "./modes";
 import { MOCK_TRUST } from "./trust";
 import type {
@@ -537,6 +552,9 @@ export const MOCK_LIVE_RUSH_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000d4";
 // Bo3 cup finals on one server: a finished aim final that goes to three maps, and a live Rush final on map 2
 export const MOCK_SERIES_AIM_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000e5";
 export const MOCK_SERIES_RUSH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000f6";
+// Rush Bo3 cup final in the series room pick before map 1. The mock socket runs the veto, see ws-mock.ts
+export const MOCK_SERIES_VETO_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a7";
+export const MOCK_SERIES_VETO_SLUG = "steady-violet-lynx";
 // Finished with the viewer playing and no demo uploaded
 export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
 
@@ -547,9 +565,12 @@ export const MOCK_MATCH_HINTS = new Map<string, { mode: Mode; mapId: string }>()
 const LIVE_START = Date.now();
 const LIVE_START_ROUNDS = 9;
 
+// Rooms and the team playing CT for one Rush map. Left out, the rooms are drawn from the seed and team 0 plays CT
+type RushPlan = { rooms: number[]; ct: 0 | 1 };
+
 // Plays out a whole match from a seed. Aim is first to 13, Rush follows the rush_001 script
-function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[]; rooms?: number[] } {
-  if (isRushMode(mode)) return playOutRush(seed);
+function playOut(mode: Mode, seed: number, rush?: RushPlan): { winners: number[]; arenas: string[]; rooms?: number[] } {
+  if (isRushMode(mode)) return playOutRush(seed, rush);
   const r = rng(seed);
   const target = 16;
   const score = [0, 0];
@@ -563,13 +584,14 @@ function playOut(mode: Mode, seed: number): { winners: number[]; arenas: string[
   return { winners, arenas: [] };
 }
 
-// Team 0 plays CT and team 1 T, the match.json default. A T win moves play one room toward the CT castle.
-// Ends on a win in the enemy castle or 8 wins, with Convoy at 7-7
-function playOutRush(seed: number): { winners: number[]; arenas: string[]; rooms: number[] } {
+// Team 0 plays CT and team 1 T unless the plan says otherwise, the match.json default. A T win moves play one
+// room toward the CT castle. Ends on a win in the enemy castle or 8 wins, with Convoy at 7-7
+function playOutRush(seed: number, plan?: RushPlan): { winners: number[]; arenas: string[]; rooms: number[] } {
   const r = rng(seed);
   const mids = [...RUSH_ROOMS.midRooms].sort(() => r() - 0.5).slice(0, 4).map((x) => x.id);
   const start = RUSH_ROOMS.startRooms[Math.floor(r() * RUSH_ROOMS.startRooms.length)]!.id;
-  const rooms = [RUSH_ROOMS.castles.t.id, mids[0]!, mids[1]!, start, mids[2]!, mids[3]!, RUSH_ROOMS.castles.ct.id];
+  const rooms = plan?.rooms ?? [RUSH_ROOMS.castles.t.id, mids[0]!, mids[1]!, start, mids[2]!, mids[3]!, RUSH_ROOMS.castles.ct.id];
+  const tTeam = plan?.ct === 1 ? 0 : 1;
   const bias = 0.4 + r() * 0.2;
   const score = [0, 0];
   const winners: number[] = [];
@@ -583,7 +605,7 @@ function playOutRush(seed: number): { winners: number[]; arenas: string[]; rooms
     winners.push(w);
     score[w]!++;
     if (decider || score[w]! >= 8) break;
-    pos += w === 1 ? 1 : -1;
+    pos += w === tTeam ? 1 : -1;
     if (pos < 0 || pos > 6) break;
     if (score[0] === 7 && score[1] === 7) decider = true;
   }
@@ -612,8 +634,18 @@ function players(mode: Mode, seed: number, offset: number, rounds: number, meFir
 }
 
 // meOnB puts the mock viewer on the second team to show own and enemy colours
-function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed: number | null, startedAt: number, meOnB = false, demo = true): MatchDetail {
-  const plan = playOut(mode, seed);
+function build(
+  id: string,
+  mode: Mode,
+  mapId: string,
+  seed: number,
+  roundsPlayed: number | null,
+  startedAt: number,
+  meOnB = false,
+  demo = true,
+  rush?: RushPlan,
+): MatchDetail {
+  const plan = playOut(mode, seed, rush);
   const n = roundsPlayed === null ? plan.winners.length : Math.min(roundsPlayed, plan.winners.length);
   const names = mode === "aim1v1" ? [mockUser(1).displayName, mockUser(meOnB ? 0 : 11).displayName] : ["Team A", "Team B"];
   const score: Record<string, number> = { [names[0]!]: 0, [names[1]!]: 0 };
@@ -661,6 +693,8 @@ function buildSeries(
   live: { map: number; rounds: number } | null,
   startedAt: number,
   cup: { id: string; name: string; bracketMatchId: string },
+  // Rush: rooms and sides per map from the series room pick
+  rushPlans?: RushPlan[],
 ): MatchDetail {
   let base = seed;
   const winnerOf = (m: MatchDetail) => ([...m.teams].sort((x, y) => y.score - x.score)[0]!.name);
@@ -677,7 +711,8 @@ function buildSeries(
     const decided = Object.values(wins).some((w) => w >= 2);
     const isLive = live?.map === number;
     const upcoming = decided || (live !== null && number > live.map);
-    const m = build(`${id}-map${number}`, mode, mapIds[i]!, base + i, isLive ? live!.rounds : upcoming ? 0 : null, at);
+    const plan = rushPlans?.[i];
+    const m = build(`${id}-map${number}`, mode, mapIds[i]!, base + i, isLive ? live!.rounds : upcoming ? 0 : null, at, false, true, plan);
     const finishedMap = !upcoming && m.status === "finished";
     if (finishedMap) {
       const w = winnerOf(m);
@@ -691,7 +726,8 @@ function buildSeries(
       winnerTeam: finishedMap ? winnerOf(m) : null,
       score: Object.fromEntries(m.teams.map((t) => [t.name, upcoming ? 0 : t.score])),
       ...(upcoming ? {} : { players: m.teams.flatMap((t) => t.players), demo: finishedMap ? m.demo : undefined }),
-      ...(m.rushRooms && !upcoming ? { rushRooms: m.rushRooms } : {}),
+      // The series room pick sets every map's rooms and sides before map 1
+      ...(plan ? { rushRooms: plan.rooms, ctTeam: m.teams[plan.ct]!.name } : m.rushRooms && !upcoming ? { rushRooms: m.rushRooms } : {}),
     });
     at += (m.rounds.length + 3) * 60_000;
   }
@@ -729,6 +765,19 @@ function buildSeries(
   };
 }
 
+// Rooms and sides for a Rush Bo3 as the series room pick leaves them: every mid room once, three different
+// start rooms, and map 2 swaps the sides of map 1
+function seriesRushPlans(seed: number, firstCt: 0 | 1): RushPlan[] {
+  const r = rng(seed);
+  const mids = [...RUSH_ROOMS.midRooms].sort(() => r() - 0.5).map((x) => x.id);
+  const starts = [...RUSH_ROOMS.startRooms].sort(() => r() - 0.5).map((x) => x.id);
+  const swapped: 0 | 1 = firstCt === 0 ? 1 : 0;
+  return [firstCt, swapped, firstCt].map((ct, i) => ({
+    ct,
+    rooms: [RUSH_ROOMS.castles.t.id, mids[i * 4]!, mids[i * 4 + 1]!, starts[i]!, mids[i * 4 + 2]!, mids[i * 4 + 3]!, RUSH_ROOMS.castles.ct.id],
+  }));
+}
+
 // The match the mock socket runs. The room starts at the accept step and the socket moves it on
 export const MOCK_ROOM_MATCH_ID = "9d4f1c2a-7b3e-4a5d-8c6f-1e2d3c4b5a69";
 export const MOCK_ROOM_SLUG = "brave-amber-falcon";
@@ -764,6 +813,73 @@ function mockRoomDetail(): MatchDetail {
   return { ...base, ...mockMatchExtras(base, 1, { demo: false }) };
 }
 
+// Series room pick state for MOCK_SERIES_VETO_ID. The mock socket votes and resolves steps and writes it back here,
+// so a refetch sees the same veto. Created on first use, reset by a page load
+let seriesVeto: { state: VetoState; stepDeadline: number | null } | null = null;
+
+export function mockSeriesVeto(): { state: VetoState; stepDeadline: number | null } {
+  if (!seriesVeto) {
+    const size = teamSize("rush3v3");
+    const us = [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4))];
+    const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
+    // Team B is the higher seed, so the viewer's team chooses sides on map 1. The flip is fixed so every load
+    // reads the same: the viewer's team wins it and chooses sides on map 3 too
+    const state = createSeriesRoomVeto(
+      [
+        { id: "team_a", steamIds: us },
+        { id: "team_b", steamIds: them },
+      ],
+      RUSH_SERIES_ROOM_VETO.format,
+      1,
+      () => 0.3,
+    );
+    seriesVeto = { state, stepDeadline: Date.now() + 20_000 };
+  }
+  return seriesVeto;
+}
+
+export function setMockSeriesVeto(state: VetoState, stepDeadline: number | null) {
+  seriesVeto = { state, stepDeadline };
+}
+
+function mockSeriesVetoDetail(): MatchDetail {
+  const { state, stepDeadline } = mockSeriesVeto();
+  const player = (steamId: string): MatchPlayer => {
+    const u = mockUserBySteamId(steamId);
+    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1700).id, rating: 1700, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+  };
+  const names = state.teams.map((t) => t.id);
+  // Once the veto is done every map carries its rooms and the team playing CT
+  const picked = state.done ? seriesRushRoomsFromVeto(state, RUSH_SERIES_ROOM_VETO.format) : [];
+  const maps: MatchMap[] = [1, 2, 3].map((n) => {
+    const p = picked.find((x) => x.mapNumber === n);
+    return {
+      mapNumber: n,
+      mapId: RUSH_MAP.id,
+      status: "upcoming",
+      winnerTeam: null,
+      score: Object.fromEntries(names.map((x) => [x, 0])),
+      ...(p ? { rushRooms: p.rushRooms, ctTeam: names[p.ctTeam]! } : {}),
+    };
+  });
+  return {
+    id: MOCK_SERIES_VETO_ID,
+    slug: MOCK_SERIES_VETO_SLUG,
+    mode: "rush3v3",
+    mapId: RUSH_MAP.id,
+    status: state.done ? "allocating" : "veto",
+    driver: null,
+    startedAt: null,
+    endedAt: null,
+    teams: state.teams.map((t) => ({ name: t.id, score: 0, players: t.steamIds.map(player) })),
+    rounds: [],
+    bestOf: 3,
+    maps,
+    tournament: { id: MOCK_TOURNAMENT_IDS[0]!, name: "Daily Rush Cup", bracketMatchId: "final", bestOf: 3, gameNumber: 1 },
+    veto: { state: structuredClone(state), stepDeadline, kind: "series-rooms" },
+  };
+}
+
 export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
   if (id === MOCK_ROOM_MATCH_ID || id === MOCK_ROOM_SLUG) return mockRoomDetail();
   if (id === MOCK_LIVE_MATCH_ID) {
@@ -793,12 +909,19 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
   if (id === MOCK_SERIES_RUSH_ID) {
     // Map 1 done, map 2 live and gaining a round every few seconds like the other live mocks
     const played = 3 + (Math.floor((now - LIVE_START) / MOCK_ROUND_MS) % 12);
-    return buildSeries(id, "rush3v3", [RUSH_MAP.id, RUSH_MAP.id, RUSH_MAP.id], 400, { map: 2, rounds: played }, LIVE_START - 20 * 60_000, {
-      id: MOCK_TOURNAMENT_IDS[0]!,
-      name: "Daily Rush Cup",
-      bracketMatchId: "final",
-    });
+    return buildSeries(
+      id,
+      "rush3v3",
+      [RUSH_MAP.id, RUSH_MAP.id, RUSH_MAP.id],
+      400,
+      { map: 2, rounds: played },
+      LIVE_START - 20 * 60_000,
+      { id: MOCK_TOURNAMENT_IDS[0]!, name: "Daily Rush Cup", bracketMatchId: "final" },
+      // Team B plays CT on map 1, so map 2 draws the CT castle on the left
+      seriesRushPlans(400, 1),
+    );
   }
+  if (id === MOCK_SERIES_VETO_ID || id === MOCK_SERIES_VETO_SLUG) return mockSeriesVetoDetail();
   if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);
   const seed = hash(id);
   const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];

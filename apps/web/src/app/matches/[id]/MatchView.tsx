@@ -329,7 +329,7 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
   const selected = started.find((x) => `map-${x.mapNumber}` === tab);
   const current = selected ? `map-${selected.mapNumber}` : "all";
   const keys = ["all", ...started.map((x) => `map-${x.mapNumber}`)];
-  const flip = isRushMode(m.mode) && rushFlip(m);
+  const rush = isRushMode(m.mode);
   const [a, b] = m.teams;
   const view: MatchDetail = selected
     ? {
@@ -399,7 +399,8 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
               onClick={() => !upcoming && setTab(key)}
               onKeyDown={onKey}
             >
-              <SeriesMapImage mode={m.mode} map={x} flip={flip} />
+              {/* Each map has its own sides. Map 2 of a series room pick swaps them, so its row reverses */}
+              <SeriesMapImage mode={m.mode} map={x} flip={rush && rushFlip(m, x)} />
               <span className={styles.mapTabBody}>
                 <span className={styles.mapTabTop}>
                   <span className={styles.mapTabName}>
