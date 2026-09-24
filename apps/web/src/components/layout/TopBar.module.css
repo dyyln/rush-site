@@ -11,23 +11,31 @@
   flex-wrap: wrap;
 }
 
-/* Height set so it runs from the top of the tab letters to the bottom of the underline. --logo-h is measured from the tab font */
+/* The logo and the lead block share one height: brand line on top, tabs below. --lead-h is that height */
+.inner {
+  --tab-size: var(--text-2xl);
+  --brand-size: var(--text-xs);
+  --brand-gap: var(--space-1);
+  /* From the brand line's cap top: the part of its line box below cap top, the gap, then the 44px tab box to its underline */
+  --lead-h: calc(var(--brand-size) * 0.925 + var(--brand-gap) + var(--target-min));
+}
 .logo {
   flex: none;
   display: inline-flex;
-  width: var(--logo-h);
-  height: var(--logo-h);
+  align-self: flex-end;
+  width: var(--lead-h);
+  height: var(--lead-h);
   color: var(--color-text);
   filter: drop-shadow(0 2px 10px rgb(0 0 0 / 0.6));
   transition: color var(--duration-fast) var(--ease);
 }
-/* The mark fills 56 of its 64 unit box. Scale the box up and pull it back so the mark itself spans --logo-h */
+/* The mark fills 56 of its 64 unit box. Scale the box up and pull it back so the mark itself spans --lead-h */
 .logo > svg {
   flex: none;
-  width: calc(var(--logo-h) * 64 / 56);
-  height: calc(var(--logo-h) * 64 / 56);
-  margin: calc(var(--logo-h) * -4 / 56);
+  width: calc(var(--lead-h) * 64 / 56);
+  height: calc(var(--lead-h) * 64 / 56);
   max-width: none;
+  margin: calc(var(--lead-h) * -4 / 56);
 }
 .logo:hover {
   color: var(--color-accent-hover);
@@ -36,22 +44,16 @@
 .lead {
   display: flex;
   flex-direction: column;
+  align-self: flex-end;
+  gap: var(--brand-gap);
   min-width: 0;
   margin-right: auto;
-}
-/* Cap height of the display font is about 0.715em. Add the tab's bottom padding and the 3px underline */
-.row {
-  --tab-size: var(--text-2xl);
-  --logo-h: calc(var(--tab-size) * 0.715 + var(--space-2) + 3px);
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-4);
-  min-width: 0;
 }
 .brand {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--text-xs);
+  font-size: var(--brand-size);
+  line-height: 1;
   font-weight: 700;
   letter-spacing: 0.3em;
   text-transform: uppercase;
@@ -323,7 +325,7 @@
   .tabs {
     gap: var(--space-4);
   }
-  .row {
+  .inner {
     --tab-size: var(--text-lg);
   }
   .slot {

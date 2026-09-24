@@ -31,30 +31,28 @@ export function TopBar() {
   return (
     <header className={styles.bar}>
       <div className={`container ${styles.inner}`}>
+        {/* Spans the whole lead block: top of the brand line down to the bottom of the tab underline */}
+        <Link href="/" className={styles.logo} aria-label={`${BRAND_NAME} home`}>
+          <Logo size={64} />
+        </Link>
         <div className={styles.lead}>
           <p className={styles.brand} aria-hidden="true">
             {BRAND_NAME}
           </p>
-          <div className={styles.row}>
-            {/* Spans the tab text's cap height down to the bottom of the underline */}
-            <Link href="/" className={styles.logo} aria-label={`${BRAND_NAME} home`}>
-              <Logo size={40} />
-            </Link>
-            <nav aria-label="Main">
-              <ul className={styles.tabs}>
-                {TABS.map((t) => {
-                  const active = pathname === t.href || pathname.startsWith(t.href + "/");
-                  return (
-                    <li key={t.href}>
-                      <Link href={t.href} className={styles.tab} aria-current={active ? "page" : undefined}>
-                        {t.label}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          </div>
+          <nav aria-label="Main">
+            <ul className={styles.tabs}>
+              {TABS.map((t) => {
+                const active = pathname === t.href || pathname.startsWith(t.href + "/");
+                return (
+                  <li key={t.href}>
+                    <Link href={t.href} className={styles.tab} aria-current={active ? "page" : undefined}>
+                      {t.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
         </div>
         <div className={styles.end}>
           {pathname === "/banned" ? null : user ? (
