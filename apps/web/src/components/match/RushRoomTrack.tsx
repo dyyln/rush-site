@@ -145,8 +145,11 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
   // During a live Convoy decider the rooms either side of the room it replaced keep their holders
   const front = typeof current === "number" ? current : current === "decider" ? replacedByDecider() : ended;
   const finalWinner = ended === null ? null : ([...track.slots.flatMap((sl) => sl.visits), ...track.decider].sort((x, y) => y.round - x.round)[0]?.team ?? null);
+  // A castle taken by the winning round belongs to the winner, like a finished Convoy
+  const takenBy = ended !== null && track.captured === ended ? finalWinner : null;
   // The room in play, or the room play ended in, stays split between the two
-  const holder = (i: number) => (front === null || i === front ? null : i < front ? tTeam : ctTeam);
+  const contested = (i: number) => i === front && !takenBy;
+  const holder = (i: number) => (front === null ? null : i === front ? takenBy : i < front ? tTeam : ctTeam);
   // The left team's castle goes on the left (on top on phones), so it attacks left to right
   const flip = tTeam !== teams[0];
   const shownSlots = flip ? [...track.slots].reverse() : track.slots;
@@ -207,7 +210,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                 data-side={def?.side}
                 data-current={isCurrent || undefined}
                 data-control={held?.side}
-                data-contested={slot.index === front || undefined}
+                data-contested={contested(slot.index) || undefined}
                 data-last={isLast || undefined}
                 data-empty={(building && !slot.room) || undefined}
                 data-latest={(building && building.latestSlot === slot.index) || undefined}
