@@ -89,7 +89,8 @@
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;
-  background: var(--color-surface-1);
+  /* A shade darker than the panel so open slots read as holes to fill */
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface-1));
 }
 .slotName {
   position: absolute;
