@@ -36,6 +36,7 @@ import { StartCountdown } from "@/components/play/StartCountdown";
 import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
+import { CooldownLine } from "./CooldownLine";
 import styles from "./play.module.css";
 
 const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
@@ -333,7 +334,7 @@ export function PlayView() {
               <div className={styles.actionBar}>
                 {user ? (
                   <>
-                    {isLeader ? (
+                    {isLeader || queued ? (
                       <Button
                         size="lg"
                         variant={queued ? "danger" : "primary"}
@@ -345,6 +346,9 @@ export function PlayView() {
                         {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
                       </Button>
                     ) : null}
+                    {cooldown && play.queue.cooldownUntil && (
+                      <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />
+                    )}
                     <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
                     <SegmentedControl
                       label="Opponents"
@@ -367,10 +371,12 @@ export function PlayView() {
               </div>
               {user && (
                 <p id="queue-hint" className={styles.hint}>
-                  {!isLeader
-                    ? "Leader starts the queue."
-                    : queued
+                  {queued
+                    ? isLeader
                       ? "Stop queue to change modes."
+                      : "Any member can stop the queue. The leader starts it."
+                    : !isLeader
+                      ? "Leader starts the queue."
                       : cooldown
                         ? "On cooldown."
                         : eligible.length === 0
@@ -426,6 +432,7 @@ export function PlayView() {
                   }
                 }}
                 locked={queued || inMatch}
+                modes={partySize < 2 ? [] : queued ? queuedModes : isLeader ? eligible : MODES.filter((m) => !disabledReason(m))}
                 renderInvite={(close, anchor) => (
                   <InvitePopover
                     inviteUrl={inviteUrl}

@@ -172,6 +172,7 @@ export function buildContext(deps: ContextDeps): AppContext {
   })
   const presence = new PresenceService({ db, redis, notifier, queue, parties, log, now })
   const friends = new FriendsService({ db, redis, notifier, steam, users, parties, log, now, presence })
+  parties.setPresence(presence)
   queue.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onMatchChanged((m) => presence.matchChanged(m))

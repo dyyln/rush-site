@@ -24,8 +24,31 @@
   justify-content: flex-end;
   gap: var(--space-1);
 }
-.name {
+.who {
   flex: 1 1 6rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) 0;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.tier {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.tierMode {
+  font-family: var(--font-mono);
+}
+.name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

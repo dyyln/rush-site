@@ -9,6 +9,7 @@ import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { ApiError, api, type InvitePreview } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import styles from "./invite.module.css";
 
 type Problem = { title: string; body: string };
 
@@ -79,9 +80,9 @@ export function InviteView({ code }: { code: string }) {
       <Card tone="raised">
         <div className="stack">
           {preview && !problem && (
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+            <div className={styles.leader}>
               <Avatar name={preview.leader.displayName} src={preview.leader.avatarUrl} size="lg" />
-              <div>
+              <div className={styles.leaderText}>
                 <p>
                   <strong>{preview.leader.displayName}</strong> invited you to their party
                 </p>
@@ -92,8 +93,8 @@ export function InviteView({ code }: { code: string }) {
             </div>
           )}
           {problem && (
-            <div role="alert">
-              <p style={{ color: "var(--color-loss)", fontWeight: 600 }}>{problem.title}</p>
+            <div role="alert" className={styles.problem}>
+              <p className={styles.problemTitle}>{problem.title}</p>
               <p className="muted">{problem.body}</p>
             </div>
           )}

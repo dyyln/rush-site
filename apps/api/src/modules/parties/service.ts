@@ -1,8 +1,8 @@
-import type { PartyUpdatePayload } from "@rushsite/shared"
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import type { Mode, PartyUpdatePayload, Presence } from "@rushsite/shared"
+import { and, asc, eq, gt, inArray, isNull } from "drizzle-orm"
 import { ACTIVE_MATCH_STATUSES } from "@rushsite/shared"
 import type { Db } from "../../db/client.js"
-import { matches, matchPlayers, parties, partyMembers, trustLevels } from "../../db/schema.js"
+import { matches, matchPlayers, parties, partyMembers, ratings, trustLevels } from "../../db/schema.js"
 import { randomToken } from "../../lib/hmac.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { UsersService } from "../auth/users.js"
@@ -24,8 +24,12 @@ export type InvitePreview = {
 
 export type PartyChangeHook = (partyId: string, reason: string) => Promise<void>
 
+// Presence is built after parties, so it is plugged in later
+export type PresenceReader = { get(ids: string[]): Promise<Map<string, { state: Presence }>> }
+
 export class PartyService {
   private hooks: PartyChangeHook[] = []
+  private presence: PresenceReader | null = null
 
   constructor(
     private readonly db: Db,
@@ -36,6 +40,10 @@ export class PartyService {
   // Queue uses this to drop tickets when a party changes shape
   onChange(hook: PartyChangeHook): void {
     this.hooks.push(hook)
+  }
+
+  setPresence(reader: PresenceReader): void {
+    this.presence = reader
   }
 
   private async changed(partyId: string, reason: string): Promise<void> {
@@ -265,15 +273,22 @@ export class PartyService {
 
   async payload(info: PartyInfo | null): Promise<PartyUpdatePayload> {
     if (!info) return emptyParty()
-    const cards = await this.users.cards(info.memberSteamIds)
-    const trust = new Map(
-      (
-        await this.db
-          .select({ steamId: trustLevels.steamId, level: trustLevels.level })
-          .from(trustLevels)
-          .where(inArray(trustLevels.steamId, info.memberSteamIds))
-      ).map((r) => [r.steamId, r.level]),
-    )
+    const ids = info.memberSteamIds
+    const [cards, trustRows, ratingRows, presence] = await Promise.all([
+      this.users.cards(ids),
+      this.db
+        .select({ steamId: trustLevels.steamId, level: trustLevels.level })
+        .from(trustLevels)
+        .where(inArray(trustLevels.steamId, ids)),
+      this.db
+        .select({ steamId: ratings.steamId, mode: ratings.mode, rating: ratings.rating })
+        .from(ratings)
+        .where(and(inArray(ratings.steamId, ids), gt(ratings.matchesPlayed, 0))),
+      this.presence?.get(ids).catch(() => null) ?? null,
+    ])
+    const trust = new Map(trustRows.map((r) => [r.steamId, r.level]))
+    const rated = new Map<string, Partial<Record<Mode, number>>>()
+    for (const r of ratingRows) rated.set(r.steamId, { ...rated.get(r.steamId), [r.mode]: r.rating })
     return {
       partyId: info.partyId,
       leaderSteamId: info.leaderSteamId,
@@ -282,6 +297,8 @@ export class PartyService {
         displayName: cards.get(id)?.displayName ?? id,
         avatarUrl: cards.get(id)?.avatarUrl ?? null,
         trustLevel: trust.get(id) ?? "new",
+        ratings: rated.get(id) ?? {},
+        ...(presence ? { presence: presence.get(id)?.state ?? "offline" } : {}),
       })),
       inviteCode: info.inviteToken,
     }

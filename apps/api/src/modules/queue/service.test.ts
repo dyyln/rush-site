@@ -190,3 +190,48 @@ describe("queue join while the party changes", () => {
     expect((await h.ctx.queue.status(leader!)).state).toBe("idle")
   })
 })
+
+describe("queue stop by a party member", () => {
+  it("lets any member stop the queue but only the leader start it", async () => {
+    h = await createHarness()
+    const [leader, member] = await makeUsers(h.db, 2)
+    const party = await h.ctx.parties.ensure(leader!)
+    await h.ctx.parties.join(member!, party.inviteToken)
+    await expect(h.ctx.queue.join(member!, ["aim2v2"])).rejects.toMatchObject({ statusCode: 403, code: "not_leader" })
+    await h.ctx.queue.join(leader!, ["aim2v2"])
+    expect((await h.ctx.queue.status(member!)).state).toBe("queued")
+    await h.ctx.queue.leave(member!)
+    expect((await h.ctx.queue.status(leader!)).state).toBe("idle")
+    expect((await h.ctx.queue.status(member!)).state).toBe("idle")
+    expect(await h.redis.zcard("q:aim2v2")).toBe(0)
+  })
+})
+
+describe("queue cooldown detail", () => {
+  it("reports the reason and the ladder step", async () => {
+    h = await createHarness()
+    const [a] = await makeUsers(h.db, 1)
+    const first = await h.ctx.cooldowns.issue(a!, "decline", null)
+    expect((await h.ctx.queue.status(a!)).cooldown).toEqual({ reason: "decline", step: 1, steps: 4 })
+    h.clock.advance(first.endsAt - h.clock.now() + 1)
+    expect((await h.ctx.queue.status(a!)).cooldown).toBeUndefined()
+    await h.ctx.cooldowns.issue(a!, "decline", null)
+    const st = await h.ctx.queue.status(a!)
+    expect(st.state).toBe("cooldown")
+    expect(st.cooldown).toEqual({ reason: "decline", step: 2, steps: 4 })
+  })
+
+  it("keeps the abandon reason when a decline lands during it", async () => {
+    h = await createHarness()
+    const [a] = await makeUsers(h.db, 1)
+    await h.ctx.cooldowns.issue(a!, "abandon", null)
+    h.clock.advance(1000)
+    await h.ctx.cooldowns.issue(a!, "decline", null)
+    expect((await h.ctx.queue.status(a!)).cooldown).toEqual({ reason: "abandon", step: 1, steps: 5 })
+  })
+
+  it("caps the step at the ladder length", async () => {
+    const { cooldownDetail } = await import("./service.js")
+    expect(cooldownDetail("accept_timeout", 9)).toEqual({ reason: "accept_timeout", step: 4, steps: 4 })
+  })
+})

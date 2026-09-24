@@ -151,15 +151,16 @@ export class PresenceService {
     return rows.map((r) => (r.a === steamId ? r.b : r.a))
   }
 
-  // Presence only ever goes to the player's friends
+  // Presence goes to the player's friends and party mates
   private async push(steamId: string, entry: PresenceEntry): Promise<void> {
-    const friends = await this.friendIdsOf(steamId)
+    const [friends, party] = await Promise.all([this.friendIdsOf(steamId), this.d.parties.partyOf(steamId)])
+    const mates = (party?.memberSteamIds ?? []).filter((id) => id !== steamId && !friends.includes(id))
     const payload: FriendUpdatePayload = {
       kind: "presence",
       steamId,
       presence: entry.state,
       ...(entry.detail ? { detail: entry.detail } : {}),
     }
-    toUsers(this.d.notifier, friends, "friend_update", payload)
+    toUsers(this.d.notifier, [...friends, ...mates], "friend_update", payload)
   }
 }

@@ -14,6 +14,9 @@ import {
   type UserSettingsPatch,
   type QueueModeStatus,
   type QueueStatusPayload,
+  type QueueCooldown,
+  COOLDOWN_LADDERS,
+  type CooldownReason,
 } from "@rushsite/shared"
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm"
 import type { Redis } from "ioredis"
@@ -48,6 +51,12 @@ export function lowestTrust(levels: TrustLevel[]): TrustLevel {
   return levels.reduce<TrustLevel>((low, l) => (trustAtLeast(low, l) ? l : low), "trusted")
 }
 const TRUST_ETA_TTL_MS = 15_000
+
+// Ladder position for the Play page. Offences past the ladder end repeat the last step
+export function cooldownDetail(reason: CooldownReason, offence: number): QueueCooldown {
+  const steps = COOLDOWN_LADDERS[reason].ladderSec.length
+  return { reason, step: Math.min(Math.max(offence, 1), steps), steps }
+}
 
 const K = {
   queue: (mode: Mode) => `q:${mode}`,
@@ -628,6 +637,7 @@ export class QueueService {
       partyId: party?.partyId ?? null,
       modes: [],
       cooldownUntil: cd?.endsAt ?? null,
+      ...(cd ? { cooldown: cooldownDetail(cd.reason, cd.offence) } : {}),
     }
   }
 

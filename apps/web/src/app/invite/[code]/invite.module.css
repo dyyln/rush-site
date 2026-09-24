@@ -1,0 +1,21 @@
+.leader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.leaderText {
+  min-width: 0;
+}
+.leaderText p,
+.problem p {
+  margin: 0;
+}
+.problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.problemTitle {
+  color: var(--color-loss);
+  font-weight: 600;
+}
