@@ -7,9 +7,14 @@ import type {
   ChatMuteView,
   FeatureFlag,
   MetricsRange,
+  MapLoadout,
   MetricsView,
   Mode,
+  PoolMap,
+  PoolMode,
+  PoolView,
   TrustLevel,
+  WorkshopItem,
 } from "@rushsite/shared"
 
 export type { AdminEventKind, Announcement, ChatMuteStatus, ChatMuteView, FeatureFlag, MetricsRange, MetricsView, Mode, TrustLevel }
@@ -109,6 +114,22 @@ export interface ChatModerationLike {
   mutes(): Promise<ChatMuteView[]>
 }
 
+// Live aim map pool. MapPoolService in modules/maps satisfies it
+export interface MapPoolLike {
+  view(): Promise<PoolView>
+  add(
+    input: { id: string; displayName: string; mapName?: string; modes: PoolMode[]; loadout?: MapLoadout; workshop: WorkshopItem },
+    by: string,
+  ): Promise<PoolMap>
+  update(
+    id: string,
+    patch: { displayName?: string; modes?: PoolMode[]; loadout?: MapLoadout | null },
+    by: string,
+  ): Promise<{ before: PoolMap; after: PoolMap }>
+  reorder(ids: string[], by: string): Promise<PoolMap[]>
+  remove(id: string, by: string): Promise<PoolMap>
+}
+
 export interface AdminPluginOptions {
   db: Db
   redis: RedisLike
@@ -116,6 +137,10 @@ export interface AdminPluginOptions {
   isAdmin(steamId: string): boolean
   // Editable admin list. The /admin/admins routes answer 404 without it
   admins?: AdminDirectory
+  // Steam names and avatars for ids with no user row. Missing ids are unknown to Steam
+  steamProfiles?(steamIds: string[]): Promise<SteamProfileCard[]>
+  // Moves the user's open sockets in or out of the admin audience on every instance
+  onAdminChanged?(steamId: string, isAdmin: boolean): void
   // Returns the signed in user's SteamID64 or null.
   authenticate(request: FastifyRequest): Promise<string | null>
   // Every waiting ticket across all modes.
@@ -145,6 +170,12 @@ export interface AdminPluginOptions {
   onModeClosed?(mode: Mode): Promise<number>
   // Turns a /id/<vanity> profile URL into a SteamID64. Null when unknown or Steam is not configured
   resolveVanity?(vanity: string): Promise<string | null>
+  // Map pool routes answer 404 without these
+  mapPool?: MapPoolLike
+  // Reads a Workshop item from Steam
+  fetchWorkshop?(workshopId: string): Promise<WorkshopItem>
+  // Pushes a fresh queue status to the player, for example after a cooldown was cleared
+  notifyQueueStatus?(steamId: string): Promise<void>
   now?: () => Date
 }
 
@@ -153,6 +184,13 @@ export interface AdminRow {
   addedBy: string
   note: string | null
   createdAt: Date
+}
+
+export interface SteamProfileCard {
+  steamId: string
+  displayName: string
+  avatarUrl: string | null
+  profileUrl: string | null
 }
 
 // AdminRegistry in src/lib/admins.ts satisfies it.
@@ -267,6 +305,8 @@ export interface EventView {
 export interface AuditEntry {
   id: string
   adminSteamId: string
+  // Filled on the user page. Null when the admin has no user row
+  adminName?: string | null
   action: AuditAction
   target: string
   payload: unknown
@@ -279,6 +319,7 @@ export type AuditAction =
   | "user.ban"
   | "user.unban"
   | "user.trust"
+  | "user.cooldown_clear"
   | "flag.set"
   | "flag.delete"
   | "announcement.create"
@@ -289,16 +330,42 @@ export type AuditAction =
   | "chat.delete"
   | "chat.mute"
   | "chat.unmute"
+  // Written by the chat filter with adminSteamId system
+  | "chat.refused"
+  | "map.add"
+  | "map.update"
+  | "map.reorder"
+  | "map.remove"
 
 export interface AdminView {
   steamId: string
   displayName?: string
   avatarUrl?: string
-  // config admins come from ADMIN_STEAM_IDS and cannot be removed
+  // True when the name comes from a user row rather than Steam
+  signedIn: boolean
+  // Super admins come from ADMIN_STEAM_IDS and cannot be removed
+  super: boolean
   source: "config" | "db"
   addedBy?: string
+  addedByName?: string
   note?: string
   createdAt?: string
+}
+
+export interface AdminListView {
+  admins: AdminView[]
+  viewer: { steamId: string; super: boolean; canManage: boolean }
+}
+
+// Preview of a SteamID64 before it is made an admin
+export interface AdminCandidateView {
+  steamId: string
+  displayName?: string
+  avatarUrl?: string
+  profileUrl?: string
+  signedIn: boolean
+  // Null when the id is not an admin yet
+  admin: "super" | "admin" | null
 }
 
 export interface BanView {
@@ -331,6 +398,8 @@ export interface RatingView {
 
 export interface UserMatchView {
   id: string
+  slug: string | null
+  bestOf: number | null
   mode: Mode
   status: string
   team: number
@@ -368,7 +437,29 @@ export interface UserDetailView {
   cooldowns: { reason: string; endsAt: string; offence: number }[]
   reports: { received: number; open: number }
   flags: { open: number; total: number }
+  // Live queue ticket or active match. The routes fill it
+  state: UserStateView
   audit: AuditEntry[]
+}
+
+export interface UserStateView {
+  queue: { ticketId: string; partyId: string; modes: Mode[]; enqueuedAt: string } | null
+  match: ActiveMatchRef | null
+}
+
+export interface ActiveMatchRef {
+  id: string
+  slug: string | null
+  mode: Mode
+  status: string
+  createdAt: string
+}
+
+// One row of the admin name search
+export interface UserSearchHit extends UserCard {
+  lastLoginAt: string
+  trustLevel: TrustLevel | null
+  banned: boolean
 }
 
 export interface Health {

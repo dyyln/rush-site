@@ -5,6 +5,7 @@ const MODE_LABEL: Record<Mode, string> = {
   aim1v1: "1v1 Aim",
   aim2v2: "2v2 Aim",
   rush3v3: "3v3 Rush",
+  rush1v1: "1v1 Rush Test",
 }
 
 export interface CupFormat {
@@ -32,7 +33,8 @@ export interface CupDefinition {
 
 const FORMAT: CupFormat = { type: "single_elimination", bestOf: { default: 1, semis: 1, final: 3 } }
 
-const MAX_ENTRANTS: Record<"daily" | "weekly", Record<Mode, number>> = {
+// Test modes have no default cups
+const MAX_ENTRANTS: Record<"daily" | "weekly", Partial<Record<Mode, number>>> = {
   daily: { aim1v1: 32, aim2v2: 16, rush3v3: 16 },
   weekly: { aim1v1: 64, aim2v2: 32, rush3v3: 32 },
 }
@@ -58,7 +60,7 @@ function cup(mode: Mode, cadence: "daily" | "weekly"): CupDefinition {
     cadence,
     schedule: daily ? { hourUtc: 18, minuteUtc: 0 } : { hourUtc: 17, minuteUtc: 0, weekdayUtc: 0 },
     registrationOpensHours: REGISTRATION_OPENS_HOURS[cadence],
-    maxEntrants: MAX_ENTRANTS[cadence][mode],
+    maxEntrants: MAX_ENTRANTS[cadence][mode] ?? 16,
     minTrust: "verified",
     entryFee: 0,
     checkIn: false,

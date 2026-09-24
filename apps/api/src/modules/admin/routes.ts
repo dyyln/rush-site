@@ -12,6 +12,7 @@ import type {
   QueueTicketSnapshot,
   QueueView,
   UserCard,
+  UserStateView,
 } from "./types.js"
 
 export class AdminError extends Error {
@@ -41,6 +42,10 @@ const BanBody = z.object({
   until: z.iso.datetime({ offset: true }).nullable().optional(),
 })
 const TrustBody = z.object({ level: TrustLevelSchema })
+const SearchQuery = z.object({
+  q: z.string().trim().min(2, "Enter at least 2 characters").max(64),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+})
 
 type Hooks = Omit<AdminPluginOptions, "db" | "redis" | "isAdmin" | "admins" | "authenticate" | "now">
 
@@ -264,14 +269,32 @@ export function registerRoutes(
 
   app.get("/admin/hosts", async () => ({ hosts: (await hooks.getHosts()).map(hostView) }))
 
+  // Name search. Rate limited in lib/security.ts
+  app.get("/admin/users", async (req) => {
+    const { q, limit } = parse(SearchQuery, req.query)
+    return { q, users: await store.searchUsers(q, limit, now()) }
+  })
+
   app.get<{ Params: { steamId: string } }>("/admin/users/:steamId", async (req) => {
-    checkSteamId(req.params.steamId)
-    const [user, auditRows] = await Promise.all([
-      store.getUser(req.params.steamId, now()),
-      store.listAudit({ target: req.params.steamId, limit: 50 }),
+    const { steamId } = req.params
+    checkSteamId(steamId)
+    const [user, auditRows, tickets, match] = await Promise.all([
+      store.getUser(steamId, now()),
+      store.listAudit({ target: steamId, limit: 50 }),
+      safe(() => hooks.getQueueSnapshot(), []),
+      store.activeMatchOf(steamId, ACTIVE_STATUSES),
     ])
     if (!user) throw new AdminError(404, "not_found", "User not found")
-    return { ...user, audit: auditRows }
+    const ticket = tickets.value.find((t) => t.steamIds.includes(steamId))
+    const state: UserStateView = {
+      queue: ticket
+        ? { ticketId: ticket.id, partyId: ticket.partyId, modes: ticket.modes, enqueuedAt: iso(ticket.enqueuedAt)! }
+        : null,
+      match,
+    }
+    const names = await store.userCards(auditRows.map((a) => a.adminSteamId))
+    const audit = auditRows.map((a) => ({ ...a, adminName: names.get(a.adminSteamId)?.displayName ?? null }))
+    return { ...user, state, audit }
   })
 
   app.get<{ Querystring: { limit?: string } }>("/admin/events", async (req) => {
@@ -343,6 +366,18 @@ export function registerRoutes(
     await hooks.setTrustLevel(steamId, level)
     const entry = await audit(req, "user.trust", steamId, { level, before })
     hooks.emitAdmin("user", { action: "trust_changed", steamId, level, before, by: entry.adminSteamId })
+    return { ok: true, audit: entry }
+  })
+
+  app.post<{ Params: { steamId: string } }>("/admin/users/:steamId/cooldown/clear", async (req) => {
+    const { steamId } = req.params
+    await requireUser(steamId)
+    const cleared = await store.clearCooldowns(steamId, now())
+    if (cleared.length === 0) throw new AdminError(409, "no_cooldown", "User has no running cooldown")
+    const entry = await audit(req, "user.cooldown_clear", steamId, { cleared })
+    // The player sees the queue open again without a reload
+    await hooks.notifyQueueStatus?.(steamId).catch((err) => req.log.warn({ err, steamId }, "queue status push failed"))
+    hooks.emitAdmin("user", { action: "cooldown_cleared", steamId, by: entry.adminSteamId })
     return { ok: true, audit: entry }
   })
 }

@@ -81,6 +81,16 @@ export function usePlay(notices: Notices = {}) {
       }),
       rt.on("queue_status", setQueue),
       rt.on("party_update", setParty),
+      // Presence of party mates arrives as friend updates
+      rt.on("friend_update", (u) => {
+        if (u.kind !== "presence" || !u.presence) return;
+        const presence = u.presence;
+        setParty((p) =>
+          p && p.members.some((m) => m.steamId === u.steamId)
+            ? { ...p, members: p.members.map((m) => (m.steamId === u.steamId ? { ...m, presence } : m)) }
+            : p,
+        );
+      }),
       rt.on("mode_stats", setStats),
       rt.on("match_found", (found) =>
         setMatch((m) => ({ phase: "found", found, responded: m.phase === "found" && m.found.matchId === found.matchId && m.responded })),

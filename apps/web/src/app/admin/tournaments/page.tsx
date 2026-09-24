@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  MODES,
+  RANKED_MODES,
   type OpenCupOutcome,
   type CupSchedule,
   type CupScheduleCadence,
@@ -34,7 +34,8 @@ import cs from "./cups.module.css";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TRUST: TrustLevel[] = ["new", "verified", "trusted"];
-const MODE_OPTIONS = MODES.map((m) => ({ value: m, label: MODE_COPY[m].label }));
+// Test modes have no cups
+const MODE_OPTIONS = RANKED_MODES.map((m) => ({ value: m, label: MODE_COPY[m].label }));
 const TRUST_OPTIONS = TRUST.map((t) => ({ value: t, label: t[0]!.toUpperCase() + t.slice(1) }));
 const BO_OPTIONS = [1, 3, 5].map((n) => ({ value: String(n), label: `Bo${n}` }));
 const OPEN_MATCH = new Set(["ready", "provisioning", "live"]);

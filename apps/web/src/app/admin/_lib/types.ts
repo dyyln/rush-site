@@ -1,5 +1,5 @@
 // Mirrors the response shapes in apps/api/src/modules/admin/types.ts
-import type { AdminEventKind, Mode, TrustLevel } from "@rushsite/shared";
+import type { AdminEventKind, Mode, TrustLevel, WorkshopItem } from "@rushsite/shared";
 
 export type { AdminEventKind, Mode, TrustLevel };
 
@@ -92,18 +92,28 @@ export type AuditAction =
   | "user.ban"
   | "user.unban"
   | "user.trust"
+  | "user.cooldown_clear"
   | "flag.set"
   | "flag.delete"
   | "announcement.create"
   | "announcement.update"
   | "announcement.delete"
+  | "admin.grant"
+  | "admin.revoke"
   | "chat.delete"
   | "chat.mute"
-  | "chat.unmute";
+  | "chat.unmute"
+  | "chat.refused"
+  | "map.add"
+  | "map.update"
+  | "map.reorder"
+  | "map.remove";
 
 export type AuditEntry = {
   id: string;
   adminSteamId: string;
+  // Filled on the user page. Null when the admin has no user row
+  adminName?: string | null;
   action: AuditAction;
   target: string;
   payload: unknown;
@@ -140,6 +150,8 @@ export type UserDetailView = {
   ratings: { mode: Mode; rating: number; rd: number; matchesPlayed: number; wins: number; losses: number; updatedAt: string }[];
   recentMatches: {
     id: string;
+    slug: string | null;
+    bestOf: number | null;
     mode: Mode;
     status: string;
     team: number;
@@ -157,8 +169,16 @@ export type UserDetailView = {
   cooldowns: { reason: string; endsAt: string; offence: number }[];
   reports: { received: number; open: number };
   flags: { open: number; total: number };
+  state: UserStateView;
   audit: AuditEntry[];
 };
+
+export type UserStateView = {
+  queue: { ticketId: string; partyId: string; modes: Mode[]; enqueuedAt: string } | null;
+  match: { id: string; slug: string | null; mode: Mode; status: string; createdAt: string } | null;
+};
+
+export type UserSearchHit = UserCard & { lastLoginAt: string; trustLevel: TrustLevel | null; banned: boolean };
 
 export type Health = { ok: boolean; latencyMs: number | null; error?: string };
 
@@ -176,5 +196,36 @@ export type OverviewView = {
 export type ActionResult = { ok: true; audit: AuditEntry };
 
 export type { Announcement, FeatureFlag, MetricPoint, MetricsRange, MetricsView } from "@rushsite/shared";
+export type { MapLoadout, PoolMap, PoolMode, PoolView, WorkshopItem } from "@rushsite/shared";
+
+export type WorkshopPreview = { item: WorkshopItem; suggestedId: string; existingId: string | null };
 
 export type ResolvedProfile = { steamId: string; registered: boolean; user: UserCard | null };
+
+// Super admins come from ADMIN_STEAM_IDS and cannot be removed
+export type AdminView = {
+  steamId: string;
+  displayName?: string;
+  avatarUrl?: string;
+  signedIn: boolean;
+  super: boolean;
+  source: "config" | "db";
+  addedBy?: string;
+  addedByName?: string;
+  note?: string;
+  createdAt?: string;
+};
+
+export type AdminListView = {
+  admins: AdminView[];
+  viewer: { steamId: string; super: boolean; canManage: boolean };
+};
+
+export type AdminCandidateView = {
+  steamId: string;
+  displayName?: string;
+  avatarUrl?: string;
+  profileUrl?: string;
+  signedIn: boolean;
+  admin: "super" | "admin" | null;
+};

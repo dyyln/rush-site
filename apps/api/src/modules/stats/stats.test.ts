@@ -80,7 +80,10 @@ describe("status", () => {
       { mode: "aim1v1", available: true },
       { mode: "aim2v2", available: true },
       { mode: "rush3v3", available: false, reason: "not_configured" },
+      { mode: "rush1v1", available: true },
     ])
+    const off = buildStatus({ ...base, disabled: ["rush1v1"] })
+    expect(off.modes.at(-1)).toEqual({ mode: "rush1v1", available: false, reason: "disabled" })
     const upd = buildStatus({ ...base, hosts: [{ status: "updating", slotsTotal: 8, slotsFree: 8 }] })
     expect(upd.modes[0]).toEqual({ mode: "aim1v1", available: false, reason: "servers_updating" })
   })
@@ -286,7 +289,8 @@ describe("stats routes", () => {
     const body = res.json()
     expect(body.regions).toEqual([{ region: "eu", hosts: 1, hostsOnline: 1, slotsTotal: 4, slotsFree: 4, updating: false }])
     expect(body.surge).toEqual({ enabled: false, active: 0 })
-    expect(body.modes.every((m: { available: boolean }) => m.available)).toBe(true)
+    // The Rush test queue is off unless its env flag is set
+    expect(body.modes.filter((m: { available: boolean }) => !m.available)).toEqual([{ mode: "rush1v1", available: false, reason: "disabled" }])
     await h.db.update(hosts).set({ status: "updating" })
     const upd = (await h.app.inject({ method: "GET", url: "/status" })).json()
     expect(upd.regions[0].updating).toBe(true)

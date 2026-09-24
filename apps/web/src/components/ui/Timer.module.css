@@ -20,3 +20,7 @@
   font-size: var(--text-3xl);
   font-weight: 500;
 }
+/* Minutes and seconds need a smaller size to fit the ring */
+.ringTextLong {
+  font-size: var(--text-xl);
+}

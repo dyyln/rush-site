@@ -5,6 +5,9 @@ export const ACCEPT_WINDOW_SEC = 20
 // Seconds each veto step stays open before it resolves with the votes cast so far
 export const VETO_STEP_SEC = 20
 
+// Seconds a player has to join the server once it is ready. The plugin's no-show grace must match
+export const CONNECT_GRACE_SEC = 300
+
 export type RatingWidenStep = {
   // Applies once a ticket has waited at least this long
   afterSec: number
@@ -43,6 +46,7 @@ export const PARTY_BUCKET_RULES: Record<Mode, PartyBucketRule> = {
   aim1v1: { mode: "aim1v1", allowedPartySizes: [1], mixAfterSec: 0 },
   aim2v2: { mode: "aim2v2", allowedPartySizes: [1, 2], mixAfterSec: 60 },
   rush3v3: { mode: "rush3v3", allowedPartySizes: [1, 2, 3], mixAfterSec: 90 },
+  rush1v1: { mode: "rush1v1", allowedPartySizes: [1], mixAfterSec: 0 },
 }
 
 // A ticket's bucket is solo for party size 1, party otherwise

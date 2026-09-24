@@ -1,15 +1,15 @@
 import { createFaceitClient } from "@rushsite/faceit"
-import type { ServerDriver } from "@rushsite/shared"
+import { BRAND_NAME, CHAT_SLOW_MODE_FLAG, type ServerDriver } from "@rushsite/shared"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
-import type { Env } from "./env.js"
+import { disabledModes, type Env } from "./env.js"
 import { AdminRegistry } from "./lib/admins.js"
 import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
 import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
-import { ChatService } from "./modules/chat/service.js"
+import { ChatService, slowModeSeconds } from "./modules/chat/service.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
 import { AnnouncementService, FlagService } from "./modules/flags/service.js"
@@ -17,6 +17,7 @@ import { FriendsService } from "./modules/friends/service.js"
 import { PresenceService } from "./modules/friends/presence.js"
 import { HttpAgentClient, type AgentApi } from "./modules/match/agent.js"
 import { Allocator } from "./modules/match/allocator.js"
+import { MapPoolService } from "./modules/maps/pool.js"
 import { MatchFlow } from "./modules/match/flow.js"
 import { MatchWatchdog } from "./modules/match/watchdog.js"
 import { createDemoStorage, type DemoStorage } from "./modules/match/storage.js"
@@ -62,6 +63,7 @@ export type AppContext = {
   flags: FlagService
   announcements: AnnouncementService
   chat: ChatService
+  maps: MapPoolService
 }
 
 export type ContextDeps = {
@@ -88,6 +90,8 @@ export function buildContext(deps: ContextDeps): AppContext {
   const sessions = new SessionStore(redis, env.SESSION_TTL_DAYS * 86400)
   const admins = new AdminRegistry(db, env.ADMIN_STEAM_IDS, log)
   void admins.refresh().catch(() => undefined)
+  const maps = new MapPoolService(db, log)
+  void maps.refresh().catch(() => undefined)
   const steam = new SteamWebApi(env.STEAM_API_KEY, fetchFn)
   const users = new UsersService(db)
   let faceit: FaceitLookup | undefined
@@ -118,14 +122,21 @@ export function buildContext(deps: ContextDeps): AppContext {
   const parties = new PartyService(db, users, notifier)
   const cooldowns = new CooldownService(db, now)
   const allowUnresolvedModes = env.NODE_ENV !== "production" && env.ALLOW_UNRESOLVED_MODES
-  const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, { allowUnresolvedModes })
+  const queue = new QueueService(db, redis, notifier, parties, cooldowns, ratings, trust, now, {
+    allowUnresolvedModes,
+    disabledModes: disabledModes(env),
+  })
   const storage = deps.storage ?? createDemoStorage(env)
   const agent = deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn)
   const allocator = new Allocator(
     db,
     agent,
     storage,
-    { webhookBaseUrl: env.API_PUBLIC_URL, surgeWaitSec: env.SURGE_WAIT_SEC },
+    {
+      webhookBaseUrl: env.API_PUBLIC_URL,
+      surgeWaitSec: env.SURGE_WAIT_SEC,
+      brand: { name: BRAND_NAME, siteUrl: env.PUBLIC_URL },
+    },
     log,
     deps.surgeDriver ?? null,
   )
@@ -138,7 +149,12 @@ export function buildContext(deps: ContextDeps): AppContext {
     log,
     now,
     options: {
-      maxDurationMin: { aim1v1: env.MATCH_MAX_MIN_AIM, aim2v2: env.MATCH_MAX_MIN_AIM, rush3v3: env.MATCH_MAX_MIN_RUSH },
+      maxDurationMin: {
+        aim1v1: env.MATCH_MAX_MIN_AIM,
+        aim2v2: env.MATCH_MAX_MIN_AIM,
+        rush3v3: env.MATCH_MAX_MIN_RUSH,
+        rush1v1: env.MATCH_MAX_MIN_RUSH,
+      },
       silenceSec: env.MATCH_SILENCE_SEC,
       intervalSec: env.WATCHDOG_INTERVAL_SEC,
     },
@@ -155,6 +171,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     log,
     events,
     watchdog,
+    maps,
     now,
     ...(deps.rng ? { rng: deps.rng } : {}),
     options: {
@@ -162,10 +179,12 @@ export function buildContext(deps: ContextDeps): AppContext {
       connectTimeoutSec: env.CONNECT_TIMEOUT_SEC,
       demoWaitSec: env.DEMO_WAIT_SEC,
       allowUnresolvedModes,
+      ...(env.RUSH_ROOM_VETO !== undefined ? { rushRoomVeto: env.RUSH_ROOM_VETO } : {}),
     },
   })
   const presence = new PresenceService({ db, redis, notifier, queue, parties, log, now })
   const friends = new FriendsService({ db, redis, notifier, steam, users, parties, log, now, presence })
+  parties.setPresence(presence)
   queue.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onMatchChanged((m) => presence.matchChanged(m))
@@ -206,6 +225,14 @@ export function buildContext(deps: ContextDeps): AppContext {
     snapshots,
     flags,
     announcements: new AnnouncementService(db, now),
-    chat: new ChatService({ db, redis, notifier, isAdmin: (id) => admins.isAdmin(id), now }),
+    chat: new ChatService({
+      db,
+      redis,
+      notifier,
+      isAdmin: (id) => admins.isAdmin(id),
+      now,
+      slowModeSec: async () => slowModeSeconds(await flags.get(CHAT_SLOW_MODE_FLAG)),
+    }),
+    maps,
   }
 }

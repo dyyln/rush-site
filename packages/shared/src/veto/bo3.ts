@@ -116,6 +116,13 @@ export function actingTeam(state: VetoState): VetoTeam | null {
   return step ? state.teams[step.team] : null
 }
 
+// Maps the current step can take. A step with a phase is limited to that phase's pool
+export function stepAvailable(state: VetoState): string[] {
+  const step = currentStep(state)
+  const pool = step?.phase !== undefined ? state.phases?.[step.phase]?.pool : undefined
+  return pool ? state.available.filter((m) => pool.includes(m)) : state.available
+}
+
 export function allVoted(state: VetoState): boolean {
   const team = actingTeam(state)
   if (!team) return false
@@ -127,7 +134,7 @@ export function castVote(state: VetoState, steamId: string, mapId: string): Veto
   const team = actingTeam(state)
   if (!team) throw new VetoError("veto is finished")
   if (!team.steamIds.includes(steamId)) throw new VetoError("player is not on the acting team")
-  if (!state.available.includes(mapId)) throw new VetoError("map is not available")
+  if (!stepAvailable(state).includes(mapId)) throw new VetoError("map is not available")
   return { ...state, votes: { ...state.votes, [steamId]: mapId } }
 }
 
@@ -158,7 +165,7 @@ export function tallyVotes(
 export function resolveStep(state: VetoState, rng: Rng = Math.random): VetoState {
   const step = currentStep(state)
   if (!step) throw new VetoError("veto is finished")
-  const { mapId, tieBroken, noVotes } = tallyVotes(state.votes, state.available, rng)
+  const { mapId, tieBroken, noVotes } = tallyVotes(state.votes, stepAvailable(state), rng)
   const entry: VetoHistoryEntry = {
     step: state.stepIndex,
     action: step.action,

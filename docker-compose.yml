@@ -30,6 +30,7 @@ x-api-env: &api-env
   S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-rushsite-dev-secret}
   S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  RUSH1V1_TEST_QUEUE: ${RUSH1V1_TEST_QUEUE:-false}
 
 services:
   postgres:

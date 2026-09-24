@@ -20,6 +20,21 @@ public class RushRoomPlanTests
     }
 
     [Fact]
+    public void AcceptsTheSevenRoomPathTheApiSends()
+    {
+        Assert.True(RushRoomPlan.TryParse(Json("[401, 203, 207, 102, 211, 205, 301]"), out var plan, out var error));
+        Assert.Null(error);
+        Assert.Equal(new[] { 203, 207, 102, 211, 205 }, plan!.Slots);
+    }
+
+    [Fact]
+    public void RefusesSevenRoomsWithoutTheCastles()
+    {
+        Assert.False(RushRoomPlan.TryParse(Json("[203, 207, 102, 211, 205, 204, 206]"), out _, out var error));
+        Assert.Contains("needs 5", error);
+    }
+
+    [Fact]
     public void AcceptsIdsWrittenAsStrings()
     {
         Assert.True(RushRoomPlan.TryParse(Json("[\"203\", \"207\", \"102\", \"211\", \"205\"]"), out var plan, out _));
@@ -101,6 +116,13 @@ public class RushRoomsControllerTests
     public void RoomsAreSentInWarmupWhenTheMapIsUp()
     {
         New(RushWithRooms());
+        Assert.Equal("say rushsite_rooms 203,207,102,211,205", Assert.Single(RoomCommands));
+    }
+
+    [Fact]
+    public void RushTestModeSendsRoomsToo()
+    {
+        New(MatchConfigLoader.Parse(Json("rush1v1", "valve_rush", 1).Replace("\"winCondition\"", Rooms + "\"winCondition\"")));
         Assert.Equal("say rushsite_rooms 203,207,102,211,205", Assert.Single(RoomCommands));
     }
 

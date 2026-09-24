@@ -1,6 +1,7 @@
 import { z } from "zod"
 
-export const ModeSchema = z.enum(["aim1v1", "aim2v2", "rush3v3"])
+// rush1v1 is a test queue. It is unrated and off unless the API enables it
+export const ModeSchema = z.enum(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
 export type Mode = z.infer<typeof ModeSchema>
 export const MODES = ModeSchema.options
 
@@ -64,5 +65,7 @@ export const ModeConfigSchema = z.object({
   vetoFormat: VetoFormatSchema,
   winCondition: WinConditionSchema,
   cs2: Cs2LaunchSchema,
+  // A test mode is unrated, has no leaderboard or cups and is hidden unless enabled
+  test: z.boolean().optional(),
 })
 export type ModeConfig = z.infer<typeof ModeConfigSchema>

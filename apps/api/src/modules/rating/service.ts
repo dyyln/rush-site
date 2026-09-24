@@ -1,5 +1,6 @@
 import {
   defaultRating,
+  isTestMode,
   teamComposite,
   tierForRating,
   updateRating,
@@ -22,7 +23,7 @@ export type TeamMatchInput = {
   forfeiters?: string[]
   // Players left unrated, such as teammates of a leaver. They still count toward team strength
   exclude?: string[]
-  // Challenge matches are unrated. They still count for history and stats
+  // Challenge matches and test modes are unrated. They still count for history and stats
   source?: string
 }
 
@@ -83,7 +84,7 @@ export class RatingService {
 
   // Updates every player against the mean of the other team and writes rating_events
   async applyMatch(input: TeamMatchInput, tx: Db = this.db): Promise<RatingChange[]> {
-    if (input.source === "challenge") return []
+    if (input.source === "challenge" || isTestMode(input.mode)) return []
     const [a, b] = input.teams
     const all = [...a, ...b]
     const rows = await this.lockRows(tx, all, input.mode)

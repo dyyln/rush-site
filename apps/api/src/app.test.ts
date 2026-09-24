@@ -18,7 +18,7 @@ describe("app wiring", () => {
   it("serves health and public reads", async () => {
     expect((await h.app.inject({ method: "GET", url: "/health" })).json()).toMatchObject({ ok: true, ws: { droppedSlow: expect.any(Number), closedSlow: expect.any(Number) } })
     const modes = (await h.app.inject({ method: "GET", url: "/modes" })).json() as { mode: string }[]
-    expect(modes.map((m) => m.mode)).toEqual(["aim1v1", "aim2v2", "rush3v3"])
+    expect(modes.map((m) => m.mode)).toEqual(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
     const lb = await h.app.inject({ method: "GET", url: "/leaderboard/aim1v1" })
     expect(lb.statusCode).toBe(200)
     expect(lb.json()).toEqual({ mode: "aim1v1", total: 0, rows: [] })
@@ -28,6 +28,7 @@ describe("app wiring", () => {
         { mode: "aim1v1", playersInQueue: 0, matchesInProgress: 0 },
         { mode: "aim2v2", playersInQueue: 0, matchesInProgress: 0 },
         { mode: "rush3v3", playersInQueue: 0, matchesInProgress: 0 },
+        { mode: "rush1v1", playersInQueue: 0, matchesInProgress: 0 },
       ],
     })
     const missing = await h.app.inject({ method: "GET", url: "/nope" })

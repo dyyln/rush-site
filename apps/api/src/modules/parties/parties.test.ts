@@ -2,7 +2,7 @@ import type { PartyUpdatePayload } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, makeUsers } from "../../../test/helpers.js"
-import { matches, matchPlayers, parties, partyMembers, queueTickets } from "../../db/schema.js"
+import { matches, matchPlayers, parties, partyMembers, queueTickets, ratings } from "../../db/schema.js"
 
 type H = Awaited<ReturnType<typeof createAppHarness>>
 
@@ -208,5 +208,40 @@ describe("parties", () => {
     await h.ctx.queue.join(A, ["rush3v3"])
     await call(A, "DELETE", `/parties/members/${B}`)
     expect(await h.db.select().from(queueTickets).where(eq(queueTickets.status, "waiting"))).toHaveLength(0)
+  })
+
+  it("lets a member stop the party queue over http", async () => {
+    await partyOf(A, B)
+    await h.ctx.queue.join(A, ["rush3v3"])
+    const res = await h.app.inject({ method: "POST", url: "/queue/leave", cookies: await cookie(B), payload: {} })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().state).toBe("idle")
+    expect(await h.db.select().from(queueTickets).where(eq(queueTickets.status, "waiting"))).toHaveLength(0)
+  })
+
+  it("sends member ratings for played modes and site presence", async () => {
+    await partyOf(A, B)
+    await h.db.insert(ratings).values([
+      { steamId: B, mode: "rush3v3", rating: 1720, rd: 80, volatility: 0.06, matchesPlayed: 4 },
+      { steamId: B, mode: "aim1v1", rating: 1500, rd: 350, volatility: 0.06, matchesPlayed: 0 },
+    ])
+    await h.ctx.presence.heartbeat(A)
+    const body = await me(A)
+    const a = body.members.find((m) => m.steamId === A)!
+    const b = body.members.find((m) => m.steamId === B)!
+    expect(b.ratings).toEqual({ rush3v3: 1720 })
+    expect(a.ratings).toEqual({})
+    expect(a.presence).toBe("online")
+    expect(b.presence).toBe("offline")
+  })
+
+  it("tells party mates when a member's presence changes", async () => {
+    await partyOf(A, B)
+    await h.ctx.presence.heartbeat(B)
+    const pushed = h.notifier
+      .ofType("friend_update")
+      .filter((s) => s.audience.kind === "users" && s.audience.steamIds.includes(A))
+      .map((s) => s.msg.payload as { kind: string; steamId: string; presence?: string })
+    expect(pushed).toContainEqual(expect.objectContaining({ kind: "presence", steamId: B, presence: "online" }))
   })
 })

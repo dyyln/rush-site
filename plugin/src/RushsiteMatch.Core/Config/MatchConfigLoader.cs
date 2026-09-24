@@ -88,7 +88,7 @@ public static class MatchConfigLoader
         else
         {
             cfg.ParsedWinCondition = wc;
-            var isRushMode = cfg.Mode == Modes.Rush3v3;
+            var isRushMode = Modes.Rush.Contains(cfg.Mode);
             if (isRushMode != (wc.Kind == WinConditionKind.ValveRush))
                 errors.Add($"winCondition '{cfg.WinCondition}' does not fit mode '{cfg.Mode}'");
         }

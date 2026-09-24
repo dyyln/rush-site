@@ -17,8 +17,14 @@ internal sealed class FakeGame : IGameServer
     public void ExecuteCommand(string command) => Commands.Add(command);
     public string? GetConVar(string name) => ConVars.TryGetValue(name, out var v) ? v : null;
     public void Kick(int userId, string reason) => Kicks.Add((userId, reason));
-    public void PrintToAll(string message) => Chat.Add(message);
-    public void PrintToPlayer(string steamId, string message) => Chat.Add(steamId + ": " + message);
+    // Chat holds the text without colour codes. RawChat keeps them.
+    public readonly List<string> RawChat = new();
+    public readonly List<string> Center = new();
+    public readonly Dictionary<string, string> Names = new();
+    public void PrintToAll(string message) { RawChat.Add(message); Chat.Add(ChatColor.Strip(message)); }
+    public void PrintToPlayer(string steamId, string message) { RawChat.Add(message); Chat.Add(steamId + ": " + ChatColor.Strip(message)); }
+    public void PrintCenterToAll(string message) => Center.Add(message);
+    public string? PlayerName(string steamId) => Names.TryGetValue(steamId, out var n) ? n : null;
     public void Log(string message) => Logs.Add(message);
     public string CsgoDirectory => "/srv/cs2/game/csgo";
     public IReadOnlyList<(string SteamId, Side Side)> GetPlayerSides() => Sides.Select(kv => (kv.Key, kv.Value)).ToList();

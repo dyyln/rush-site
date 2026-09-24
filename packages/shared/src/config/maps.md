@@ -2,6 +2,8 @@
 
 `AIM_MAPS` in `modes.ts` uses these ids. The agent launches them with `+host_workshop_map <id>` and DatHost with `workshop_single_map_id`.
 
+These are the defaults. The live pool is the `map_pool` table, edited at /admin/maps. It stays empty, and the site uses `AIM_MAPS`, until an admin first changes the pool. That change copies these defaults into the table.
+
 How they were picked (2026-09-23): search the app 730 Workshop by map name and take the most subscribed item that is a CS2 upload. An item counts as CS2 when it was created after September 2023, carries the `Cs2` tag, and has no legacy `mymaps/*.bsp` file name. Titles, subscriber counts, dates and tags come from Steam's public `GetPublishedFileDetails` API. Authors come from each creator's Steam profile.
 
 | Slot id | Workshop id | Title | Author | Subscribers | Created / updated | URL |

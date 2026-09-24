@@ -18,8 +18,10 @@ const NAV = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/review", label: "Review" },
   { href: "/admin/events", label: "Events" },
+  { href: "/admin/maps", label: "Maps" },
   { href: "/admin/flags", label: "Flags" },
   { href: "/admin/announcements", label: "Announcements" },
+  { href: "/admin/admins", label: "Admins" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {

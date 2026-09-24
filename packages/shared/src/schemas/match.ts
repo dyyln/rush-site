@@ -3,7 +3,8 @@ import { SteamId64Schema, UuidSchema } from "./common.js"
 import { ModeSchema } from "./mode.js"
 import { TierIdSchema } from "../config/tiers.js"
 import { ServerDriverNameSchema } from "../drivers.js"
-import { VetoStateSchema } from "./veto.js"
+import { VetoKindSchema, VetoStateSchema } from "./veto.js"
+import { RushRoomsSchema } from "./agent.js"
 
 export const MatchStatusSchema = z.enum([
   "accepting",
@@ -64,9 +65,6 @@ export type MatchDetailTeam = z.infer<typeof MatchDetailTeamSchema>
 export const MatchMapStatusSchema = z.enum(["upcoming", "live", "done"])
 export type MatchMapStatus = z.infer<typeof MatchMapStatusSchema>
 
-// Rush room ids for slots 0 to 6: T castle, 2 mid, start, 2 mid, CT castle. Same ids as RUSH_ROOMS
-export const RushRoomsSchema = z.array(z.number().int()).length(7)
-
 // One map of a match. A Bo1 has one entry, a series has bestOf entries
 export const MatchMapSchema = z.object({
   mapNumber: z.number().int().positive(),
@@ -96,6 +94,8 @@ export const MatchAcceptViewSchema = z.object({
   required: z.number().int().positive(),
   // True once the viewer accepted or declined
   responded: z.boolean(),
+  // Players who accepted so far
+  acceptedSteamIds: z.array(SteamId64Schema).optional(),
 })
 export type MatchAcceptView = z.infer<typeof MatchAcceptViewSchema>
 
@@ -104,6 +104,8 @@ export const MatchVetoViewSchema = z.object({
   state: VetoStateSchema,
   // Epoch ms. null once the veto is done
   stepDeadline: z.number().nullable(),
+  // Left out means maps
+  kind: VetoKindSchema.optional(),
 })
 export type MatchVetoView = z.infer<typeof MatchVetoViewSchema>
 
@@ -121,8 +123,6 @@ export const MatchDetailSchema = z.object({
   teams: z.array(MatchDetailTeamSchema),
   // round.arena carries the room each round was played in
   rounds: z.array(MatchRoundSchema),
-  // Rush only. The 7 rooms of a single map match, from match_started. Left out until the server reports them
-  rushRooms: RushRoomsSchema.optional(),
   // Challenges and rematches. No rating change
   unrated: z.boolean().optional(),
   tournament: z
@@ -139,10 +139,21 @@ export const MatchDetailSchema = z.object({
   bestOf: z.number().int().positive().optional(),
   // One entry per map. In a series teams[].score is maps won and player stats are totals
   maps: z.array(MatchMapSchema).optional(),
+  // Rush room ids from T castle to CT castle when the room veto ran
+  rushRooms: z.array(z.number().int()).optional(),
   // Participants only, while the match is in that step
   accept: MatchAcceptViewSchema.optional(),
   veto: MatchVetoViewSchema.optional(),
-  warmup: z.object({ connected: z.number().int().nonnegative(), expected: z.number().int().nonnegative() }).optional(),
+  warmup: z
+    .object({
+      connected: z.number().int().nonnegative(),
+      expected: z.number().int().nonnegative(),
+      // Players not on the server yet
+      missingSteamIds: z.array(SteamId64Schema).optional(),
+      // Epoch ms by which every player must be on the server
+      connectDeadline: z.number().optional(),
+    })
+    .optional(),
   // Only included for participants
   connect: z
     .object({

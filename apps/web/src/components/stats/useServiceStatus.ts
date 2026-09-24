@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Mode, ServiceStatus } from "@rushsite/shared";
+import { isTestMode, MODES, type Mode, type ServiceStatus } from "@rushsite/shared";
 import { unavailableText } from "./copy";
 import { statsApi } from "./statsApi";
 
@@ -25,6 +25,11 @@ export function useServiceStatus(refreshMs = REFRESH_MS): ServiceStatus | null {
     };
   }, [refreshMs]);
   return status;
+}
+
+// Modes the site offers. A test mode shows only once the status lists it, which means the server turned it on
+export function offeredModes(status: ServiceStatus | null): Mode[] {
+  return MODES.filter((m) => !isTestMode(m) || !!status?.modes.some((x) => x.mode === m));
 }
 
 // Short reason text when the mode cannot queue, null when it can

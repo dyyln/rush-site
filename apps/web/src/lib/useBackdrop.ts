@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { Mode } from "@rushsite/shared";
+import { isRushMode, type Mode } from "@rushsite/shared";
 
 // The scene behind the page. tokens.css maps html[data-backdrop] to an image and
 // components/layout/Backdrop crossfades to it when the attribute changes
@@ -10,7 +10,7 @@ export type Backdrop = "rush" | "aim";
 // Rush wins when a selection mixes both, since it is the headline mode
 export function backdropFor(modes: readonly Mode[]): Backdrop | null {
   if (modes.length === 0) return null;
-  return modes.includes("rush3v3") ? "rush" : "aim";
+  return modes.some(isRushMode) ? "rush" : "aim";
 }
 
 // Sets the backdrop while the calling page is mounted. No mode keeps the default scene

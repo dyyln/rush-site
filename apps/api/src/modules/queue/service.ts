@@ -14,6 +14,9 @@ import {
   type UserSettingsPatch,
   type QueueModeStatus,
   type QueueStatusPayload,
+  type QueueCooldown,
+  COOLDOWN_LADDERS,
+  type CooldownReason,
 } from "@rushsite/shared"
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm"
 import type { Redis } from "ioredis"
@@ -49,6 +52,12 @@ export function lowestTrust(levels: TrustLevel[]): TrustLevel {
 }
 const TRUST_ETA_TTL_MS = 15_000
 
+// Ladder position for the Play page. Offences past the ladder end repeat the last step
+export function cooldownDetail(reason: CooldownReason, offence: number): QueueCooldown {
+  const steps = COOLDOWN_LADDERS[reason].ladderSec.length
+  return { reason, step: Math.min(Math.max(offence, 1), steps), steps }
+}
+
 const K = {
   queue: (mode: Mode) => `q:${mode}`,
   ticket: (id: string) => `q:t:${id}`,
@@ -78,6 +87,8 @@ export type RefreshResult = { tickets: number; players: number }
 export type QueueOptions = {
   // Lets modes with placeholder config queue anyway, for local testing
   allowUnresolvedModes?: boolean
+  // Test modes switched off by the server config
+  disabledModes?: readonly Mode[]
 }
 
 export type ClaimResult = { ok: true } | { ok: false; lost: string[] }
@@ -212,6 +223,8 @@ export class QueueService {
   async join(steamId: string, modes: Mode[], minTrust?: TrustLevel): Promise<LiveTicket> {
     const wanted = [...new Set(modes)]
     if (wanted.length === 0) throw badRequest("no_modes")
+    const off = wanted.filter((m) => this.opts.disabledModes?.includes(m))
+    if (off.length > 0) throw new ApiError(503, "mode_unavailable", `${off.join(",")}: disabled`)
     if (this.modeGate) {
       const closed: Mode[] = []
       for (const m of wanted) if (!(await this.modeGate(m))) closed.push(m)
@@ -628,6 +641,7 @@ export class QueueService {
       partyId: party?.partyId ?? null,
       modes: [],
       cooldownUntil: cd?.endsAt ?? null,
+      ...(cd ? { cooldown: cooldownDetail(cd.reason, cd.offence) } : {}),
     }
   }
 

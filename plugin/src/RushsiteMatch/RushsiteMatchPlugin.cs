@@ -34,6 +34,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<bool> AimHalftime = new("rushsite_aim_halftime", "Aim modes. Swap sides at halftime.", false);
     public FakeConVar<bool> PauseOnDisconnect = new("rushsite_pause_on_disconnect", "Aim modes. Pause at the next freeze time when a player disconnects.", true);
     public FakeConVar<int> MatchEndWait = new("rushsite_match_end_wait", "Seconds to wait for cs_win_panel_match after the score decides the match.", 10);
+    public FakeConVar<int> MatchEndKickDelay = new("rushsite_match_end_kick_delay", "Seconds the final score stays up before players are kicked.", 10);
     public FakeConVar<int> DemoStopExtra = new("rushsite_demo_stop_extra", "Seconds added to tv_delay before tv_stoprecord.", 5);
     public FakeConVar<bool> KickBots = new("rushsite_kick_bots", "Hold bot_quota at 0 and kick bots.", true);
     public FakeConVar<bool> TryChangeTeam = new("rushsite_try_changeteam", "Also try ChangeTeam to put players on their side. Broken on CS2 1.41.8.2.", false);
@@ -163,6 +164,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
             OvertimeStartMoney = Math.Max(0, OvertimeStartMoney.Value),
             SeriesMapBreak = TimeSpan.FromSeconds(Math.Max(0, SeriesMapBreak.Value)),
             MatchEndWait = TimeSpan.FromSeconds(MatchEndWait.Value),
+            MatchEndKickDelay = TimeSpan.FromSeconds(Math.Max(0, MatchEndKickDelay.Value)),
             DemoStopExtra = TimeSpan.FromSeconds(DemoStopExtra.Value),
             AimHalftime = AimHalftime.Value,
             PauseOnDisconnect = PauseOnDisconnect.Value,
@@ -234,7 +236,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     {
         if (_match is null || ev.Userid is { IsBot: true }) return HookResult.Continue;
         var id = Sid(ev.Userid) ?? (ev.Xuid != 0 ? ev.Xuid.ToString() : null);
-        if (id is not null) _match.OnPlayerDisconnected(id, ev.Userid?.UserId);
+        if (id is not null) _match.OnPlayerDisconnected(id, ev.Userid?.UserId, ev.Name);
         return HookResult.Continue;
     }
 

@@ -1,3 +1,4 @@
+import { isTestMode, MODES, type Mode } from "@rushsite/shared"
 import { z } from "zod"
 
 const bool = z
@@ -97,6 +98,10 @@ export const EnvSchema = z.object({
   DEMO_WAIT_SEC: z.coerce.number().int().nonnegative().default(180),
   // Lets modes with placeholder map or game ids queue outside production
   ALLOW_UNRESOLVED_MODES: bool.default(false),
+  // Rush room ban and pick. Unset follows RUSH_ROOM_VETO.enabled in shared config
+  RUSH_ROOM_VETO: bool.optional(),
+  // Opens the unrated 1v1 Rush test queue. Off hides it on the site and refuses joins
+  RUSH1V1_TEST_QUEUE: bool.default(false),
   // Disable background loops, for tests and one-off scripts
   DISABLE_LOOPS: bool.default(false),
   // Per route HTTP rate limits backed by Redis
@@ -104,6 +109,11 @@ export const EnvSchema = z.object({
 })
 
 export type Env = z.infer<typeof EnvSchema>
+
+// Test modes the server config leaves off. They are hidden on the site and refuse joins
+export function disabledModes(env: Pick<Env, "RUSH1V1_TEST_QUEUE">): Mode[] {
+  return MODES.filter((m) => isTestMode(m) && !(m === "rush1v1" && env.RUSH1V1_TEST_QUEUE))
+}
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = EnvSchema.safeParse(source)

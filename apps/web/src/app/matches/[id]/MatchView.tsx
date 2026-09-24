@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { MatchMap, RoomStage, RoomState } from "@rushsite/shared";
+import { connectDeadlineOf, isRushMode, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -28,6 +28,7 @@ import { useLiveExtras } from "@/components/match/useLiveExtras";
 import { AcceptPanel, AllocatingPanel, CancelledPanel, ConnectPanel, VetoPanel } from "@/components/match/room/StagePanels";
 import { RoomResult } from "@/components/match/room/RoomResult";
 import { SeriesStrip } from "@/components/match/room/SeriesStrip";
+import { RoomsCard } from "@/components/rush/RoomsCard";
 import roomStyles from "@/components/match/room/Room.module.css";
 import actionStyles from "@/components/match/MatchActions.module.css";
 import { ApiError } from "@/lib/api";
@@ -165,6 +166,10 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
 
       <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
 
+      {isRushMode(m.mode) && stage !== "veto" && (
+        <RoomsCard rushRooms={m.rushRooms} veto={room.veto?.kind === "rooms" ? room.veto.state : null} sideOf={(t) => sideOf(t)} />
+      )}
+
       {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
 
       {finished && <MatchSummary m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} />}
@@ -205,7 +210,16 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
   const me = participant ? viewer : null;
   switch (stage) {
     case "accept":
-      return room.accept ? <AcceptPanel accept={room.accept} mode={m.mode} participant={participant} onRespond={onRespond} /> : null;
+      return room.accept ? (
+        <AcceptPanel
+          accept={room.accept}
+          mode={m.mode}
+          participant={participant}
+          onRespond={onRespond}
+          viewer={viewer}
+          team={(m.teams.find((t) => t.players.some((p) => p.steamId === viewer))?.players ?? []).map((p) => ({ steamId: p.steamId, name: p.displayName }))}
+        />
+      ) : null;
     case "veto":
       return <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} />;
     case "allocating":
@@ -213,7 +227,16 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
     case "connect":
     case "live":
       return participant && room.server ? (
-        <ConnectPanel mode={m.mode} server={room.server} live={stage === "live"} warmup={room.warmup} mapId={currentMapId} />
+        <ConnectPanel
+          mode={m.mode}
+          server={room.server}
+          live={stage === "live"}
+          warmup={room.warmup}
+          mapId={currentMapId}
+          deadline={connectDeadlineOf(room)}
+          names={names}
+          viewer={viewer}
+        />
       ) : null;
     case "result":
       return <RoomResult m={m} result={room.result} viewer={viewer} />;
@@ -276,9 +299,9 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
           <TeamScore team={b} side={sideOf(1)} />
         </Card>
       )}
-      {m.mode === "rush3v3" && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
+      {isRushMode(m.mode) && <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} />}
       {a && b && rounds.length > 0 && (
-        <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={m.mode === "rush3v3"} kills={kills} roster={roster} />
+        <RoundTimeline rounds={rounds} teamA={a.name} teamB={b.name} sideA={sideOf(0)} rush={isRushMode(m.mode)} kills={kills} roster={roster} />
       )}
       <PlayerTables m={m} sideOf={sideOf} topDamage={topDamage} />
     </>

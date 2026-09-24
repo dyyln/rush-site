@@ -1,4 +1,4 @@
-import { generateMatchSlug, isMatchSlug } from "@rushsite/shared"
+import { CONNECT_GRACE_SEC, generateMatchSlug, isMatchSlug } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, createTestDb, finishVeto, makeUsers, withServers } from "../../../test/helpers.js"
@@ -68,6 +68,9 @@ describe("match rooms", () => {
     await h.ctx.flow.respond(a, matchId, true)
     let m = (await get(matchId, ca)).json().match
     expect(m.accept).toMatchObject({ accepted: 1, required: 2, responded: true, windowSec: 20 })
+    expect(m.accept.acceptedSteamIds).toEqual([a])
+    const sent = h.notifier.ofType("match_found").at(-1)!.msg.payload as { acceptedSteamIds?: string[] }
+    expect(sent.acceptedSteamIds).toEqual([a])
     // Spectators see no step state
     expect((await get(matchId)).json().match.accept).toBeUndefined()
     const cb = await cookieFor(b)
@@ -94,5 +97,19 @@ describe("match rooms", () => {
     const slug = await newMatchSlug(h.db, () => 0)
     expect(slug).not.toBe(taken)
     expect(slug.split("-")).toHaveLength(4)
+  })
+  it("shows who is still missing and the connect deadline", async () => {
+    const { matchId, a, b } = await found()
+    await h.ctx.flow.respond(a, matchId, true)
+    await h.ctx.flow.respond(b, matchId, true)
+    await finishVeto(h, matchId)
+    await h.ctx.flow.handleEvent(matchId, { type: "server_ready" })
+    const ready = h.notifier.ofType("server_ready").at(-1)!.msg.payload as { connectDeadline?: number }
+    expect(ready.connectDeadline).toBe(h.ctx.now() + CONNECT_GRACE_SEC * 1000)
+    await h.ctx.flow.handleEvent(matchId, { type: "player_connected", steamId: a })
+    const update = h.notifier.ofType("match_update").at(-1)!.msg.payload as { missingSteamIds?: string[] }
+    expect(update.missingSteamIds).toEqual([b])
+    const m = (await get(matchId, await cookieFor(a))).json().match
+    expect(m.warmup).toMatchObject({ connected: 1, expected: 2, missingSteamIds: [b], connectDeadline: ready.connectDeadline })
   })
 })

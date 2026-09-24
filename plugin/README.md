@@ -73,6 +73,14 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - It is found at `round_freeze_end` by matching living T pawns, or `tspawn*` entities, to the nearest `t1room.<id>` target.
   - This field is not in CONTRACTS.md yet.
 
+## Chat
+
+- Every line starts with the brand prefix in purple. Scores are gold and team names follow the site colours, purple for the first team and amber for the second.
+- Aim start countdown: announced when it starts, every 10 seconds above 10, then each of the last 5 seconds. The center of the screen shows every second. When it stops, chat names who left the server or switched side.
+- Disconnect: `<name> disconnected. 3:00 to return or they forfeit.` The time is `rushsite_disconnect_grace`. Aim adds that the match pauses at the next freeze time. The time left is repeated every minute and at 30 and 10 seconds, and `<name> is back.` is printed on return. This runs in warmup, live and between series maps, in every mode.
+- Match end: the final score, the match link when `brand.siteUrl` is set, and the time until the kick. Players are kicked after `rushsite_match_end_kick_delay` with the score in the kick reason. Anyone who reconnects after that is kicked again.
+- Series: each map end prints the map score, the series score and the next map. The series end prints the series score, every map score and the match link.
+
 ### Rush rooms from the veto
 
 Needs our modified `rush_001` script from `rush-script/`, installed as described in `rush-script/README.md`. Without it the chat line does nothing and Valve's random draw stands. The script side was proven on a local dedicated server (see `docs/RUSH-ROOM-VETO.md`). The plugin side has unit tests but has not run on a server yet.
@@ -241,6 +249,9 @@ Relative paths resolve against `game/csgo`. If `RUSHSITE_MATCH_ID` is set and di
 - `map` is optional. It is the launch map, and each `series.maps` entry has the same shape: `{ id, displayName?, workshopId?, mapName?, loadout? }`. Each needs a `workshopId` of digits or a `mapName` of letters, digits and `_`.
 - `loadout` is optional: `{ primary?: { ct?, t? }, secondary?: { ct?, t? }, armor?: "none" | "kevlar" | "kevlar_helmet" }`. Weapons are `weapon_` engine names. A missing side leaves that slot empty, and armor defaults to kevlar and helmet.
 - `series` is optional: `{ bestOf, maps, startMapNumber, wins, demoUploads }`. `bestOf` is odd, `maps` and `demoUploads` have `bestOf` entries, `startMapNumber` is in range, and `wins` uses team names and does not already decide the series.
+- `brand` is optional: `{ name?, siteUrl? }`. `name` is the chat prefix, `[rushsite]` when missing. `siteUrl` is the web root for the match link printed at match end. A `siteUrl` that is not an absolute http(s) URL is ignored and no link is printed. Neither field fails the load.
+- `slug` is optional. The match link is `<siteUrl>/matches/<slug>`, or `<siteUrl>/matches/<matchId>` without it.
+- A team `displayName`, when set, is used in chat. Otherwise chat says `Team <name>`.
 
 The plugin retries the load every second until it succeeds, and `rushsite_reload` retries it on demand.
 
@@ -268,6 +279,7 @@ Launch the server with:
 | `rushsite_aim_halftime` | 0 | Aim only. Swap sides at halftime |
 | `rushsite_pause_on_disconnect` | 1 | Aim only. `mp_pause_match` when a player drops, and unpause when all are back |
 | `rushsite_match_end_wait` | 10 | Seconds to wait for `cs_win_panel_match` after the score decides the match |
+| `rushsite_match_end_kick_delay` | 10 | Seconds the final score and match link stay on screen before everyone is kicked |
 | `rushsite_demo_stop_extra` | 5 | Seconds added to `tv_delay` before `tv_stoprecord` |
 | `rushsite_kick_bots` | 1 | Hold `bot_quota` at 0. `gamemode_rush.cfg` sets 2 |
 | `rushsite_try_changeteam` | 0 | Also try `ChangeTeam` when a player must move. Broken on the current CS2 build |

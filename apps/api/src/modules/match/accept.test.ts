@@ -14,7 +14,7 @@ const p = (steamId: string, ticketId: string, accepted = false, declined = false
 
 describe("resolveAccept", () => {
   it("waits while players are still deciding", () => {
-    expect(resolveAccept([p("a", "t1", true), p("b", "t2")], false)).toEqual({ kind: "pending", accepted: 1, required: 2 })
+    expect(resolveAccept([p("a", "t1", true), p("b", "t2")], false)).toEqual({ kind: "pending", accepted: 1, required: 2, acceptedSteamIds: ["a"] })
   })
 
   it("proceeds when everyone accepted", () => {

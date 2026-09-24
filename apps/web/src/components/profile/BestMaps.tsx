@@ -1,4 +1,5 @@
 import type { Mode } from "@rushsite/shared";
+import { MapThumb } from "@/components/play/MapThumb";
 import { cx } from "@/components/ui/cx";
 import { formatStat, pct, winRate } from "@/lib/format";
 import { mapName } from "@/lib/modes";
@@ -27,7 +28,10 @@ export function BestMaps({ mode, maps }: { mode: Mode; maps: MapStat[] }) {
         return (
           <li key={m.mapId} className={cx(styles.row, small && styles.small)}>
             <span className={styles.head}>
-              <span className={cx("mono", styles.name)}>{mapName(mode, m.mapId)}</span>
+              <span className={styles.map}>
+                <MapThumb mapId={m.mapId} className={styles.thumb} />
+                <span className={cx("mono", styles.name)}>{mapName(mode, m.mapId)}</span>
+              </span>
               <span className={cx("mono", styles.rate)}>
                 {formatStat(wr, "pct", m.matches)}
                 <span className="visually-hidden"> win rate</span>

@@ -21,6 +21,12 @@ public sealed class MatchConfig
     // Optional. Present only for a series such as a Bo3. Absent means one map.
     public SeriesConfig? Series { get; init; }
 
+    // Optional. Brand name for the chat prefix and the site the match link points to.
+    public BrandConfig? Brand { get; init; }
+
+    // Optional. Word id of the match, such as brave-amber-falcon. The match link uses it over matchId.
+    public string? Slug { get; init; }
+
     // Optional. Rush rooms for slots 1 to 5 from the website veto. A map entry's own rushRooms wins.
     // Kept as raw JSON so a bad value falls back to Valve's random draw instead of failing the match.
     public JsonElement? RushRooms { get; init; }
@@ -77,6 +83,9 @@ public sealed class TeamConfig
     // Optional. "ct" or "t". When left out teams[0] plays CT and teams[1] plays T.
     public string? Side { get; init; }
 
+    // Optional. Shown in chat when set, such as a cup team name.
+    public string? DisplayName { get; init; }
+
     public const string SideCt = "ct";
     public const string SideT = "t";
 
@@ -86,6 +95,13 @@ public sealed class TeamConfig
         "t" or "2" or "terrorist" => SideT,
         _ => null,
     };
+}
+
+public sealed class BrandConfig
+{
+    public string? Name { get; init; }
+    // Web site root, such as https://example.gg. Match links are siteUrl/matches/<slug or matchId>.
+    public string? SiteUrl { get; init; }
 }
 
 public sealed class DemoUploadConfig
@@ -148,5 +164,8 @@ public static class Modes
     public const string Aim1v1 = "aim1v1";
     public const string Aim2v2 = "aim2v2";
     public const string Rush3v3 = "rush3v3";
-    public static readonly IReadOnlySet<string> All = new HashSet<string> { Aim1v1, Aim2v2, Rush3v3 };
+    // Unrated Rush test queue with one player per side
+    public const string Rush1v1 = "rush1v1";
+    public static readonly IReadOnlySet<string> All = new HashSet<string> { Aim1v1, Aim2v2, Rush3v3, Rush1v1 };
+    public static readonly IReadOnlySet<string> Rush = new HashSet<string> { Rush3v3, Rush1v1 };
 }

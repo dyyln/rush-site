@@ -51,7 +51,7 @@ export function Timer({ until, since, totalSec, label, size = "sm", frozenSec }:
         stroke={6}
         label={label ? `${label}: ${sec} seconds` : undefined}
       >
-        <span className={cx(styles.ringText, "mono")}>{sec}</span>
+        <span className={cx(styles.ringText, "mono", totalSec >= 60 && styles.ringTextLong)}>{totalSec >= 60 ? text : sec}</span>
       </CountdownRing>
     );
   }

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { MatchAcceptView, MatchVetoView, Mode, RoomServer } from "@rushsite/shared";
-import { ButtonLink } from "@/components/ui/Button";
+import { CONNECT_GRACE_SEC, type MatchAcceptView, type MatchVetoView, type Mode, type RoomServer, type RoomWarmup } from "@rushsite/shared";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Timer } from "@/components/ui/Timer";
@@ -10,23 +10,31 @@ import { VetoBoard } from "@/components/ui/VetoBoard";
 import { VetoSummary } from "@/components/play/VetoSummary";
 import { AcceptOverlay } from "./AcceptOverlay";
 import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
+import { RoomVetoBoard } from "@/components/rush/RoomVetoBoard";
 import { cancelCopy } from "@/lib/errors";
 import { mapName, modeLabel } from "@/lib/modes";
 import styles from "./Room.module.css";
+
+type Named = { steamId: string; name: string };
 
 export function AcceptPanel({
   accept,
   mode,
   participant,
   onRespond,
+  team = [],
+  viewer = null,
 }: {
   accept: MatchAcceptView;
   mode: Mode;
   participant: boolean;
   onRespond: (accept: boolean) => void;
+  // The viewer's team. Their accepts are shown by name
+  team?: Named[];
+  viewer?: string | null;
 }) {
   // Players get the blocking in-game style overlay. Spectators keep an inline panel
-  if (participant) return <AcceptOverlay accept={accept} mode={mode} onRespond={onRespond} />;
+  if (participant) return <AcceptOverlay accept={accept} mode={mode} onRespond={onRespond} team={team} viewer={viewer} />;
   return (
     <Card tone="accent" eyebrow="Match found" title={modeLabel(mode)}>
       <div className={styles.accept}>
@@ -69,7 +77,11 @@ export function VetoPanel({
   }
   return (
     <Card tone="accent">
-      <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      {veto.kind === "rooms" ? (
+        <RoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      ) : (
+        <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
+      )}
     </Card>
   );
 }
@@ -88,7 +100,7 @@ export function AllocatingPanel({
   return (
     <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={modeLabel(mode)}>
       <div className="stack">
-        {veto?.state.done && viewer && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
+        {veto?.state.done && viewer && veto.kind !== "rooms" && <VetoSummary mode={mode} state={veto.state} mySteamId={viewer} />}
         <ConnectSteps step={step} />
       </div>
     </Card>
@@ -106,11 +118,18 @@ export function ConnectPanel({
   live,
   warmup,
   mapId,
+  deadline = null,
+  names = {},
+  viewer = null,
 }: {
   mode: Mode;
   server: RoomServer;
   live: boolean;
-  warmup: { connected: number; expected: number } | null;
+  warmup: RoomWarmup | null;
+  // Epoch ms by which every player must be on the server
+  deadline?: number | null;
+  names?: Record<string, string>;
+  viewer?: string | null;
   // Map on the server now. In a series it changes while the server stays the same
   mapId: string | null;
 }) {
@@ -122,8 +141,17 @@ export function ConnectPanel({
           <p className="muted">Dropped out? Join the same server again. It stays the same for every map.</p>
         ) : (
           <>
-            <p className="muted">Join the server now. If you do not connect in time you forfeit the match and lose rating.</p>
+            <div className={styles.accept}>
+              {deadline !== null && <Timer until={deadline} totalSec={CONNECT_GRACE_SEC} size="lg" label="Time to join" />}
+              <p className="muted">Join the server now. If you do not connect in time you forfeit the match and lose rating.</p>
+            </div>
             <ConnectSteps step="waiting" connected={warmup?.connected} expected={warmup?.expected} />
+            {warmup?.missingSteamIds && warmup.missingSteamIds.length > 0 && (
+              <p className="muted" aria-live="polite">
+                Not on the server yet:{" "}
+                {warmup.missingSteamIds.map((id) => (id === viewer ? "you" : (names[id] ?? "a player"))).join(", ")}
+              </p>
+            )}
           </>
         )}
         <label htmlFor="connect-string" className="visually-hidden">

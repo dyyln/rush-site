@@ -68,6 +68,8 @@ public sealed class RushRoomPlan
         plan = null;
         error = null;
         if (ids is null) return false;
+        // The API sends the full path castle to castle. Keep the 5 slots between the castles
+        if (ids.Count == PickedSlots + 2 && ids[0] == TCastle && ids[^1] == CtCastle) ids = ids.Skip(1).Take(PickedSlots).ToList();
         if (ids.Count != PickedSlots)
         {
             error = $"rushRooms has {ids.Count} entries, needs {PickedSlots}";

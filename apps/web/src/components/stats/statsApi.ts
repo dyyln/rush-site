@@ -18,9 +18,10 @@ export type FriendsLeaderboard = Omit<Leaderboard, "rows"> & {
 };
 
 export const statsApi = {
+  // Modes the server switched off, such as a test queue, are left out so the site hides them
   async status(): Promise<ServiceStatus> {
-    if (isMock) return mockCall(mockStatus, 200);
-    return api.get<ServiceStatus>("/status");
+    const s = isMock ? await mockCall(mockStatus, 200) : await api.get<ServiceStatus>("/status");
+    return { ...s, modes: s.modes.filter((m) => m.reason !== "disabled") };
   },
   async distribution(mode: Mode): Promise<TierDistribution> {
     if (isMock) return mockCall(() => mockDistribution(mode), 200);

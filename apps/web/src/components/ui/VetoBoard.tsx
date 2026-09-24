@@ -1,6 +1,7 @@
 "use client";
 
 import { VETO_STEP_SEC, type Mode, type VetoState } from "@rushsite/shared";
+import { useMapPool } from "@/lib/mapPool";
 import { mapName } from "@/lib/modes";
 import { VetoSummary } from "@/components/play/VetoSummary";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
@@ -23,6 +24,8 @@ type VetoBoardProps = {
 };
 
 export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names = {}, frozenSec }: VetoBoardProps) {
+  // Re-renders with admin set names once the live pool loads
+  useMapPool();
   const myTeam = state.teams[0].steamIds.includes(mySteamId) ? 0 : 1;
   const step = state.done ? null : state.steps[state.stepIndex] ?? null;
   const myTurn = step?.team === myTeam;
@@ -69,7 +72,9 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
     : myTurn
       ? myVote
         ? `You voted ${mapName(mode, myVote)}.`
-        : "Pick a map to ban."
+        : step!.action === "pick"
+          ? "Pick a map to play."
+          : "Pick a map to ban."
       : "Waiting for opponents.";
 
   return (

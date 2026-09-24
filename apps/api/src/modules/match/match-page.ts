@@ -1,11 +1,11 @@
-import { tierForRating, type MatchDetail, type MatchRound, type MatchStatus, type ServerDriverName } from "@rushsite/shared"
+import { isTestMode, tierForRating, type MatchDetail, type MatchRound, type MatchStatus, type ServerDriverName } from "@rushsite/shared"
 import { asc, eq } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { matchPlayers, matchRounds, matches, tournaments } from "../../db/schema.js"
 import type { UsersService } from "../auth/users.js"
 import type { RatingService } from "../rating/service.js"
 import { buildRoomView } from "./room-view.js"
-import { isSeries, seriesDetail } from "./series.js"
+import { loadMapRows, seriesDetail, showsAsSeries } from "./series.js"
 import type { DemoStorage } from "./storage.js"
 
 export type { MatchRound as MatchRoundView, MatchUpdatePayload } from "@rushsite/shared"
@@ -52,12 +52,14 @@ export async function buildMatchPage(
     .from(matchRounds)
     .where(eq(matchRounds.matchId, matchId))
     .orderBy(asc(matchRounds.mapNumber), asc(matchRounds.round))
-  const series = isSeries(m)
+  const mapRows = (m.bestOf ?? 1) > 1 ? await loadMapRows(db, m.id) : []
+  const series = showsAsSeries(m, mapRows.length)
   const scores = teamScores(m.teams, m.score)
 
   const page: MatchPage = {
     id: m.id,
     ...(m.slug ? { slug: m.slug } : {}),
+    ...(m.rushRooms ? { rushRooms: m.rushRooms } : {}),
     mode: m.mode,
     mapId: m.mapId,
     status: m.status as MatchStatus,
@@ -86,13 +88,13 @@ export async function buildMatchPage(
         }),
     })),
     rounds: rounds.map((r) => roundView(r, series)),
-    ...(m.source === "challenge" ? { unrated: true } : {}),
+    ...(m.source === "challenge" || isTestMode(m.mode) ? { unrated: true } : {}),
   }
 
   if (series) {
     const lines = new Map(page.teams.flatMap((t) => t.players).map((p) => [p.steamId, p]))
     page.bestOf = m.bestOf ?? 1
-    page.maps = await seriesDetail(db, m, lines, deps.storage, deps.now?.() ?? Date.now())
+    page.maps = await seriesDetail(db, m, mapRows, lines, deps.storage, deps.now?.() ?? Date.now())
   }
 
   if (m.tournamentId) {

@@ -2,11 +2,11 @@ import { z } from "zod"
 import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./schemas/common.js"
 import { ModeSchema } from "./schemas/mode.js"
 import { TrustLevelSchema } from "./schemas/trust.js"
-import { VetoStateSchema } from "./schemas/veto.js"
+import { VetoKindSchema, VetoStateSchema } from "./schemas/veto.js"
 import { MatchMapSchema, MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
-import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema } from "./schemas/friends.js"
+import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema, PresenceSchema } from "./schemas/friends.js"
 import { CupEntrantPreviewSchema, CupWinnerSchema } from "./schemas/cups-ux.js"
 import { ChatDeletedPayloadSchema, ChatMessageSchema } from "./schemas/chat.js"
 
@@ -39,6 +39,15 @@ export const QueueModeStatusSchema = z.object({
 })
 export type QueueModeStatus = z.infer<typeof QueueModeStatusSchema>
 
+export const QueueCooldownSchema = z.object({
+  reason: z.enum(["decline", "accept_timeout", "no_connect", "abandon"]),
+  // 1 based offence number within the decay window. Capped at steps
+  step: z.number().int().positive(),
+  // Length of the ladder this reason uses
+  steps: z.number().int().positive(),
+})
+export type QueueCooldown = z.infer<typeof QueueCooldownSchema>
+
 export const QueueStatusPayloadSchema = z.object({
   state: z.enum(["idle", "queued", "cooldown"]),
   partyId: UuidSchema.nullable(),
@@ -46,6 +55,8 @@ export const QueueStatusPayloadSchema = z.object({
   modes: z.array(QueueModeStatusSchema).refine((m) => uniqueModes(m.map((x) => x.mode)), "duplicate mode"),
   // Epoch ms, set when state is cooldown
   cooldownUntil: z.number().nullable(),
+  // Why the cooldown runs and where it sits on its ladder. Set with cooldownUntil
+  cooldown: QueueCooldownSchema.optional(),
   // Opponent trust floor of the ticket. Set when queued
   minTrust: TrustLevelSchema.optional(),
   // True only on the periodic refresh. A slow socket may drop these, never a state change
@@ -63,6 +74,8 @@ export const MatchFoundPayloadSchema = z.object({
   // Epoch ms when the accept window closes
   acceptDeadline: z.number(),
   acceptWindowSec: z.number().int().positive(),
+  // Players who accepted so far. The room names them for the viewer's own team
+  acceptedSteamIds: z.array(SteamId64Schema).optional(),
   accepted: z.number().int().nonnegative(),
   required: z.number().int().positive(),
 })
@@ -75,6 +88,8 @@ export const VetoStatePayloadSchema = z.object({
   state: VetoStateSchema,
   // Epoch ms when the current step resolves. null once the veto is done
   stepDeadline: z.number().nullable(),
+  // Left out means maps
+  kind: VetoKindSchema.optional(),
 })
 export type VetoStatePayload = z.infer<typeof VetoStatePayloadSchema>
 
@@ -86,6 +101,8 @@ export const ServerReadyPayloadSchema = z.object({
   password: z.string(),
   // Full console connect string including the password
   connect: z.string(),
+  // Epoch ms by which every player must be on the server
+  connectDeadline: z.number().optional(),
   mapId: z.string(),
 })
 export type ServerReadyPayload = z.infer<typeof ServerReadyPayloadSchema>
@@ -109,7 +126,12 @@ export const MatchResultPayloadSchema = z.object({
 })
 export type MatchResultPayload = z.infer<typeof MatchResultPayloadSchema>
 
-export const PartyMemberSchema = PlayerCardSchema
+export const PartyMemberSchema = PlayerCardSchema.extend({
+  // Site presence when the party was sent. Friend presence updates keep it current
+  presence: PresenceSchema.optional(),
+  // Rating per mode the member has played
+  ratings: z.partialRecord(ModeSchema, z.number()).optional(),
+})
 export type PartyMember = z.infer<typeof PartyMemberSchema>
 
 export const PartyUpdatePayloadSchema = z.object({
@@ -189,6 +211,21 @@ export type TournamentEntry = z.infer<typeof TournamentEntrySchema>
 
 export const BracketSideSchema = z.enum(["a", "b"])
 
+// Round score for one game, or maps won for a series
+export const BracketScoreSchema = z.object({ a: z.number().int().nonnegative(), b: z.number().int().nonnegative() })
+export type BracketScore = z.infer<typeof BracketScoreSchema>
+
+// One map of a best-of series with its round score
+export const BracketMapScoreSchema = z.object({
+  mapNumber: z.number().int().positive(),
+  mapId: z.string().nullable(),
+  status: z.enum(["live", "done"]),
+  score: BracketScoreSchema,
+  // null while live or when the map was drawn
+  winner: BracketSideSchema.nullable(),
+})
+export type BracketMapScore = z.infer<typeof BracketMapScoreSchema>
+
 export const BracketMatchSchema = z.object({
   // Stable key such as r1m0
   id: z.string(),
@@ -210,6 +247,12 @@ export const BracketMatchSchema = z.object({
   resolution: z
     .enum(["played", "bye", "walkover", "forfeit", "double_forfeit", "void", "disqualified", "admin_decision"])
     .nullable(),
+  // Round score of a single game or maps won in a series. null before any game has a score
+  score: BracketScoreSchema.nullable().optional(),
+  // Series only. Maps started or decided so far in map order
+  maps: z.array(BracketMapScoreSchema).optional(),
+  // Match room id of the live game or the last game played, for /matches/<room>
+  room: z.string().nullable().optional(),
 })
 export type BracketMatchView = z.infer<typeof BracketMatchSchema>
 
@@ -269,7 +312,7 @@ export const ModeStatsPayloadSchema = z.object({
 })
 export type ModeStatsPayload = z.infer<typeof ModeStatsPayloadSchema>
 
-export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user"])
+export const AdminEventKindSchema = z.enum(["queue", "match", "host", "webhook", "error", "user", "maps"])
 export type AdminEventKind = z.infer<typeof AdminEventKindSchema>
 
 // Sent to admin clients only
@@ -302,6 +345,8 @@ export const MatchUpdatePayloadSchema = z.object({
   // Warm-up progress, sent to participants on player_connected and player_disconnected
   connected: z.number().int().nonnegative().optional(),
   expected: z.number().int().nonnegative().optional(),
+  // Players not on the server yet, sent with the warm-up counts
+  missingSteamIds: z.array(SteamId64Schema).optional(),
   // Series only. The live map, and every map without per map players
   mapNumber: z.number().int().positive().optional(),
   maps: z.array(MatchMapSchema.omit({ players: true })).optional(),

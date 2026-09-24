@@ -2,44 +2,79 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { isMock } from "@/lib/env";
+import { adminApi, errorMessage } from "../_lib/client";
+import { ago, TRUST_LABEL, trustTone } from "../_lib/format";
 import { mockAdmin } from "../_lib/mock";
+import type { UserSearchHit } from "../_lib/types";
 import { ManualBan } from "../_components/ManualBan";
 import { PageHeader } from "../_components/parts";
 import styles from "../admin.module.css";
 
-// Accepts a SteamID64 or a steamcommunity.com/profiles/ URL
+// A SteamID64 or a steamcommunity.com/profiles/ URL goes straight to the user page
 function parseSteamId(input: string): string | null {
-  const m = input.trim().match(/(\d{17})/);
+  const s = input.trim();
+  if (/^\d{17}$/.test(s)) return s;
+  const m = s.match(/steamcommunity\.com\/profiles\/(\d{17})/i);
   return m ? m[1]! : null;
 }
+
+const isVanityUrl = (input: string) => /steamcommunity\.com\/id\//i.test(input);
+
+type Results = { q: string; users: UserSearchHit[] };
 
 export default function AdminUsersPage() {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<Results | null>(null);
+  const resultsRef = useRef<HTMLHeadingElement>(null);
+
+  async function submit() {
+    const q = value.trim();
+    const id = parseSteamId(q);
+    if (id) return router.push(`/admin/users/${id}`);
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (isVanityUrl(q)) {
+        const r = await adminApi.resolveProfile(q);
+        return router.push(`/admin/users/${r.steamId}`);
+      }
+      if (q.length < 2) return setError("Enter at least 2 characters of a name, or a SteamID64");
+      setResults({ q, users: await adminApi.searchUsers(q) });
+      requestAnimationFrame(() => resultsRef.current?.focus());
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
-      <PageHeader title="Users" description="Look up a player by SteamID64 to see trust signals, ratings and history." />
+      <PageHeader title="Users" description="Find a player by name, SteamID64 or Steam profile URL to see trust signals, ratings and history." />
       <Card>
         <form
           className={styles.formRow}
+          role="search"
           onSubmit={(e) => {
             e.preventDefault();
-            const id = parseSteamId(value);
-            if (!id) return setError("Enter a 17 digit SteamID64 or a Steam profile URL");
-            router.push(`/admin/users/${id}`);
+            void submit();
           }}
         >
           <Input
-            label="SteamID64"
-            placeholder="76561198000000000"
-            inputMode="numeric"
+            label="Name, SteamID64 or profile URL"
+            placeholder="vexa or 76561198000000000"
+            autoComplete="off"
+            maxLength={200}
             value={value}
             error={error}
             onChange={(e) => {
@@ -47,9 +82,43 @@ export default function AdminUsersPage() {
               setError(undefined);
             }}
           />
-          <Button type="submit">Look up</Button>
+          <Button type="submit" loading={busy}>
+            Search
+          </Button>
         </form>
       </Card>
+
+      {results && (
+        <section className={styles.section} aria-labelledby="user-results">
+          <h2 id="user-results" ref={resultsRef} tabIndex={-1} className={styles.sectionTitle}>
+            {results.users.length === 0
+              ? `No players match "${results.q}"`
+              : `${results.users.length}${results.users.length >= 20 ? "+" : ""} ${results.users.length === 1 ? "player matches" : "players match"} "${results.q}"`}
+          </h2>
+          {results.users.length > 0 && (
+            <ul className={styles.hitList}>
+              {results.users.map((u) => (
+                <li key={u.steamId}>
+                  <Link href={`/admin/users/${u.steamId}`} className={styles.hit}>
+                    <Avatar name={u.displayName} src={u.avatarUrl} />
+                    <span className={styles.hitText}>
+                      <span className={styles.hitName}>{u.displayName}</span>
+                      <span className={`${styles.muted} mono`}>{u.steamId}</span>
+                    </span>
+                    <span className={styles.hitMeta}>
+                      {u.banned && <Badge tone="loss">Banned</Badge>}
+                      {u.trustLevel && <Badge tone={trustTone(u.trustLevel)}>{TRUST_LABEL[u.trustLevel] ?? u.trustLevel}</Badge>}
+                      <span className={styles.muted}>Seen {ago(u.lastLoginAt, Date.now())}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          {results.users.length >= 20 && <p className={styles.muted}>Showing the first 20. Type more of the name to narrow it down.</p>}
+        </section>
+      )}
+
       <ManualBan />
       {isMock && (
         <Card title="Sample players">

@@ -11,6 +11,7 @@ import {
 } from "@rushsite/shared"
 import { and, desc, eq, gt, lte, or, sql } from "drizzle-orm"
 import type { AppContext } from "../../context.js"
+import { disabledModes } from "../../env.js"
 import { matches } from "../../db/schema.js"
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import { withLock } from "../../lib/redis.js"
@@ -52,6 +53,7 @@ export class ChallengeService {
   }
 
   private assertModeAvailable(mode: Mode): void {
+    if (disabledModes(this.ctx.env).includes(mode)) throw new ApiError(503, "mode_unavailable", `${mode} is disabled`)
     if (!this.allowUnresolved() && unresolvedConfig(mode).length > 0) {
       throw new ApiError(503, "mode_unavailable", `${mode} is not configured yet`)
     }

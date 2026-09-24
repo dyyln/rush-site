@@ -316,6 +316,35 @@ func TestSeriesReachesMatchJSON(t *testing.T) {
 	}
 }
 
+func TestBrandAndSlugReachMatchJSON(t *testing.T) {
+	r := sampleReq()
+	r.Brand = &Brand{Name: "rushsite", SiteURL: "https://site.example.test"}
+	r.Slug = "brave-amber-falcon"
+	spec, err := Validate(&r, DefaultModes(), "")
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	b, err := PluginJSON(Params{Req: r, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pc PluginConfig
+	if err := json.Unmarshal(b, &pc); err != nil {
+		t.Fatal(err)
+	}
+	if pc.Brand == nil || pc.Brand.Name != "rushsite" || pc.Brand.SiteURL != "https://site.example.test" || pc.Slug != "brave-amber-falcon" {
+		t.Errorf("brand=%+v slug=%q", pc.Brand, pc.Slug)
+	}
+	r = sampleReq()
+	b, err = PluginJSON(Params{Req: r, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"brand"`) || strings.Contains(string(b), `"slug"`) {
+		t.Errorf("empty brand or slug written: %s", b)
+	}
+}
+
 func TestValidateRejectsBadSeries(t *testing.T) {
 	cases := map[string]func(s *Series){
 		"bestOf one":     func(s *Series) { s.BestOf = 1 },

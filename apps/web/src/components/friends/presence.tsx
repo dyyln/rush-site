@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Presence, PresenceDetail } from "@rushsite/shared";
+import { isRushMode, type Presence, type PresenceDetail } from "@rushsite/shared";
 import { mapName, modeLabel, MODE_COPY } from "@/lib/modes";
 import { joinQueueHref, type JoinableModes } from "./useJoinQueue";
 import styles from "./friends.module.css";
@@ -31,7 +31,7 @@ export function matchesQuery(p: { displayName: string; steamId: string }, query:
 // Rush always plays on Complex, so it reads well before the map is set
 function mapLabel(d: PresenceDetail): string | null {
   if (!d.mode) return null;
-  if (d.mode === "rush3v3") return mapName("rush3v3", d.mapId ?? "rush_001");
+  if (isRushMode(d.mode)) return mapName(d.mode, d.mapId ?? "rush_001");
   return d.mapId ? mapName(d.mode, d.mapId) : null;
 }
 

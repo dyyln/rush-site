@@ -19,8 +19,8 @@ let world: World | null = null;
 let seq = 0;
 
 const MAX: Record<"daily" | "weekly", Record<Mode, number>> = {
-  daily: { aim1v1: 32, aim2v2: 16, rush3v3: 16 },
-  weekly: { aim1v1: 64, aim2v2: 32, rush3v3: 32 },
+  daily: { aim1v1: 32, aim2v2: 16, rush3v3: 16, rush1v1: 0 },
+  weekly: { aim1v1: 64, aim2v2: 32, rush3v3: 32, rush1v1: 0 },
 };
 
 function id(prefix: string): string {

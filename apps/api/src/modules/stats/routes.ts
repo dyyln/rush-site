@@ -1,11 +1,12 @@
 import {
   LEADERBOARD_MIN_MATCHES,
+  isTestMode,
   MODES,
+  RANKED_MODES,
   computeStreak,
   ModeSchema,
   getModeConfig,
   tierForRating,
-  type Mode,
   type ModeStatsPayload,
 } from "@rushsite/shared"
 import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm"
@@ -14,6 +15,7 @@ import { z } from "zod"
 import type { AppContext } from "../../context.js"
 import { badges, bans, matchKills, matchPlayers, matches, ratingEvents, ratings, tournaments, users } from "../../db/schema.js"
 import { badRequest, notFound } from "../../lib/errors.js"
+import { matchHistory } from "./history.js"
 import { globalRank, namePattern } from "./rank.js"
 
 const SteamIdParam = z.string().regex(/^\d{17}$/)
@@ -48,19 +50,33 @@ export async function modeStats(ctx: AppContext): Promise<ModeStatsPayload> {
 }
 
 export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void {
-  app.get("/modes", async () =>
-    MODES.map((mode) => {
+  app.get("/modes", async () => {
+    await ctx.maps.ensureFresh()
+    return MODES.map((mode) => {
       const cfg = getModeConfig(mode)
-      return { mode, teamSize: cfg.teamSize, vetoFormat: cfg.vetoFormat, winCondition: cfg.winCondition, maps: cfg.maps }
-    }),
-  )
+      return {
+        mode,
+        teamSize: cfg.teamSize,
+        vetoFormat: cfg.vetoFormat,
+        winCondition: cfg.winCondition,
+        maps: ctx.maps.entries(mode),
+        ...(cfg.test ? { test: true } : {}),
+      }
+    })
+  })
+
+  // Names and previews for every known map, enabled or not
+  app.get("/maps", async (_req, reply) => {
+    reply.header("cache-control", "public, max-age=60")
+    return { maps: await ctx.maps.publicMaps() }
+  })
 
   app.get("/stats/modes", async () => modeStats(ctx))
 
   // Global per mode. Players need the minimum match count to place
   app.get("/leaderboard/:mode", async (req) => {
     const mode = ModeSchema.safeParse((req.params as { mode: string }).mode)
-    if (!mode.success) throw notFound("unknown_mode")
+    if (!mode.success || isTestMode(mode.data)) throw notFound("unknown_mode")
     const page = Page.safeParse(req.query)
     if (!page.success) throw badRequest("invalid_query", "bad offset or limit", page.error.issues)
     const { limit, offset } = page.data
@@ -158,7 +174,7 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       .orderBy(asc(ratingEvents.seq))
 
     const modes = await Promise.all(
-      MODES.map(async (mode) => {
+      RANKED_MODES.map(async (mode) => {
         const r = ratingRows.find((x) => x.mode === mode)
         const s = shots.find((x) => x.mode === mode)
         const rating = r?.rating ?? 1500
@@ -213,6 +229,8 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
       .where(eq(badges.steamId, steamId))
       .orderBy(desc(badges.awardedAt))
 
+    const firstPage = await matchHistory(ctx, steamId, { limit: RECENT_MATCHES })
+
     return {
       user: {
         steamId,
@@ -232,7 +250,9 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
         mode: b.mode ?? tournamentMode,
         awardedAt: b.awardedAt.toISOString(),
       })),
-      recentMatches: await recentMatches(ctx, steamId, RECENT_MATCHES),
+      recentMatches: firstPage.matches,
+      // Pass to /users/:steamId/matches for the next page
+      recentMatchesCursor: firstPage.nextCursor,
       favouriteWeapon: weapon ? { weapon: weapon.weapon, kills: weapon.kills } : null,
     }
   })
@@ -241,51 +261,13 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
     const id = SteamIdParam.safeParse((req.params as { steamId: string }).steamId)
     if (!id.success) throw notFound("user_not_found")
     const q = z
-      .object({ limit: z.coerce.number().int().min(1).max(50).default(20), before: z.coerce.number().int().positive().optional() })
+      .object({
+        limit: z.coerce.number().int().min(1).max(50).default(20),
+        cursor: z.string().max(200).optional(),
+        mode: ModeSchema.optional(),
+      })
       .safeParse(req.query)
-    if (!q.success) throw badRequest("invalid_query", "bad limit or before", q.error.issues)
-    return { matches: await recentMatches(ctx, id.data, q.data.limit, q.data.before) }
-  })
-}
-
-async function recentMatches(ctx: AppContext, steamId: string, limit: number, before?: number) {
-  const rows = await ctx.db
-    .select({ m: matches, p: matchPlayers })
-    .from(matchPlayers)
-    .innerJoin(matches, eq(matches.id, matchPlayers.matchId))
-    .where(
-      and(
-        eq(matchPlayers.steamId, steamId),
-        inArray(matches.status, ["finished", "abandoned"]),
-        ...(before ? [sql`${matches.createdAt} < ${new Date(before)}`] : []),
-      ),
-    )
-    .orderBy(desc(matches.createdAt))
-    .limit(limit)
-  const ids = rows.map((r) => r.m.id)
-  const deltas = ids.length
-    ? await ctx.db
-        .select({ matchId: ratingEvents.matchId, before: ratingEvents.ratingBefore, after: ratingEvents.ratingAfter })
-        .from(ratingEvents)
-        .where(and(eq(ratingEvents.steamId, steamId), inArray(ratingEvents.matchId, ids), isNull(ratingEvents.voidedAt)))
-    : []
-  return rows.map(({ m, p }) => {
-    const mine = m.teams[p.team]?.name ?? ""
-    const theirs = m.teams[p.team === 0 ? 1 : 0]?.name ?? ""
-    const d = deltas.find((x) => x.matchId === m.id)
-    const result: "win" | "loss" | "abandoned" = p.abandoned ? "abandoned" : p.won ? "win" : "loss"
-    return {
-      matchId: m.id,
-      mode: m.mode as Mode,
-      mapId: m.mapId ?? "",
-      playedAt: m.createdAt.toISOString(),
-      result,
-      scoreFor: m.score?.[mine] ?? 0,
-      scoreAgainst: m.score?.[theirs] ?? 0,
-      ratingDelta: d ? Math.round(d.after - d.before) : 0,
-      kills: p.kills ?? 0,
-      deaths: p.deaths ?? 0,
-      headshots: p.headshots ?? 0,
-    }
+    if (!q.success) throw badRequest("invalid_query", "bad limit, cursor or mode", q.error.issues)
+    return matchHistory(ctx, id.data, q.data)
   })
 }

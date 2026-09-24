@@ -1,6 +1,6 @@
 "use client";
 
-import { LEADERBOARD_MIN_MATCHES, MODES, TIERS, tierForRating, type Mode, type TierBand, type TierDistribution, type TierId } from "@rushsite/shared";
+import { LEADERBOARD_MIN_MATCHES, RANKED_MODES as MODES, TIERS, tierForRating, type Mode, type TierBand, type TierDistribution, type TierId } from "@rushsite/shared";
 import { statsApi } from "@/components/stats/statsApi";
 import { TierChip } from "@/components/ui/TierChip";
 import { MODE_COPY } from "@/lib/modes";

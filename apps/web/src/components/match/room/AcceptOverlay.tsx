@@ -18,10 +18,15 @@ export function AcceptOverlay({
   accept,
   mode,
   onRespond,
+  team = [],
+  viewer = null,
 }: {
   accept: MatchAcceptView;
   mode: Mode;
   onRespond: (accept: boolean) => void;
+  // The viewer's team. Their accepts are shown by name
+  team?: { steamId: string; name: string }[];
+  viewer?: string | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const waitingRef = useRef<HTMLParagraphElement>(null);
@@ -101,6 +106,23 @@ export function AcceptOverlay({
               <li key={i} className={i < accept.accepted ? styles.pipOn : undefined} />
             ))}
           </ol>
+          {accept.acceptedSteamIds && team.length > 1 && (
+            <ul className={styles.names} aria-label="Your team">
+              {team.map((p) => {
+                const ok = accept.acceptedSteamIds!.includes(p.steamId);
+                return (
+                  <li key={p.steamId} data-ok={ok || undefined}>
+                    <span aria-hidden="true">{ok ? "✓" : "…"}</span>
+                    <span>
+                      {p.name}
+                      {p.steamId === viewer ? " (you)" : ""}
+                    </span>
+                    <span className="visually-hidden">{ok ? ", accepted" : ", not yet"}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         {open ? (

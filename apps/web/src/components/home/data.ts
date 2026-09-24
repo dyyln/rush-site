@@ -1,4 +1,4 @@
-import { AIM_MAPS, MODES, RUSH_MAP, type Mode } from "@rushsite/shared";
+import { AIM_MAPS, MODES, RANKED_MODES, RUSH_MAP, type Mode } from "@rushsite/shared";
 import { api } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { MOCK_LIVE_MATCH_ID, MOCK_MATCH_HINTS, MOCK_NOW, MOCK_TOURNAMENTS, mockMatchDetail, mockUuid, mockUser } from "@/lib/mock";
@@ -12,7 +12,7 @@ export type NextCup = { mode: Mode; cup: TournamentSummary | null; entered: bool
 
 export async function fetchNextCups(signedIn: boolean): Promise<NextCup[]> {
   const open: OpenCup[] = isMock ? mockOpenCups() : await api.tournaments.list({ status: ["open"] });
-  const next = MODES.map((mode) => {
+  const next = RANKED_MODES.map((mode) => {
     const cup = open
       .filter((t) => t.mode === mode)
       .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))[0];

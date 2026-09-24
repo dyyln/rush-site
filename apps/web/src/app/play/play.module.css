@@ -87,6 +87,10 @@
   line-height: 1.1;
   letter-spacing: 0.01em;
 }
+.testTag {
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
 .format {
   display: inline-flex;
   vertical-align: middle;
@@ -245,6 +249,13 @@
   gap: var(--space-4);
   flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
+}
+.cooldownLine {
+  margin: 0;
+  flex: 1 1 240px;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 .actionBar .hint {
   margin: 0;

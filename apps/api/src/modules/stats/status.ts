@@ -1,6 +1,7 @@
 import { ACTIVE_MATCH_STATUSES, MODES, REGIONS, unresolvedConfig, type Mode, type ModeUnavailableReason, type ServiceStatus } from "@rushsite/shared"
 import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 import type { AppContext } from "../../context.js"
+import { disabledModes } from "../../env.js"
 import { matches } from "../../db/schema.js"
 
 export type HostView = {
@@ -18,6 +19,8 @@ export type StatusInput = {
   unresolved: Record<Mode, string[]>
   // Modes an admin closed through the queue flags
   closed?: Mode[]
+  // Test modes the server config leaves off
+  disabled?: readonly Mode[]
   now: number
 }
 
@@ -52,8 +55,10 @@ export function buildStatus(input: StatusInput): ServiceStatus {
     regions,
     surge: { enabled: input.surgeEnabled, active: input.surgeActive },
     modes: MODES.map((mode) => {
-      const reason: ModeUnavailableReason | undefined = input.closed?.includes(mode)
-        ? "closed"
+      const reason: ModeUnavailableReason | undefined = input.disabled?.includes(mode)
+        ? "disabled"
+        : input.closed?.includes(mode)
+          ? "closed"
         : input.unresolved[mode].length > 0
           ? "not_configured"
           : capacityReason
@@ -83,6 +88,7 @@ export async function serviceStatus(ctx: AppContext): Promise<ServiceStatus> {
     surgeActive: surge?.n ?? 0,
     unresolved,
     closed: await ctx.flags.closedModes(),
+    disabled: disabledModes(ctx.env),
     now: ctx.now(),
   })
 }
@@ -96,6 +102,7 @@ export function createAvailabilitySource(ctx: AppContext, ttlMs = 5000): (mode: 
     if (!cached || t - cached.at >= ttlMs) cached = { at: t, status: await serviceStatus(ctx) }
     const m = cached.status.modes.find((x) => x.mode === mode)
     if (!m || m.available) return null
+    if (m.reason === "disabled") return "disabled"
     // Outside production only missing config blocks, so the flow can be tested without an agent
     // Closed modes are refused by the queue flag gate with their own error code
     if (m.reason === "closed") return null

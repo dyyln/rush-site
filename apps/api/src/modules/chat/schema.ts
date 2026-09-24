@@ -8,7 +8,10 @@ export const chatMessages = pgTable(
     // global, or match:<id> for a match room
     channel: text("channel").notNull(),
     steamId: text("steam_id").notNull(),
+    // Masked text when the filter changed it
     body: text("body").notNull(),
+    // Text as posted. Only set on masked messages and only shown to admins
+    originalBody: text("original_body"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Set when an admin removes the message. Removed rows stay for the audit trail
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

@@ -37,7 +37,8 @@ export const TierDistributionSchema = z.object({
 export type TierDistribution = z.infer<typeof TierDistributionSchema>
 
 // GET /status
-export const ModeUnavailableReasonSchema = z.enum(["not_configured", "no_servers", "servers_updating", "closed"])
+// disabled means the server config has the mode switched off, such as a test queue
+export const ModeUnavailableReasonSchema = z.enum(["not_configured", "no_servers", "servers_updating", "closed", "disabled"])
 export type ModeUnavailableReason = z.infer<typeof ModeUnavailableReasonSchema>
 
 export const RegionStatusSchema = z.object({

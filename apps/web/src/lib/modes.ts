@@ -1,6 +1,7 @@
-import { MODE_CONFIGS, MODES, type Mode } from "@rushsite/shared";
+import { isTestMode, MODE_CONFIGS, MODES, RANKED_MODES, type Mode } from "@rushsite/shared";
+import { knownMap } from "./mapPoolStore";
 
-export { MODES };
+export { isTestMode, MODES, RANKED_MODES };
 
 type ModeCopy = { label: string; name: string; short: string; format: string; blurb: string; players: string };
 
@@ -28,6 +29,14 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     format: "3v3",
     players: "3 vs 3",
     blurb: "Valve's Rush on Complex",
+  },
+  rush1v1: {
+    label: "1v1 Rush Test",
+    name: "Rush",
+    short: "Rush 1v1",
+    format: "1v1",
+    players: "1 vs 1",
+    blurb: "Unrated test queue for Rush with two players",
   },
 };
 
@@ -58,7 +67,8 @@ const MAP_NAMES: Record<string, string> = {
 };
 
 export function mapName(mode: Mode, mapId: string): string {
-  const configured = MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName;
+  // Admin edits in the live pool win over the shared config
+  const configured = knownMap(mapId)?.displayName ?? MODE_CONFIGS[mode].maps.find((m) => m.id === mapId)?.displayName;
   // A lower case name with underscores is still a raw map id
   if (configured && !/^[a-z0-9_]+$/.test(configured)) return configured;
   return MAP_NAMES[mapId] ?? configured ?? mapId;

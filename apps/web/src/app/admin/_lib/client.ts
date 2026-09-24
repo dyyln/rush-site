@@ -1,11 +1,16 @@
-import type { TrustLevel } from "@rushsite/shared";
+import type { MapLoadout, PoolMap, PoolMode, PoolView, TrustLevel } from "@rushsite/shared";
 import { api, ApiError } from "@/lib/api";
 import { isMock } from "@/lib/env";
 import { mockCall } from "@/lib/mock";
 import { MockNotFound, mockAdmin } from "./mock";
 import { mockOps } from "./ops-mock";
+import { mockMaps } from "./maps-mock";
+import { mockAdmins } from "./admins-mock";
 import type {
   ActionResult,
+  AdminCandidateView,
+  AdminListView,
+  AdminView,
   EventView,
   HostView,
   MatchDetailView,
@@ -13,13 +18,18 @@ import type {
   OverviewView,
   QueueView,
   UserDetailView,
+  UserSearchHit,
   Announcement,
   AuditEntry,
   FeatureFlag,
   MetricsRange,
   MetricsView,
   ResolvedProfile,
+  WorkshopPreview,
 } from "./types";
+
+export type PoolMapInput = { workshop: string; id?: string; displayName?: string; modes: PoolMode[]; loadout?: MapLoadout };
+export type PoolMapPatch = { displayName?: string; modes?: PoolMode[]; loadout?: MapLoadout | null };
 
 export type AnnouncementInput = {
   text: string;
@@ -69,6 +79,10 @@ export const adminApi = {
     if (isMock) return mocked(() => mockAdmin.user(steamId));
     return api.get(`/admin/users/${encodeURIComponent(steamId)}`);
   },
+  async searchUsers(q: string): Promise<UserSearchHit[]> {
+    if (isMock) return mocked(() => mockAdmin.searchUsers(q));
+    return (await api.get<{ users: UserSearchHit[] }>("/admin/users", { q })).users;
+  },
 
   removeTicket(ticketId: string, reason?: string): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.removeTicket(ticketId, reason));
@@ -89,6 +103,10 @@ export const adminApi = {
   setTrust(steamId: string, level: TrustLevel): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.setTrust(steamId, level));
     return api.post(`/admin/users/${steamId}/trust`, { level });
+  },
+  clearCooldown(steamId: string): Promise<ActionResult> {
+    if (isMock) return action(() => mockAdmin.clearCooldown(steamId));
+    return api.post(`/admin/users/${steamId}/cooldown/clear`, {});
   },
 
   resolveProfile(q: string): Promise<ResolvedProfile> {
@@ -126,6 +144,48 @@ export const adminApi = {
   deleteAnnouncement(id: string): Promise<{ ok: true; audit: AuditEntry }> {
     if (isMock) return mocked(() => mockOps.deleteAnnouncement(id));
     return api.del(`/admin/announcements/${id}`);
+  },
+
+  maps(): Promise<PoolView> {
+    if (isMock) return mocked(() => mockMaps.view());
+    return api.get("/admin/maps");
+  },
+  workshopPreview(q: string): Promise<WorkshopPreview> {
+    if (isMock) return mocked(() => mockMaps.preview(q));
+    return api.get("/admin/maps/workshop", { q });
+  },
+  addMap(input: PoolMapInput): Promise<{ map: PoolMap; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.add(input));
+    return api.post("/admin/maps", input);
+  },
+  updateMap(id: string, patch: PoolMapPatch): Promise<{ map: PoolMap; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.update(id, patch));
+    return api.patch(`/admin/maps/${encodeURIComponent(id)}`, patch);
+  },
+  reorderMaps(ids: string[]): Promise<{ maps: PoolMap[]; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.reorder(ids));
+    return api.put("/admin/maps/order", { ids });
+  },
+  removeMap(id: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockMaps.remove(id));
+    return api.del(`/admin/maps/${encodeURIComponent(id)}`);
+  },
+
+  admins(): Promise<AdminListView> {
+    if (isMock) return mocked(() => mockAdmins.list());
+    return api.get("/admin/admins");
+  },
+  adminCandidate(q: string): Promise<AdminCandidateView> {
+    if (isMock) return mocked(() => mockAdmins.lookup(q));
+    return api.get("/admin/admins/lookup", { q });
+  },
+  addAdmin(steamId: string, note?: string): Promise<{ admin: AdminView; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockAdmins.grant(steamId, note));
+    return api.post("/admin/admins", note ? { steamId, note } : { steamId });
+  },
+  removeAdmin(steamId: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockAdmins.revoke(steamId));
+    return api.del(`/admin/admins/${encodeURIComponent(steamId)}`);
   },
 };
 

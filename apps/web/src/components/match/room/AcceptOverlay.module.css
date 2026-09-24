@@ -143,3 +143,23 @@
     font-size: var(--text-3xl);
   }
 }
+
+/* Who on the viewer's team has accepted */
+.names {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.names li {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.names li[data-ok] {
+  color: var(--color-win);
+}

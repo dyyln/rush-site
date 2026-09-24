@@ -1,4 +1,4 @@
-import { Cs2StartSchema, ModeConfigSchema, type Cs2Start, type MapEntry, type Mode, type ModeConfig } from "../schemas/mode.js"
+import { Cs2StartSchema, ModeConfigSchema, MODES, type Cs2Start, type MapEntry, type Mode, type ModeConfig } from "../schemas/mode.js"
 
 // Marks values that must be filled in before a mode can go live
 export const TODO = "TODO"
@@ -106,9 +106,30 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     // The game runs Valve's gamemode_rush.cfg for game_mode 6 on map load. Ours must not touch the rules
     cs2: { gameType: 0, gameMode: 6, execCfg: "rushsite_rush3v3.cfg" },
   },
+  // Test queue for Rush with two players. Same map and rules as rush3v3
+  rush1v1: {
+    mode: "rush1v1",
+    teamSize: 1,
+    maps: [RUSH_MAP],
+    vetoFormat: "none",
+    winCondition: "valve_rush",
+    cs2: { gameType: 0, gameMode: 6, execCfg: "rushsite_rush1v1.cfg" },
+    test: true,
+  },
 }
 
 for (const cfg of Object.values(MODE_CONFIGS)) ModeConfigSchema.parse(cfg)
+
+// Modes with ratings, leaderboards and cups
+export const RANKED_MODES: readonly Mode[] = MODES.filter((m) => !MODE_CONFIGS[m].test)
+
+export function isTestMode(mode: Mode): boolean {
+  return MODE_CONFIGS[mode].test === true
+}
+
+export function isRushMode(mode: Mode): boolean {
+  return MODE_CONFIGS[mode].winCondition === "valve_rush"
+}
 
 export function getModeConfig(mode: Mode): ModeConfig {
   return MODE_CONFIGS[mode]

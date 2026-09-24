@@ -9,6 +9,7 @@ import { friendsApi } from "@/components/friends/api";
 import type {
   Leaderboard,
   MatchDetail,
+  MatchHistoryPage,
   Profile,
   ReportReason,
   TournamentBracket,
@@ -206,6 +207,11 @@ export const api = {
   async profile(steamId: string): Promise<Profile> {
     if (isMock) return mocked(/^\d{17}$/.test(steamId) ? mock.mockProfile(steamId) : null, "Player not found");
     return request("GET", `/users/${steamId}/profile`);
+  },
+
+  async userMatches(steamId: string, opts: { mode?: Mode; cursor?: string; limit?: number } = {}): Promise<MatchHistoryPage> {
+    if (isMock) return mocked(mock.mockUserMatches(steamId, opts));
+    return request("GET", `/users/${steamId}/matches`, { query: opts });
   },
 
   tournaments: {

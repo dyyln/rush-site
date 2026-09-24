@@ -1,9 +1,10 @@
 import { COOLDOWN_LADDERS, cooldownSeconds, type CooldownReason } from "@rushsite/shared"
-import { and, desc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { cooldowns } from "../../db/schema.js"
 
-export type ActiveCooldown = { steamId: string; reason: CooldownReason; endsAt: number }
+// offence is the 1 based step on the reason's ladder
+export type ActiveCooldown = { steamId: string; reason: CooldownReason; endsAt: number; offence: number }
 
 // Short cooldowns for declines, escalating ones for abandons
 export class CooldownService {
@@ -33,7 +34,7 @@ export class CooldownService {
       endsAt: new Date(finalEnd),
       createdAt: new Date(this.now()),
     })
-    return { steamId, reason, endsAt: finalEnd }
+    return { steamId, reason, endsAt: finalEnd, offence }
   }
 
   // Longest running cooldown per player
@@ -41,12 +42,13 @@ export class CooldownService {
     const out = new Map<string, ActiveCooldown>()
     if (steamIds.length === 0) return out
     const rows = await this.db
-      .select({ steamId: cooldowns.steamId, reason: cooldowns.reason, endsAt: cooldowns.endsAt })
+      .select({ steamId: cooldowns.steamId, reason: cooldowns.reason, endsAt: cooldowns.endsAt, offence: cooldowns.offence })
       .from(cooldowns)
       .where(and(inArray(cooldowns.steamId, steamIds), gt(cooldowns.endsAt, new Date(this.now()))))
-      .orderBy(desc(cooldowns.endsAt))
+      // A later offence that kept a longer cooldown shares its end. The row that set the end wins
+      .orderBy(desc(cooldowns.endsAt), asc(cooldowns.createdAt))
     for (const r of rows) {
-      if (!out.has(r.steamId)) out.set(r.steamId, { steamId: r.steamId, reason: r.reason, endsAt: r.endsAt.getTime() })
+      if (!out.has(r.steamId)) out.set(r.steamId, { steamId: r.steamId, reason: r.reason, endsAt: r.endsAt.getTime(), offence: r.offence })
     }
     return out
   }

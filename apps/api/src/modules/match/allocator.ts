@@ -1,7 +1,9 @@
 import {
+  isMatchSlug,
   resolveLaunch,
   type DemoUpload,
   type MapEntry,
+  type MatchBrand,
   type Mode,
   type ServerDriver,
   type ServerDriverName,
@@ -42,6 +44,10 @@ export type StartParams = {
   webhookSecret: string
   // A best-of series played on this one server
   series?: SeriesParams
+  // Rush room ids from the room veto, T castle first
+  rushRooms?: number[]
+  // Match room word id. The plugin links to the match page with it
+  slug?: string
 }
 
 export type AllocationResult =
@@ -107,6 +113,8 @@ export class HetznerDriver implements ServerDriver {
 export type AllocatorOptions = {
   webhookBaseUrl: string
   surgeWaitSec: number
+  // Chat prefix and web root for the match link, sent to the plugin in match.json
+  brand?: MatchBrand
 }
 
 // Hetzner is base load. DatHost is surge capacity used only after a match waited SURGE_WAIT_SEC for a slot
@@ -251,6 +259,9 @@ export class Allocator {
       webhookSecret: p.webhookSecret,
       demoUpload,
       cs2: resolveLaunch(p.mode, p.map),
+      ...(p.rushRooms ? { rushRooms: [...p.rushRooms] } : {}),
+      ...(this.opts.brand ? { brand: { ...this.opts.brand } } : {}),
+      ...(p.slug && isMatchSlug(p.slug) ? { slug: p.slug } : {}),
       ...(p.series && demoUploads
         ? {
             series: {

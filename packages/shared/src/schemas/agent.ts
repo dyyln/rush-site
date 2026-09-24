@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { SteamId64Schema, UuidSchema } from "./common.js"
 import { Cs2StartSchema, MapEntrySchema, ModeSchema, WinConditionSchema } from "./mode.js"
+import { MatchSlugSchema } from "../match-slug.js"
 
 export const TeamRosterSchema = z.object({
   // Team id used in results, such as A or B
@@ -35,6 +36,16 @@ export const SeriesConfigSchema = z
   .refine((s) => s.startMapNumber <= s.bestOf, "startMapNumber is past the last map")
 export type SeriesConfig = z.infer<typeof SeriesConfigSchema>
 
+// Seven room ids in slot order
+export const RushRoomsSchema = z.array(z.number().int().positive()).length(7)
+
+// Brand shown by the plugin. name is the chat prefix and siteUrl is the web root for the match link
+export const MatchBrandSchema = z.object({
+  name: z.string().min(1).max(24),
+  siteUrl: z.url(),
+})
+export type MatchBrand = z.infer<typeof MatchBrandSchema>
+
 export const StartServerRequestSchema = z.object({
   matchId: UuidSchema,
   mode: ModeSchema,
@@ -50,6 +61,11 @@ export const StartServerRequestSchema = z.object({
   cs2: Cs2StartSchema,
   // map, cs2 and demoUpload describe the map at series.startMapNumber
   series: SeriesConfigSchema.optional(),
+  // Rush room ids from the room veto, T castle first. Passed through to match.json
+  rushRooms: RushRoomsSchema.optional(),
+  // Passed through to match.json for the chat prefix and the match link at siteUrl/matches/<slug>
+  brand: MatchBrandSchema.optional(),
+  slug: MatchSlugSchema.optional(),
 })
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 
@@ -86,5 +102,9 @@ export const PluginMatchConfigSchema = z.object({
   demoUpload: DemoUploadSchema,
   winCondition: WinConditionSchema,
   series: SeriesConfigSchema.optional(),
+  // The plugin ignores this until the server can load chosen rooms
+  rushRooms: RushRoomsSchema.optional(),
+  brand: MatchBrandSchema.optional(),
+  slug: MatchSlugSchema.optional(),
 })
 export type PluginMatchConfig = z.infer<typeof PluginMatchConfigSchema>

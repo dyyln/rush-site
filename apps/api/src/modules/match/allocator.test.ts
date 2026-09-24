@@ -1,4 +1,4 @@
-import { MODE_CONFIGS, MODES, resolveLaunch, type ServerDriver, type StartServerRequest } from "@rushsite/shared"
+import { BRAND_NAME, MODE_CONFIGS, MODES, resolveLaunch, StartServerRequestSchema, type ServerDriver, type StartServerRequest } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { validateLikeAgent } from "../../../test/agent-contract.js"
@@ -138,6 +138,14 @@ describe("allocator launch block", () => {
         expect(() => validateLikeAgent(req)).not.toThrow()
       })
     }
+  })
+
+  it("sends the brand and the match slug for the plugin chat and match link", () => {
+    const req = h.ctx.allocator.buildRequest({ ...params("aim1v1", 0), slug: "brave-amber-falcon" }, "GSLTTOKEN1", demo)
+    expect(req.brand).toEqual({ name: BRAND_NAME, siteUrl: h.env.PUBLIC_URL })
+    expect(req.slug).toBe("brave-amber-falcon")
+    expect(StartServerRequestSchema.parse(req).slug).toBe("brave-amber-falcon")
+    expect(h.ctx.allocator.buildRequest(params("aim1v1", 0), "GSLTTOKEN1", demo)).not.toHaveProperty("slug")
   })
 
   it("starts Rush on the agent with our Rush cfg", async () => {

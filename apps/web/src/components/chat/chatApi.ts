@@ -99,6 +99,28 @@ export function chatError(e: unknown): string {
   return "Could not reach chat. Try again.";
 }
 
+export type Refusal = { code: string; message: string; until: number | null };
+
+const WAIT_TEXT: Record<string, (sec: number) => string> = {
+  chat_rate_limited: (s) => `You are sending messages too fast. You can post again in ${s}s.`,
+  chat_slow_mode: (s) => `Slow mode is on. You can post again in ${s}s.`,
+  chat_duplicate: (s) => `You just said that. Say something new, or wait ${s}s.`,
+};
+
+// A refused post as shown under the composer. Timed refusals count down to until
+export function refusalFrom(e: unknown, now = Date.now()): Refusal {
+  if (!(e instanceof ApiError)) return { code: "network", message: chatError(e), until: null };
+  const retry = Number((e.details as { retryAfterSec?: unknown } | undefined)?.retryAfterSec);
+  const until = Number.isFinite(retry) && retry > 0 ? now + retry * 1000 : null;
+  return { code: e.code, message: chatError(e), until };
+}
+
+export function refusalText(r: Refusal, now = Date.now()): string {
+  if (r.until === null) return r.message;
+  const left = Math.max(1, Math.ceil((r.until - now) / 1000));
+  return WAIT_TEXT[r.code]?.(left) ?? `${r.message.replace(/\s*Wait \d+s.*$/, "")} Try again in ${left}s.`;
+}
+
 export function mutedFrom(e: unknown): ChatMuteStatus | null {
   if (!(e instanceof ApiError) || e.code !== "chat_muted") return null;
   const d = (e.details ?? {}) as Partial<ChatMuteStatus>;

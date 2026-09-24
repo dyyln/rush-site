@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import type { PartyUpdatePayload } from "@rushsite/shared";
+import type { Mode, PartyMember, PartyUpdatePayload } from "@rushsite/shared";
+import { PRESENCE_LABEL, PresenceAvatar } from "@/components/friends/presence";
+import { MODE_COPY } from "@/lib/modes";
 import { Avatar } from "./Avatar";
 import { Button } from "./Button";
 import buttonStyles from "./Button.module.css";
@@ -9,9 +11,11 @@ import { CheckIcon, CopyIcon, useCopyFeedback } from "./CopyButton";
 import { Card } from "./Card";
 import { Modal } from "./Modal";
 import { PartySize } from "./PartySize";
+import { TierChip } from "./TierChip";
 import styles from "./PartyPanel.module.css";
 
 type Me = { steamId: string; displayName: string; avatarUrl: string | null };
+type Member = Me & Pick<PartyMember, "presence" | "ratings">;
 
 type PartyPanelProps = {
   party: PartyUpdatePayload | null;
@@ -32,6 +36,8 @@ type PartyPanelProps = {
   locked?: boolean;
   // Renders the invite popover for an empty slot
   renderInvite?: (close: () => void, anchor: HTMLElement | null) => ReactNode;
+  // Modes picked on Play. Each member shows a tier chip for these
+  modes?: readonly Mode[];
 };
 
 export function PartyPanel({
@@ -47,6 +53,7 @@ export function PartyPanel({
   onRotateInvite,
   locked,
   renderInvite,
+  modes = [],
 }: PartyPanelProps) {
   const { copied, copy: copyToClipboard } = useCopyFeedback();
   const [inviteSlot, setInviteSlot] = useState<number | null>(null);
@@ -57,7 +64,7 @@ export function PartyPanel({
   const [notice, setNotice] = useState("");
   // No party yet means a party of one led by the viewer
   const solo = !party?.partyId || (party.members.length === 0 && !!me);
-  const members = party && party.members.length > 0 ? party.members : me ? [me] : [];
+  const members: Member[] = party && party.members.length > 0 ? party.members : me ? [me] : [];
   const leaderSteamId = party?.leaderSteamId ?? (solo ? mySteamId : null);
   const isLeader = leaderSteamId === mySteamId;
   const open = Math.max(0, maxSize - Math.max(members.length, 1));
@@ -104,10 +111,24 @@ export function PartyPanel({
       <ul className={styles.members}>
         {members.map((m) => (
           <li key={m.steamId} className={styles.member}>
-            <Avatar name={m.displayName} src={m.avatarUrl} status="online" />
-            <span className={styles.name}>
-              {m.displayName}
-              {m.steamId === mySteamId && <span className="muted"> (you)</span>}
+            {m.presence ? (
+              <PresenceAvatar name={m.displayName} src={m.avatarUrl} presence={m.presence} />
+            ) : (
+              <Avatar name={m.displayName} src={m.avatarUrl} />
+            )}
+            <span className={styles.who}>
+              <span className={styles.name}>
+                {m.displayName}
+                {m.steamId === mySteamId && <span className="muted"> (you)</span>}
+              </span>
+              {(m.presence || modes.length > 0) && (
+                <span className={styles.meta}>
+                  {m.presence && <span>{PRESENCE_LABEL[m.presence]}</span>}
+                  {modes.map((mode) => (
+                    <MemberTier key={mode} mode={mode} rating={m.ratings?.[mode]} labelled={modes.length > 1} />
+                  ))}
+                </span>
+              )}
             </span>
             {m.steamId === leaderSteamId && <LeaderCrown />}
             {isLeader && m.steamId !== mySteamId && (onMakeLeader || onKick) && (
@@ -271,6 +292,16 @@ export function PartyPanel({
         </p>
       </Modal>
     </Card>
+  );
+}
+
+// Tier for one mode. Several modes get a short mode label in front
+function MemberTier({ mode, rating, labelled }: { mode: Mode; rating?: number; labelled: boolean }) {
+  return (
+    <span className={styles.tier}>
+      {labelled ? <span className={styles.tierMode}>{MODE_COPY[mode].short}</span> : <span className="visually-hidden">{MODE_COPY[mode].label}</span>}
+      {rating === undefined ? <TierChip unranked size="sm" link={false} /> : <TierChip rating={rating} size="sm" link={false} />}
+    </span>
   );
 }
 

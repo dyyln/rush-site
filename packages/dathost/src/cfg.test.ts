@@ -1,4 +1,4 @@
-import { launchFixture, MODES, PluginMatchConfigSchema, resolveLaunch, getModeConfig, type StartServerRequest } from "@rushsite/shared"
+import { isRushMode, launchFixture, MODES, PluginMatchConfigSchema, resolveLaunch, getModeConfig, type StartServerRequest } from "@rushsite/shared"
 import { describe, expect, it } from "vitest"
 import { buildMatchJson, buildModeCfg, consoleSwitchLines, dathostGameMode } from "./cfg.js"
 
@@ -7,7 +7,7 @@ describe("shared launch config", () => {
     for (const mode of MODES) {
       for (const { cs2 } of launchFixture().modes[mode]!.launches) {
         const preset = dathostGameMode(cs2)
-        expect(preset.preset).toBe(mode === "rush3v3" ? "custom" : "competitive")
+        expect(preset.preset).toBe(isRushMode(mode) ? "custom" : "competitive")
         const target = cs2.workshopId ? `host_workshop_map ${cs2.workshopId}` : `changelevel ${cs2.mapName}`
         expect(consoleSwitchLines(cs2)).toEqual([`game_type ${cs2.gameType}`, `game_mode ${cs2.gameMode}`, target])
         expect(buildModeCfg(cs2)).toContain(`exec ${cs2.execCfg}\n`)
@@ -42,5 +42,34 @@ describe("match.json", () => {
     expect(json.series?.demoUploads[2]!.key).toBe("k_m3.dem")
     const { series: _s, ...single } = req
     expect(buildMatchJson(single)).not.toHaveProperty("series")
+  })
+
+  it("passes brand and slug through for the chat prefix and match link", () => {
+    const map = getModeConfig("rush3v3").maps[0]!
+    const req: StartServerRequest = {
+      matchId: "5f0c7a3e-1b2c-4d5e-8f90-1234567890ab",
+      mode: "rush3v3",
+      map,
+      gslt: "",
+      password: "abc123",
+      allowedSteamIds: ["76561198000000001", "76561198000000002"],
+      teams: [
+        { name: "A", steamIds: ["76561198000000001"] },
+        { name: "B", steamIds: ["76561198000000002"] },
+      ],
+      webhookUrl: "https://api.test/webhooks/match/x",
+      webhookSecret: "s".repeat(32),
+      demoUpload: { bucket: "b", key: "k.dem", presignedPutUrl: "https://s3.test/1" },
+      cs2: resolveLaunch("rush3v3", map),
+      brand: { name: "rushsite", siteUrl: "https://site.test" },
+      slug: "brave-amber-falcon",
+    }
+    const json = PluginMatchConfigSchema.parse(buildMatchJson(req))
+    expect(json.brand).toEqual({ name: "rushsite", siteUrl: "https://site.test" })
+    expect(json.slug).toBe("brave-amber-falcon")
+    const { brand: _b, slug: _s, ...plain } = req
+    const bare = buildMatchJson(plain)
+    expect(bare).not.toHaveProperty("brand")
+    expect(bare).not.toHaveProperty("slug")
   })
 })

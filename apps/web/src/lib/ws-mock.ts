@@ -3,6 +3,12 @@ import {
   MODES,
   MODE_CONFIGS,
   maxRatingDiffAfter,
+  CONNECT_GRACE_SEC,
+  RUSH_MAP,
+  RUSH_ROOM_VETO,
+  createRoomVeto,
+  isRushMode,
+  stepAvailable,
   type ModeStatsPayload,
   type QueueModeStatus,
   type QueueStatusPayload,
@@ -21,6 +27,12 @@ type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]
 
 const MATCH_ID = MOCK_ROOM_MATCH_ID;
 const ACCEPT_SEC = 20;
+
+// Players in the mock room, your team first, the same ids the mock match detail uses
+function mockRoster(mode: Mode): string[] {
+  const size = MODE_CONFIGS[mode].teamSize;
+  return [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4)), ...Array.from({ length: size }, (_, i) => mockSteamId(i + 20))];
+}
 const STEP_SEC = 20;
 
 export class MockRealtime extends Emitter implements Realtime {
@@ -30,6 +42,7 @@ export class MockRealtime extends Emitter implements Realtime {
   private queued: { mode: Mode; queuedAt: number }[] = initialQueue();
   private ticker: ReturnType<typeof setInterval> | null = null;
   private veto: VetoState | null = null;
+  private vetoKind: "maps" | "rooms" = "maps";
   private accepted = 0;
   // The first match found is cancelled to show that flow once
   private cancelShown = false;
@@ -239,6 +252,7 @@ export class MockRealtime extends Emitter implements Realtime {
       acceptDeadline: Date.now() + (ACCEPT_SEC - 1) * 1000,
       acceptWindowSec: ACCEPT_SEC,
       accepted: this.accepted,
+      acceptedSteamIds: mockRoster(mode).slice(0, this.accepted),
       required: this.required,
     });
     if (this.accepted === this.required) this.later(800, () => this.afterAccept(mode));
@@ -261,6 +275,23 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 
   private afterAccept(mode: Mode) {
+    this.vetoKind = "maps";
+    // The mock always runs the Rush room veto so it can be clicked through
+    if (isRushMode(mode)) {
+      const size = MODE_CONFIGS[mode].teamSize;
+      const us = [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4))];
+      const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
+      this.vetoKind = "rooms";
+      this.veto = createRoomVeto(
+        [
+          { id: "team_a", steamIds: us },
+          { id: "team_b", steamIds: them },
+        ],
+        RUSH_ROOM_VETO.format,
+      );
+      this.pushVeto();
+      return;
+    }
     if (!hasLadderVeto(mode)) {
       this.later(1500, () => this.ready(mode, MODE_CONFIGS[mode].maps[0]!.id));
       return;
@@ -295,9 +326,10 @@ export class MockRealtime extends Emitter implements Realtime {
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: v.done ? null : Date.now() + STEP_SEC * 1000,
+      ...(this.vetoKind === "rooms" ? { kind: "rooms" as const } : {}),
     });
     if (v.done) {
-      this.later(1500, () => this.ready(this.mode!, v.maps[0]!));
+      this.later(1500, () => this.ready(this.mode!, this.vetoKind === "rooms" ? RUSH_MAP.id : v.maps[0]!));
       return;
     }
     const step = v.steps[v.stepIndex]!;
@@ -309,7 +341,8 @@ export class MockRealtime extends Emitter implements Realtime {
       .forEach((id, i) =>
         this.later(1200 + i * 700, () => {
           if (v.stepIndex !== step0) return;
-          const pick = v.available[(i + step0) % v.available.length]!;
+          const avail = stepAvailable(v);
+          const pick = avail[(i + step0) % avail.length]!;
           this.vote(id, pick);
         }),
       );
@@ -322,7 +355,7 @@ export class MockRealtime extends Emitter implements Realtime {
     const v = this.veto;
     if (!v || v.done) return;
     const team = v.teams[v.steps[v.stepIndex]!.team];
-    if (!team.steamIds.includes(steamId) || !v.available.includes(mapId)) return;
+    if (!team.steamIds.includes(steamId) || !stepAvailable(v).includes(mapId)) return;
     v.votes = { ...v.votes, [steamId]: mapId };
     if (team.steamIds.every((id) => id in v.votes)) this.resolve();
     else this.pushVetoQuiet();
@@ -337,6 +370,7 @@ export class MockRealtime extends Emitter implements Realtime {
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: Date.now() + STEP_SEC * 1000,
+      ...(this.vetoKind === "rooms" ? { kind: "rooms" as const } : {}),
     });
   }
 
@@ -346,7 +380,8 @@ export class MockRealtime extends Emitter implements Realtime {
     const counts = new Map<string, number>();
     Object.values(v.votes).forEach((m) => counts.set(m, (counts.get(m) ?? 0) + 1));
     const max = Math.max(0, ...counts.values());
-    const leaders = max === 0 ? v.available : v.available.filter((m) => counts.get(m) === max);
+    const avail = stepAvailable(v);
+    const leaders = max === 0 ? avail : avail.filter((m) => counts.get(m) === max);
     const mapId = leaders[Math.floor(Math.random() * leaders.length)]!;
     const step = v.steps[v.stepIndex]!;
     v.history.push({
@@ -374,13 +409,14 @@ export class MockRealtime extends Emitter implements Realtime {
       port: 27017,
       password: "mock-7f3a",
       connect: "connect 203.0.113.24:27017; password mock-7f3a",
+      connectDeadline: Date.now() + CONNECT_GRACE_SEC * 1000,
       mapId,
     });
     // Players join the server one by one during warm-up
     const expected = MODE_CONFIGS[mode].teamSize * 2;
     for (let n = 1; n <= expected; n++) {
       this.later(2500 * n, () =>
-        this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected }),
+        this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected, missingSteamIds: mockRoster(mode).slice(n) }),
       );
     }
     this.later(2500 * expected + 1500, () =>
@@ -409,8 +445,8 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 }
 
-const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41 };
-const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70 };
+const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41, rush1v1: 3 };
+const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70, rush1v1: 30 };
 
 // Idle at start. Start queue from the page to see the queued state
 function initialQueue(): { mode: Mode; queuedAt: number }[] {
@@ -437,6 +473,7 @@ const BASE_STATS: Record<Mode, { queue: number; live: number }> = {
   aim1v1: { queue: 23, live: 18 },
   aim2v2: { queue: 14, live: 9 },
   rush3v3: { queue: 41, live: 12 },
+  rush1v1: { queue: 3, live: 1 },
 };
 
 // Counts drift a little every tick so the cards look live

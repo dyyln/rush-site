@@ -8,7 +8,7 @@ CS2 template server per match, configuring it, starting it and deleting it after
 The template `rushsite-template` exists on the DatHost account, id `6ab450a9e85891190562866f`, in `dusseldorf`, with
 Metamod, GOTV, 7 slots, bots off, autostop 30 min and deletion protection on. It ships CounterStrikeSharp 1.0.374
 with-runtime, our plugin (net8 build) under `addons/counterstrikesharp/plugins/RushsiteMatch/`, `cfg/rushsite_base.cfg`
-from this package's `cfg/` dir, the three mode cfgs and a `core.json` with hot reload off.
+from this package's `cfg/` dir, the mode cfgs and a `core.json` with hot reload off.
 
 Checked on the DatHost box (CS2 1.41.8.2, build 2000914): Metamod lists CounterStrikeSharp, `css_plugins list` shows
 RushsiteMatch loaded, and the net8 plugin binds in the .NET 10 host. One gamedata signature fails at load,
@@ -127,7 +127,7 @@ so the api must call `fetchDemo` before `stop`.
 4. Upload our plugin build from `plugin/` to `addons/counterstrikesharp/plugins/RushsiteMatch/`.
 5. Upload `cfg/rushsite_base.cfg` (kept in this package under `cfg/`) with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
    `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload every mode cfg
-   from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`) to `cfg/`.
+   from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`, `rushsite_rush1v1.cfg`) to `cfg/`.
    `gamemode_rush.cfg` is Valve's and the game runs it by itself. Also create `cfg/rushsite/matches/` (upload a `.keep`
    file into it), because the per match `mode.cfg` upload needs the parent to exist.
 6. Start the template, join it, check the plugin loads (`css_plugins list` in the console), and do the Rush check at the top of this README.

@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode, type TrustLevel } from "@rushsite/shared";
+import { isTestMode, MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode, type TrustLevel } from "@rushsite/shared";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
 import { PartyPanel } from "@/components/ui/PartyPanel";
 import { GetVerifiedCard } from "@/components/trust/GetVerifiedCard";
@@ -16,7 +17,7 @@ import { PartySize } from "@/components/ui/PartySize";
 import { QueueStatus } from "@/components/ui/QueueStatus";
 import { ModeAvailabilityHint } from "@/components/stats/ModeAvailabilityHint";
 import { ModeCardWarning } from "@/components/stats/ModeCardWarning";
-import { modeUnavailable, useServiceStatus } from "@/components/stats/useServiceStatus";
+import { modeUnavailable, offeredModes, useServiceStatus } from "@/components/stats/useServiceStatus";
 import { Throbber } from "@/components/ui/Throbber";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -38,6 +39,7 @@ import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
 import { useBackdrop } from "@/lib/useBackdrop";
+import { CooldownLine } from "./CooldownLine";
 import styles from "./play.module.css";
 
 const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
@@ -101,6 +103,7 @@ export function PlayView() {
   useEffect(() => setOrigin(window.location.origin), []);
 
   const service = useServiceStatus();
+  const offered = offeredModes(service);
 
   // Drop modes the status page reports as unavailable from the selection
   useEffect(() => {
@@ -171,6 +174,7 @@ export function PlayView() {
   }, [play.queue.state, play.queue.cooldownUntil]);
 
   function disabledReason(mode: Mode): string | null {
+    if (!offered.includes(mode)) return "Not offered right now";
     const size = MODE_CONFIGS[mode].teamSize;
     if (partySize > size) return `Party too big. ${MODE_COPY[mode].label} fits ${size === 1 ? "1 player" : `${size} players`}`;
     const down = modeUnavailable(service, mode);
@@ -270,7 +274,7 @@ export function PlayView() {
               <fieldset className={styles.picker} disabled={locked || readOnly}>
                 <legend className={styles.legend}>Modes</legend>
                 <ul className={styles.modes}>
-                  {MODES.map((mode) => {
+                  {offered.map((mode) => {
                     const reason = disabledReason(mode);
                     const checked = !readOnly && selected.includes(mode) && !reason;
                     const q = play.queue.modes.find((m) => m.mode === mode);
@@ -292,6 +296,11 @@ export function PlayView() {
                           <span className={styles.modeTop}>
                             <span className={styles.modeName}>
                               {copy.label}
+                              {isTestMode(mode) && (
+                                <Badge tone="warn" className={styles.testTag}>
+                                  Test
+                                </Badge>
+                              )}
                               <span className={styles.format}>
                                 <PartySize
                                   count={Math.min(partySize, MODE_CONFIGS[mode].teamSize)}
@@ -339,7 +348,7 @@ export function PlayView() {
               <Card as="div" tone="flat" padded={false} className={styles.actionBar}>
                 {user ? (
                   <>
-                    {isLeader ? (
+                    {isLeader || queued ? (
                       <Button
                         size="lg"
                         variant={queued ? "danger" : "primary"}
@@ -351,6 +360,9 @@ export function PlayView() {
                         {queued ? "Stop queue" : cooldown && play.queue.cooldownUntil ? <StartCountdown until={play.queue.cooldownUntil} /> : "Start queue"}
                       </Button>
                     ) : null}
+                    {cooldown && play.queue.cooldownUntil && (
+                      <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />
+                    )}
                     <QueueStatus status={play.queue} connection={play.connection} minTrust={effectiveMinTrust} />
                     <SegmentedControl
                       label="Opponents"
@@ -373,10 +385,12 @@ export function PlayView() {
               </Card>
               {user && (
                 <p id="queue-hint" className={styles.hint}>
-                  {!isLeader
-                    ? "Leader starts the queue."
-                    : queued
+                  {queued
+                    ? isLeader
                       ? "Stop queue to change modes."
+                      : "Any member can stop the queue. The leader starts it."
+                    : !isLeader
+                      ? "Leader starts the queue."
                       : cooldown
                         ? "On cooldown."
                         : eligible.length === 0
@@ -432,6 +446,7 @@ export function PlayView() {
                   }
                 }}
                 locked={queued || inMatch}
+                modes={partySize < 2 ? [] : queued ? queuedModes : isLeader ? eligible : offered.filter((m) => !disabledReason(m))}
                 renderInvite={(close, anchor) => (
                   <InvitePopover
                     inviteUrl={inviteUrl}
@@ -471,6 +486,7 @@ function modeLabelFor(m: ReturnType<typeof usePlay>["match"]): string | null {
 
 function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {
   if (!profile) return <span className={styles.standing}>{"\u00a0"}</span>;
+  if (isTestMode(mode)) return <span className={`${styles.standing} muted`}>Unrated</span>;
   const s = profile.modes.find((m) => m.mode === mode);
   if (!s || s.matches === 0) {
     return (

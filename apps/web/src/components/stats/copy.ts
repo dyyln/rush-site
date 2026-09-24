@@ -5,6 +5,7 @@ export const UNAVAILABLE_COPY: Record<ModeUnavailableReason, string> = {
   no_servers: "No servers online",
   servers_updating: "Servers updating",
   closed: "Closed for now",
+  disabled: "Switched off",
 };
 
 export function unavailableText(reason?: ModeUnavailableReason): string {

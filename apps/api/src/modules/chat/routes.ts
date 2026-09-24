@@ -29,8 +29,15 @@ export function registerChatRoutes(app: FastifyInstance, ctx: AppContext): void 
     const messages = await ctx.chat.history(channel, {
       ...(q.data.before ? { before: new Date(q.data.before) } : {}),
       ...(q.data.limit ? { limit: q.data.limit } : {}),
+      withOriginal: viewer ? ctx.isAdmin(viewer) : false,
     })
-    return { channel, messages, ...(viewer ? { me: { muted: await ctx.chat.activeMute(viewer) } } : {}) }
+    const slowModeSec = await ctx.chat.slowModeSec()
+    return {
+      channel,
+      messages,
+      ...(slowModeSec > 0 ? { slowModeSec } : {}),
+      ...(viewer ? { me: { muted: await ctx.chat.activeMute(viewer) } } : {}),
+    }
   })
 
   app.post("/chat/messages", async (req, reply) => {
