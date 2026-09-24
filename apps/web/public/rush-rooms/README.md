@@ -4,10 +4,10 @@ One screenshot tile per Rush room, 640x400 webp, named by the room id the rush_0
 
 ## Source
 
-Extracted from a local CS2 install by `apps/web/scripts/extract_rush_rooms.py`. Rerun it after a CS2 update that touches Rush:
+Extracted from a local CS2 install by `apps/web/scripts/extract_rush_images.py`. Rerun it after a CS2 update that touches Rush:
 
 ```bash
-python apps/web/scripts/extract_rush_rooms.py "D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive"
+python apps/web/scripts/extract_rush_images.py "D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive"
 ```
 
 The script reads `panorama/images/map_icons/screenshots/rush_hud/<id>_room_png.vtex_c` from `game/csgo/pak01_dir.vpk`. These are the clean room shots the in-game Rush HUD uses. They are DXT5 textures in YCoCg, stored as 1024x1024. The script decodes them, stretches them back to 1280x900, the size the game draws them at, crops the centre to 16:10 and scales down.
