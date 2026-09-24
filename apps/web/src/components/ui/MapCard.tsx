@@ -85,6 +85,8 @@ export function MapCard({
         : `${count} ${count === 1 ? "vote" : "votes"}`;
   const stamp = state === "available" ? null : (stampLabel ?? STAMP[state]);
   // What choosing this card does. Shown on hover and focus, and kept once the viewer has voted
+  // A pick wears the colour of the team that made it: own purple, opponents amber
+  const picker = state === "picked" ? by?.side : undefined;
   const intent = onSelect && state === "available" ? (actionLabel.toLowerCase() === "pick" ? "pick" : "ban") : null;
 
   const body = (
@@ -154,6 +156,7 @@ export function MapCard({
       <button
         type="button"
         className={cls}
+        data-picker={picker}
         data-enter="off"
         onClick={onSelect}
         onMouseEnter={onPreview && (() => onPreview(true))}
@@ -165,7 +168,7 @@ export function MapCard({
     );
   }
   return (
-    <div className={cls} data-enter="off" data-map={mapId}>
+    <div className={cls} data-enter="off" data-map={mapId} data-picker={picker}>
       {body}
     </div>
   );

@@ -25,9 +25,24 @@
   background: var(--color-border-strong);
 }
 .voted::before,
-.picked::before,
 .decider::before {
   background: var(--color-accent);
+}
+/* Picks take the picking team's colour. A pick with no known team stays accent */
+.picked {
+  --pick: var(--color-accent);
+  --pick-hover: var(--color-accent-hover);
+}
+.picked[data-picker="own"] {
+  --pick: var(--team-own);
+  --pick-hover: var(--team-own);
+}
+.picked[data-picker="enemy"] {
+  --pick: var(--team-enemy);
+  --pick-hover: var(--team-enemy);
+}
+.picked::before {
+  background: var(--pick);
 }
 
 /* Map art, full bleed along the top */
@@ -94,8 +109,8 @@
 }
 .stamp_picked {
   color: var(--color-text-on-accent);
-  background: var(--color-accent);
-  border-color: var(--color-accent-hover);
+  background: var(--pick, var(--color-accent));
+  border-color: var(--pick-hover, var(--color-accent-hover));
   transform: translate(-50%, -50%);
 }
 .stamp_decider {
@@ -137,7 +152,9 @@
 .label_taken {
   color: var(--color-text-muted);
 }
-.label_picked,
+.label_picked {
+  color: var(--pick-hover, var(--color-accent-hover));
+}
 .label_decider {
   color: var(--color-accent-hover);
 }
@@ -304,11 +321,15 @@
 .taken .name {
   color: var(--color-text-muted);
 }
-.picked,
 .decider {
   border-color: var(--color-accent);
   background: var(--color-accent-subtle);
   box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--color-accent);
+}
+.picked {
+  border-color: var(--pick);
+  background: color-mix(in srgb, var(--pick) 14%, transparent);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--pick);
 }
 
 .tag {
