@@ -316,12 +316,12 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   return (
     <>
       <PlayerTables m={m} sideOf={sideOf} />
-      {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they share a card */}
+      {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they sit together on the page */}
       {rush ? (
-        <Card as="div" className={styles.flow}>
+        <div className={styles.flow}>
           <MatchRushTrack m={m} rounds={rounds} mapNumber={mapNumber} sideOf={sideOf} bare />
           {timeline}
-        </Card>
+        </div>
       ) : (
         timeline
       )}
