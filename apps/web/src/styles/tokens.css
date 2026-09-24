@@ -77,13 +77,20 @@
   --team-own: #9b8ac4;
   --team-enemy: #e0c36a;
 
-  /* Tiers. Each passes 4.5:1 on surface-1 */
-  --tier-iron: #a7a9b0;
-  --tier-bronze: #d19a6a;
-  --tier-silver: #c9d1dc;
-  --tier-gold: #e0c36a;
-  --tier-platinum: #7fd1e0;
-  --tier-elite: #c3b2f0;
+  /* Tiers. A lightness ramp: every tier is lighter than the one below, so the order holds
+     under any colour vision and in greyscale. Each passes 4.5:1 on surface-1, even over a
+     white scene. The emblem's wing count carries the order too */
+  --tier-iron: #969aa8;
+  --tier-bronze: #d39a72;
+  --tier-silver: #a6c1de;
+  --tier-gold: #e3c55c;
+  --tier-platinum: #96ecdf;
+  --tier-elite: #fbf4ff;
+
+  /* Cup placings. Metal colours for trophies, apart from the tier ramp. Each passes 4.5:1 on surface-1 */
+  --place-champion: #e0c36a;
+  --place-runner-up: #c9d1dc;
+  --place-semifinalist: #d19a6a;
 
   /* Focus */
   --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent-hover);
