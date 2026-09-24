@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { CHAT_GLOBAL_CHANNEL, CHAT_MAX_LENGTH, TIERS, type ChatMessage, type ChatMuteStatus, type TierId } from "@rushsite/shared";
-import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { TierEmblem } from "@/components/ui/TierEmblem";
 import { useSession } from "@/lib/session";
@@ -40,30 +38,28 @@ function tierName(tier: string): string | null {
   return TIERS.find((t) => t.id === tier)?.displayName ?? null;
 }
 
+// One compact line: time, rank emblem, name, admin tag, then the text. Long text wraps under the name, not the time
 function MessageRow({ message: m, canModerate, onModerate }: { message: ChatMessage; canModerate: boolean; onModerate: () => void }) {
   const tier = m.author.tier === "unranked" ? null : tierName(m.author.tier);
   const at = new Date(m.createdAt);
   return (
-    <li className={styles.message}>
-      <Avatar name={m.author.displayName} src={m.author.avatarUrl} size="sm" />
-      <div className={styles.messageMain}>
-        <div className={styles.meta}>
-          <Link href={`/profile/${m.author.steamId}`} className={styles.name}>
-            {m.author.displayName}
-          </Link>
-          {m.author.admin && <Badge tone="accent">Admin</Badge>}
-          {tier && (
-            <span className={styles.tier} data-tier={m.author.tier} title={`${tier} tier`}>
-              <TierEmblem tier={m.author.tier as TierId} size={14} />
-              <span className="visually-hidden">{tier} tier</span>
-            </span>
-          )}
-          <time className={styles.time} dateTime={m.createdAt} title={fullFmt.format(at)}>
-            {timeFmt.format(at)}
-          </time>
-        </div>
-        <p className={styles.body}>{m.body}</p>
-      </div>
+    <li className={styles.message} data-mod={canModerate || undefined}>
+      <time className={styles.time} dateTime={m.createdAt} title={fullFmt.format(at)}>
+        {timeFmt.format(at)}
+      </time>
+      <p className={styles.line}>
+        {tier && (
+          <span className={styles.tier} data-tier={m.author.tier} title={`${tier} tier`}>
+            <TierEmblem tier={m.author.tier as TierId} size={14} />
+            <span className="visually-hidden">{tier} tier</span>
+          </span>
+        )}
+        <Link href={`/profile/${m.author.steamId}`} className={styles.name}>
+          {m.author.displayName}
+        </Link>
+        {m.author.admin && <span className={styles.admin}>Admin</span>}
+        <span className={styles.colon}>:</span> <span className={styles.body}>{m.body}</span>
+      </p>
       {canModerate && (
         <button type="button" className={styles.modButton} onClick={onModerate} aria-label={`Moderate message from ${m.author.displayName}`}>
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -71,9 +67,20 @@ function MessageRow({ message: m, canModerate, onModerate }: { message: ChatMess
             <circle cx="8" cy="8" r="1.4" fill="currentColor" />
             <circle cx="8" cy="13" r="1.4" fill="currentColor" />
           </svg>
+          <span className={styles.modTip} aria-hidden="true">
+            Moderate
+          </span>
         </button>
       )}
     </li>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M2 8h10M8 3.5 12.5 8 8 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -241,6 +248,14 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
     }
   }
 
+  // The composer grows with its text up to its CSS max-height, then scrolls
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, inputRef, open]);
+
   const canModerate = !!user?.isAdmin;
   const left = CHAT_MAX_LENGTH - draft.length;
 
@@ -290,26 +305,34 @@ export function ChatBody({ open, onUnread, inputRef: givenInput, className }: Ch
             <label htmlFor={inputId} className="visually-hidden">
               Message
             </label>
-            <textarea
-              id={inputId}
-              ref={inputRef}
-              className={styles.input}
-              rows={2}
-              maxLength={CHAT_MAX_LENGTH}
-              placeholder="Message global chat"
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                // Timed refusals stay up so the countdown is not lost while typing
-                if (sendError && sendError.until === null) setSendError(null);
-              }}
-              onKeyDown={onKeyDown}
-              aria-describedby={draft.length >= COUNTER_FROM ? counterId : undefined}
-              aria-invalid={sendError ? true : undefined}
-            />
-            <button type="submit" className={styles.send} disabled={sending || waiting || draft.trim().length === 0}>
-              Send
-            </button>
+            <div className={styles.composeRow}>
+              <textarea
+                id={inputId}
+                ref={inputRef}
+                className={styles.input}
+                rows={1}
+                maxLength={CHAT_MAX_LENGTH}
+                placeholder="Message global chat"
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  // Timed refusals stay up so the countdown is not lost while typing
+                  if (sendError && sendError.until === null) setSendError(null);
+                }}
+                onKeyDown={onKeyDown}
+                aria-describedby={draft.length >= COUNTER_FROM ? counterId : undefined}
+                aria-invalid={sendError ? true : undefined}
+              />
+              <button
+                type="submit"
+                className={styles.send}
+                disabled={sending || waiting || draft.trim().length === 0}
+                aria-label="Send message"
+                aria-busy={sending || undefined}
+              >
+                <SendIcon />
+              </button>
+            </div>
             {draft.length >= COUNTER_FROM && (
               <span id={counterId} className={styles.counter} data-low={left <= 10 || undefined}>
                 {left} characters left
