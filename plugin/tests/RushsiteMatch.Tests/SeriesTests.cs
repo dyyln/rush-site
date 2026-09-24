@@ -53,6 +53,28 @@ public class SeriesTests
     }
 
     [Fact]
+    public void ShortTvDelayLetsTheNextMapLoadTenSecondsAfterTheLastOneEnds()
+    {
+        // Valve's gamemode_rush.cfg sets tv_delay 105. The plugin lowers it before recording
+        _game.ConVars["tv_delay"] = "105";
+        var m = New(AimBo3(), new MatchSettings { StartCountdown = TimeSpan.Zero, TvDelay = 0 });
+        Join(m, A1, Side.CT);
+        Join(m, B1, Side.T);
+        var tvDelay = _game.Commands.IndexOf("tv_delay 0");
+        Assert.True(tvDelay >= 0 && tvDelay < _game.Commands.FindIndex(c => c.StartsWith("tv_record")));
+
+        WinAimMap(m, Side.CT);
+        Assert.Contains(_game.Chat, c => c.Contains("in 10 seconds"));
+        _clock.Advance(9);
+        m.Tick();
+        Assert.DoesNotContain(_game.Commands, c => c.StartsWith("changelevel") || c.StartsWith("host_workshop_map"));
+        _clock.Advance(1);
+        m.Tick();
+        Assert.Contains("tv_stoprecord", _game.Commands);
+        Assert.Contains(_game.Commands, c => c.StartsWith("changelevel") || c.StartsWith("host_workshop_map"));
+    }
+
+    [Fact]
     public void AimBo3PlaysEachMapOnTheSameServerAndEndsAtTwoWins()
     {
         var m = New(AimBo3());

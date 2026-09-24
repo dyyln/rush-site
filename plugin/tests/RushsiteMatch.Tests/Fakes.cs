@@ -14,7 +14,13 @@ internal sealed class FakeGame : IGameServer
     public readonly List<(string, Side)> Moves = new();
     public string? Arena;
 
-    public void ExecuteCommand(string command) => Commands.Add(command);
+    // A "name value" command for a tracked convar sets it, like the console would
+    public void ExecuteCommand(string command)
+    {
+        Commands.Add(command);
+        var parts = command.Split(' ', 2);
+        if (parts.Length == 2 && ConVars.ContainsKey(parts[0])) ConVars[parts[0]] = parts[1].Trim('"');
+    }
     public string? GetConVar(string name) => ConVars.TryGetValue(name, out var v) ? v : null;
     public void Kick(int userId, string reason) => Kicks.Add((userId, reason));
     // Chat holds the text without colour codes. RawChat keeps them.

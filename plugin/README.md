@@ -105,7 +105,7 @@ Needs our modified `rush_001` script from `rush-script/`, installed as described
 When `match.json` has a `series`, the whole series is played on this server:
 
 - The server launches on map `series.startMapNumber`, normally 1. `series.wins` holds maps already won before it, which is non-zero only when a series resumes after a crash.
-- When a map ends, the plugin sends `map_end` and keeps everyone on the server. That includes the last map. It stops the demo after `tv_delay` + `rushsite_demo_stop_extra`, and waits at least `rushsite_series_map_break` seconds. In Rush that is about 110 s because of `tv_delay 105`. Then it loads the next map with `host_workshop_map <workshopId>` or `changelevel <mapName>`.
+- When a map ends, the plugin sends `map_end` and keeps everyone on the server. That includes the last map. It stops the demo after `tv_delay` + `rushsite_demo_stop_extra`, and waits at least `rushsite_series_map_break` seconds. With the default `rushsite_tv_delay 0` that is 10 s. Then it loads the next map with `host_workshop_map <workshopId>` or `changelevel <mapName>`.
 - On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Both count down again once everyone is in. Rush holds warmup again and waits for the new map's rooms. Sides only change between maps when the map entries set `ctTeam`, see Rush teams.
 - Players reload with the map. The plugin sends `player_disconnected` for each of them when it changes the map. It sends `player_connected` again as each one is fully in on the new map.
 - Once a team has a majority of maps, or the last map is played, the plugin sends `match_end` with the series result and then kicks everyone. A drawn Rush map credits nobody. If the maps run out level, `match_end` is `draw`.
@@ -295,7 +295,8 @@ Launch the server with:
 | `rushsite_aim_spawn_immunity` | 2 | Aim only. Seconds for `mp_respawn_immunitytime` |
 | `rushsite_overtime_maxrounds` | 6 | Aim only. Rounds per overtime period for a tied map. 0 turns overtime off |
 | `rushsite_overtime_startmoney` | 16000 | Aim only. `mp_overtime_startmoney` |
-| `rushsite_series_map_break` | 30 | Series only. Minimum seconds between a map ending and the next loading |
+| `rushsite_series_map_break` | 10 | Series only. Minimum seconds between a map ending and the next loading |
+| `rushsite_tv_delay` | 0 | `tv_delay` set just before `tv_record`, after the mode cfg ran. The demo records through `tv_delay` after a map ends, so Valve's 105 in Rush would hold every map change and match end back almost two minutes. -1 keeps the mode cfg's value. GOTV is locked with a random `tv_password`, so a short delay gives nobody a live feed |
 | `rushsite_aim_halftime` | 0 | Aim only. Swap sides at halftime |
 | `rushsite_pause_on_disconnect` | 1 | Aim only. `mp_pause_match` when a player drops, and unpause when all are back |
 | `rushsite_match_end_wait` | 10 | Seconds to wait for `cs_win_panel_match` after the score decides the match |
@@ -359,7 +360,7 @@ Stats cover live rounds only:
 - The plugin runs `tv_record "rushsite_<matchId>"`, which writes `game/csgo/rushsite_<matchId>.dem`. In a series each map writes `rushsite_<matchId>_m<mapNumber>.dem`.
 - `tv_record` writes the delayed GOTV stream, so `tv_stoprecord` waits for `tv_delay` + `rushsite_demo_stop_extra` seconds.
 - The plugin waits until the file size stops changing, then PUTs it to `demoUpload.presignedPutUrl` with `Content-Type: application/octet-stream`. It makes 3 attempts.
-- `match_end` goes out at once. Recording continues for `tv_delay` + `rushsite_demo_stop_extra` seconds, about 110 s in Rush because `gamemode_rush.cfg` sets `tv_delay 105`. The plugin does not change `tv_delay`.
+- `match_end` goes out at once. Recording continues for `tv_delay` + `rushsite_demo_stop_extra` seconds, 5 s with the default `rushsite_tv_delay 0`. Valve's `gamemode_rush.cfg` sets `tv_delay 105`, which the plugin overrides when recording starts.
 - When the upload finishes, the plugin sends `demo_uploaded` with `ok`, the file size in `bytes`, and `error` on failure.
 - After an abandon, the partial demo is recorded through the same delay, uploaded for review and reported by `demo_uploaded`.
 

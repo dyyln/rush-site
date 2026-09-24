@@ -1,6 +1,6 @@
 import { isRushMode, launchFixture, MODES, PluginMatchConfigSchema, resolveLaunch, getModeConfig, type StartServerRequest } from "@rushsite/shared"
 import { describe, expect, it } from "vitest"
-import { buildMatchJson, buildModeCfg, consoleSwitchLines, dathostGameMode } from "./cfg.js"
+import { buildMatchJson, buildModeCfg, buildServerCfg, consoleSwitchLines, dathostGameMode } from "./cfg.js"
 
 describe("shared launch config", () => {
   it("maps every mode and map from the shared cs2 block", () => {
@@ -71,5 +71,26 @@ describe("match.json", () => {
     const bare = buildMatchJson(plain)
     expect(bare).not.toHaveProperty("brand")
     expect(bare).not.toHaveProperty("slug")
+  })
+})
+
+describe("server.cfg", () => {
+  const req = {
+    matchId: "5f0c7a3e-1b2c-4d5e-8f90-1234567890ab",
+    password: "abc123",
+    teams: [
+      { name: "A", steamIds: ["76561198000000001"] },
+      { name: "B", steamIds: ["76561198000000002"] },
+    ],
+  } as unknown as StartServerRequest
+
+  // The plugin runs GOTV with little or no tv_delay, so nobody may watch it live
+  it("locks GOTV with a password nobody is given", () => {
+    expect(buildServerCfg(req, null, "tvpw")).toContain('tv_password "tvpw"')
+    const a = buildServerCfg(req, null).match(/tv_password "([0-9a-f]+)"/)?.[1]
+    const b = buildServerCfg(req, null).match(/tv_password "([0-9a-f]+)"/)?.[1]
+    expect(a).toHaveLength(32)
+    expect(a).not.toBe(b)
+    expect(a).not.toBe(req.password)
   })
 })

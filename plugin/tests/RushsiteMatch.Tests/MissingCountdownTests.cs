@@ -91,11 +91,40 @@ public class MissingCountdownTests
         Tick(m, 10);
         Leave(m, A2);
         Tick(m, 1);
-        Assert.Equal("Waiting for Al 2:59, a player from Team bravo 4:49, a player from Team bravo 4:49", _game.Center[^1]);
+        // The two bravo players who never joined share one clock, so it shows once
+        Assert.Equal("Waiting for Al 2:59, 2 players from Team bravo 4:49", _game.Center[^1]);
 
         Leave(m, A3);
         Tick(m, 1);
-        Assert.Equal("Waiting for Al 2:58, Ash 2:59, a player from Team bravo 4:48 and 1 more", _game.Center[^1]);
+        Assert.Equal("Waiting for Al 2:58, Ash 2:59, 2 players from Team bravo 4:48", _game.Center[^1]);
+    }
+
+    [Fact]
+    public void PlayersOnTheSameClockShareOneEntry()
+    {
+        var m = New(Rush(), new MatchSettings { ConnectGrace = TimeSpan.FromMinutes(5) });
+        Join(m, A1, Side.CT, "Ann", 1);
+        _game.Center.Clear();
+        Tick(m, 60);
+        Assert.Equal("Waiting for 2 players from Team alpha and 3 players from Team bravo to join. 4:00", _game.Center[^1]);
+    }
+
+    [Fact]
+    public void ForfeitRemindersForPlayersWhoLeftTogetherAreOneLine()
+    {
+        var m = New(Rush(), new MatchSettings { DisconnectGrace = TimeSpan.FromMinutes(3), StartCountdown = TimeSpan.Zero });
+        Join(m, A1, Side.CT, "Ann", 1);
+        Join(m, A2, Side.CT, "Al", 2);
+        Join(m, A3, Side.CT, "Ash", 3);
+        Join(m, B1, Side.T, "Bea", 4);
+        Join(m, B2, Side.T, "Ben", 5);
+        Join(m, B3, Side.T, "Bo", 6);
+        m.ForceStart();
+        Leave(m, B2);
+        Leave(m, B3);
+        Tick(m, 61);
+        var reminders = _game.Chat.Where(c => c.Contains("left to return")).ToList();
+        Assert.Equal(new[] { " [DuelRush] Ben and Bo have 2:00 left to return or they forfeit." }, reminders);
     }
 
     [Fact]
@@ -138,6 +167,6 @@ public class MissingCountdownTests
         _game.Connected.Clear();
         m.OnMapStart();
         Tick(m, 1);
-        Assert.Equal("Waiting for Alice 2:59, Bob 2:59", _game.Center[^1]);
+        Assert.Equal("Alice and Bob left. 2:59 to return or forfeit", _game.Center[^1]);
     }
 }

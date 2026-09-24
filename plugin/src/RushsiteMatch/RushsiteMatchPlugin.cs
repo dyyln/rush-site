@@ -33,7 +33,8 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout into empty weapon slots on spawn.", true);
     public FakeConVar<int> OvertimeMaxRounds = new("rushsite_overtime_maxrounds", "Aim modes. Rounds per overtime period for a tied map. 0 turns overtime off.", 6);
     public FakeConVar<int> OvertimeStartMoney = new("rushsite_overtime_startmoney", "Aim modes. mp_overtime_startmoney.", 16000);
-    public FakeConVar<int> SeriesMapBreak = new("rushsite_series_map_break", "Series. Minimum seconds between one map ending and the next loading.", 30);
+    public FakeConVar<int> SeriesMapBreak = new("rushsite_series_map_break", "Series. Minimum seconds between one map ending and the next loading.", 10);
+    public FakeConVar<int> TvDelay = new("rushsite_tv_delay", "tv_delay set when the demo starts. The next map waits for it, so keep it short. -1 keeps the mode cfg's value.", 0);
     public FakeConVar<bool> AimHalftime = new("rushsite_aim_halftime", "Aim modes. Swap sides at halftime.", false);
     public FakeConVar<bool> PauseOnDisconnect = new("rushsite_pause_on_disconnect", "Aim modes. Pause at the next freeze time when a player disconnects.", true);
     public FakeConVar<int> MatchEndWait = new("rushsite_match_end_wait", "Seconds to wait for cs_win_panel_match after the score decides the match.", 10);
@@ -236,6 +237,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
             OvertimeMaxRounds = Math.Max(0, OvertimeMaxRounds.Value),
             OvertimeStartMoney = Math.Max(0, OvertimeStartMoney.Value),
             SeriesMapBreak = TimeSpan.FromSeconds(Math.Max(0, SeriesMapBreak.Value)),
+            TvDelay = TvDelay.Value < 0 ? null : TvDelay.Value,
             MatchEndWait = TimeSpan.FromSeconds(MatchEndWait.Value),
             MatchEndKickDelay = TimeSpan.FromSeconds(Math.Max(0, MatchEndKickDelay.Value)),
             DemoStopExtra = TimeSpan.FromSeconds(DemoStopExtra.Value),

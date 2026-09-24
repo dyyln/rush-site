@@ -135,14 +135,15 @@ public static class Warmup
         var score = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
         msg.CountdownCancelled(new[] { "a" }, new[] { "b", "c" });
         msg.CountdownTick("The match", 5);
-        msg.StillAway("a", TimeSpan.FromSeconds(30));
+        msg.StillAway(new[] { "a", "b" }, TimeSpan.FromSeconds(30));
         msg.Returned("a", true);
         msg.MapOver(1, "map", MatchEventJson.Draw, score, score, "next", 30);
         msg.SeriesOver(cfg.Teams[0].Name, score);
         MatchMessages.MissingCenter(new[]
         {
-            new MatchMessages.Missing("a", TimeSpan.FromSeconds(30), true),
-            new MatchMessages.Missing("b", TimeSpan.FromSeconds(60), false),
+            new MatchMessages.Missing("a", "Team a", TimeSpan.FromSeconds(30), true),
+            new MatchMessages.Missing(null, "Team b", TimeSpan.FromSeconds(60), false),
+            new MatchMessages.Missing(null, "Team b", TimeSpan.FromSeconds(60), false),
         });
         Loadout.IsWeaponName("weapon_ak47");
         var sent = sink.Types.ToList();

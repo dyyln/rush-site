@@ -155,24 +155,43 @@ public sealed class MatchMessages
 
     public static string DisconnectedCenter(string name, TimeSpan left) => $"{name} disconnected. {Clock(left)} to return";
 
-    // One entry of the live countdown. Joined is false for a player who has not been in yet.
-    public sealed record Missing(string Name, TimeSpan Left, bool Joined);
+    // One entry of the live countdown. Name is null for a player who was never on the server, so the team
+    // label stands in for it. Joined is false for a player who has not been in yet.
+    public sealed record Missing(string? Name, string Team, TimeSpan Left, bool Joined);
 
-    // Center screen countdown for the players still missing, soonest forfeit first. At most three names.
+    // Center screen countdown for the players still missing, soonest forfeit first. Players on the same
+    // clock share one entry, and unnamed players from one team count as one, so no clock repeats.
+    // At most three entries.
     public static string MissingCenter(IReadOnlyList<Missing> missing)
     {
-        if (missing.Count == 1)
+        var groups = missing
+            .GroupBy(m => ((int)Math.Ceiling(m.Left.TotalSeconds), m.Joined))
+            .OrderBy(g => g.Key.Item1)
+            .Select(g => (Who: Who(g.ToList()), Left: g.Min(m => m.Left), Joined: g.Key.Joined, Count: g.Count()))
+            .ToList();
+        if (groups.Count == 1)
         {
-            var m = missing[0];
-            return m.Joined ? $"{m.Name} left. {Clock(m.Left)} to return or forfeit" : $"Waiting for {m.Name} to join. {Clock(m.Left)}";
+            var g = groups[0];
+            return g.Joined ? $"{g.Who} left. {Clock(g.Left)} to return or forfeit" : $"Waiting for {g.Who} to join. {Clock(g.Left)}";
         }
-        var shown = missing.OrderBy(m => m.Left).Take(3).Select(m => $"{m.Name} {Clock(m.Left)}");
-        var more = missing.Count > 3 ? $" and {missing.Count - 3} more" : "";
+        var shown = groups.Take(3).Select(g => $"{g.Who} {Clock(g.Left)}");
+        var rest = groups.Skip(3).Sum(g => g.Count);
+        var more = rest > 0 ? $" and {rest} more" : "";
         return $"Waiting for {string.Join(", ", shown)}{more}";
     }
 
-    public string StillAway(string name, TimeSpan left) =>
-        Line($"{Hi(name)} has {Warn(Clock(left))} left to return or they forfeit.");
+    // "Al, Bob and 2 players from Team bravo". Named players first, then the unnamed ones per team.
+    private static string Who(IReadOnlyList<Missing> group)
+    {
+        var parts = group.Where(m => m.Name is not null).Select(m => m.Name!).ToList();
+        foreach (var team in group.Where(m => m.Name is null).GroupBy(m => m.Team))
+            parts.Add(team.Count() == 1 ? $"a player from {team.Key}" : $"{team.Count()} players from {team.Key}");
+        return parts.Count == 1 ? parts[0] : string.Join(", ", parts.Take(parts.Count - 1)) + " and " + parts[^1];
+    }
+
+    // One line for every player whose forfeit clock reached the same mark
+    public string StillAway(IReadOnlyList<string> names, TimeSpan left) =>
+        Line($"{Names(names)} {(names.Count == 1 ? "has" : "have")} {Warn(Clock(left))} left to return or they forfeit.");
 
     public string Returned(string name, bool unpausing) =>
         Line($"{Good(name + " is back.")}" + (unpausing ? " All players are in. Unpausing." : ""));

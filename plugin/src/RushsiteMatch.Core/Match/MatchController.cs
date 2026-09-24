@@ -566,9 +566,11 @@ public sealed class MatchController
 
     public string NameOf(string steamId) => _names.TryGetValue(steamId, out var n) ? n : steamId;
 
-    // Announces the forfeit countdown of each disconnected player at set marks.
+    // Announces the forfeit countdown of disconnected players at set marks. Players on the same
+    // clock share one line.
     private void AnnounceAway(DateTimeOffset now)
     {
+        var due = new List<(string Name, int Secs, TimeSpan Left)>();
         foreach (var (id, last) in _away.ToList())
         {
             if (_presence.IsConnected(id) || _presence.MissingSince(id) is not DateTimeOffset since)
@@ -580,8 +582,10 @@ public sealed class MatchController
             var secs = (int)Math.Ceiling(left.TotalSeconds);
             if (!CountdownMarks.Due(secs, last, CountdownMarks.IsGraceMark)) continue;
             _away[id] = secs;
-            _game.PrintToAll(_msg.StillAway(NameOf(id), left));
+            due.Add((NameOf(id), secs, left));
         }
+        foreach (var g in due.GroupBy(d => d.Secs).OrderBy(g => g.Key))
+            _game.PrintToAll(_msg.StillAway(g.Select(d => d.Name).ToList(), g.Min(d => d.Left)));
     }
 
     // Live countdown on every screen while a match player is missing, on the same clocks CheckAbandon uses.
@@ -597,8 +601,9 @@ public sealed class MatchController
             var joined = _presence.HasEverConnected(id);
             var left = (joined ? _settings.DisconnectGrace : _settings.ConnectGrace) - (now - since);
             // A player who was never on the server has no name yet, so the team stands in for it.
-            var name = _names.TryGetValue(id, out var n) ? n : $"a player from {_msg.TeamLabel(_cfg.TeamOf(id) ?? "")}";
-            if (left > TimeSpan.Zero) missing.Add(new MatchMessages.Missing(name, left, joined));
+            var name = _names.TryGetValue(id, out var n) ? n : null;
+            var team = _msg.TeamLabel(_cfg.TeamOf(id) ?? "");
+            if (left > TimeSpan.Zero) missing.Add(new MatchMessages.Missing(name, team, left, joined));
         }
         if (missing.Count > 0) _game.PrintCenterToAll(MatchMessages.MissingCenter(missing));
     }
@@ -906,6 +911,7 @@ public sealed class MatchController
         if (_recording) return;
         if (_game.GetConVar("tv_enable") != "1")
             _game.Log("tv_enable is not 1. tv_record will fail. Start the server with +tv_enable 1.");
+        if (_settings.TvDelay is int delay) _game.ExecuteCommand($"tv_delay {Math.Max(0, delay)}");
         _game.ExecuteCommand($"tv_record \"{DemoName}\"");
         _recording = true;
         MarkRecording();

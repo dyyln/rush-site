@@ -96,7 +96,11 @@ public sealed class MatchSettings
     public int OvertimeMaxRounds { get; init; } = 6;
     public int OvertimeStartMoney { get; init; } = 16000;
     // Series. Minimum wait between a map ending and the next map loading.
-    public TimeSpan SeriesMapBreak { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan SeriesMapBreak { get; init; } = TimeSpan.FromSeconds(10);
+    // tv_delay set when recording starts, after the mode cfg has run. The demo keeps recording through
+    // tv_delay after a map ends, so Valve's 105 in Rush holds every map change back almost two minutes.
+    // Null leaves the mode's value. GOTV is password locked, so a short delay gives nobody a live feed.
+    public int? TvDelay { get; init; }
     // Series. The match is abandoned when the next map has not loaded by then.
     public TimeSpan MapLoadTimeout { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan MatchEndWait { get; init; } = TimeSpan.FromSeconds(10);

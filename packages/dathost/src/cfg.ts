@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import {
   MODE_CONFIGS,
   type Cs2Launch,
@@ -76,7 +77,12 @@ function cfgString(s: string): string {
 }
 
 // server.cfg runs on every map load. Base settings stay in the template's base cfg.
-export function buildServerCfg(req: StartServerRequest, baseCfg: string | null): string {
+// GOTV gets a random password nobody is told, since the plugin runs it with little or no tv_delay.
+export function buildServerCfg(
+  req: StartServerRequest,
+  baseCfg: string | null,
+  tvPassword: string = randomBytes(16).toString("hex"),
+): string {
   const [t1, t2] = req.teams
   const lines = [
     "// Written by rushsite for this match",
@@ -86,6 +92,7 @@ export function buildServerCfg(req: StartServerRequest, baseCfg: string | null):
     `mp_teamname_1 "${cfgString(t1?.name ?? "")}"`,
     `mp_teamname_2 "${cfgString(t2?.name ?? "")}"`,
     "tv_enable 1",
+    `tv_password "${cfgString(tvPassword)}"`,
     `exec ${modeCfgPath(req.matchId)}`,
   ]
   return lines.join("\n") + "\n"
