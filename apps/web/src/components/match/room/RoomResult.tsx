@@ -49,6 +49,8 @@ export function RoomResult({ m, result, viewer }: { m: MatchDetail; result: Matc
   const tierMove = change && change.tierBefore !== change.tierAfter ? tierChange(change.tierBefore, change.tierAfter) : null;
   const winner = winnerOf(m, result);
   const winnerLabel = m.teams.find((t) => t.name === winner);
+  // A spectator would only see the winner here, which MatchSummary already shows below
+  if (!participant && outcome !== "abandoned" && m.status === "finished") return null;
 
   return (
     <Card tone="raised" as="div">

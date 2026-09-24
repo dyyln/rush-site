@@ -17,6 +17,7 @@ import { RatingText } from "@/components/ui/RatingText";
 import { TierChip } from "@/components/ui/TierChip";
 import { formatStat, winRate } from "@/lib/format";
 import { MODE_COPY, isMode } from "@/lib/modes";
+import { useBackdrop } from "@/lib/useBackdrop";
 import { useSession } from "@/lib/session";
 import type { Leaderboard, LeaderboardRow } from "@/lib/types";
 
@@ -115,6 +116,7 @@ export function LeaderboardView() {
   const { user, loading: sessionLoading } = useSession();
   const raw = params.get("mode");
   const mode: Mode = isMode(raw) ? raw : "rush3v3";
+  useBackdrop(mode);
   const board: Board = params.get("board") === "friends" ? "friends" : "global";
   const page = Math.max(0, Number(params.get("page") ?? 0) || 0);
   const q = (params.get("q") ?? "").trim();

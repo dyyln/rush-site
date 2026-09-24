@@ -27,6 +27,7 @@ import { TRUST_NAMES, trustProgressLine } from "@/lib/trust";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
 import type { EntryView, TournamentBracket, TournamentDetail } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { useBackdrop } from "@/lib/useBackdrop";
 import { useVisibleInterval } from "@/lib/useVisibleInterval";
 import { getRealtime } from "@/lib/ws";
 import styles from "./detail.module.css";
@@ -114,6 +115,7 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
 
 export function TournamentDetailView({ id }: { id: string }) {
   const data = useAsync(() => api.tournaments.detail(id), [id]);
+  useBackdrop(data.data?.mode);
   const { reload } = data;
   const live = useLiveBracket(id, data.data, reload);
 

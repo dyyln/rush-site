@@ -578,6 +578,7 @@ function mockRoomDetail(): MatchDetail {
     mode: mockRoomMode,
     mapId: null,
     status: "accepting",
+    accept: { deadline: Date.now() + 20_000, windowSec: 20, accepted: 0, required: size * 2, responded: false },
     driver: null,
     startedAt: null,
     endedAt: null,
