@@ -21,6 +21,22 @@ body {
   overflow-x: hidden;
 }
 
+/* The scene. Fixed layers under all content, tint on top of the image */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  background: var(--backdrop-image) center / cover no-repeat;
+}
+body::after {
+  background: var(--backdrop-tint);
+}
+
 h1,
 h2,
 h3,
@@ -134,6 +150,30 @@ table {
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+/* Glass panel. Any panel sitting on the scene takes this class. Card applies it.
+   A glass panel inside another one is already on glass, so it drops the blur */
+.glass {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+.glass .glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Title band. Page titles sit on glass so muted and accent text keep 4.5:1 over the scene */
+.page-header,
+.title-band {
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface-1);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
 }
 
 .page-header p {

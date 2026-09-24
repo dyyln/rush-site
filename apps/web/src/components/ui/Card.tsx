@@ -14,7 +14,7 @@ type CardProps = ComponentPropsWithoutRef<"section"> & {
 export function Card({ title, eyebrow, actions, tone = "default", padded = true, as = "section", className, children, ...rest }: CardProps) {
   const Tag = as;
   return (
-    <Tag className={cx(styles.card, styles[tone], padded && styles.padded, className)} {...rest}>
+    <Tag className={cx("glass", styles.card, styles[tone], padded && styles.padded, className)} {...rest}>
       {(title || actions || eyebrow) && (
         <header className={styles.header}>
           <div>

@@ -1,6 +1,7 @@
 import type { ReviewFlag } from "@rushsite/shared";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { dateTime } from "@/lib/format";
 import { REASON } from "./copy";
 import { FlagStatusBadge, MatchLine, PlayerFacts, PlayerHead } from "./parts";
@@ -11,7 +12,7 @@ export function ReviewQueueItem({ flag }: { flag: ReviewFlag }) {
   const reasons = [...new Set(flag.reports.map((r) => r.reason))];
   const notes = flag.reports.filter((r) => r.note);
   return (
-    <article className={styles.item} aria-labelledby={`case-${flag.id}`}>
+    <Card as="article" tone="flat" padded={false} className={styles.item} aria-labelledby={`case-${flag.id}`}>
       <div className={styles.itemHead}>
         <PlayerHead player={flag.player} link={false} />
         <div className={styles.itemMeta}>
@@ -44,6 +45,6 @@ export function ReviewQueueItem({ flag }: { flag: ReviewFlag }) {
       <Link id={`case-${flag.id}`} href={`/admin/review/${flag.id}`} className={styles.open}>
         Open case of {flag.player.displayName}
       </Link>
-    </article>
+    </Card>
   );
 }

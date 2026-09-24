@@ -59,7 +59,7 @@ export function StatusView() {
 
       {s && summary && (
         <div className="stack">
-          <p className={styles.summary} data-tone={summary.tone} role="status">
+          <p className={`glass ${styles.summary}`} data-tone={summary.tone} role="status">
             <span className={styles.dot} aria-hidden="true" />
             {summary.text}
           </p>
@@ -70,7 +70,7 @@ export function StatusView() {
             </h2>
             <ul className={styles.modes}>
               {s.modes.map((m) => (
-                <li key={m.mode} className={styles.mode} data-tone={m.available ? "ok" : "down"}>
+                <li key={m.mode} className={`glass ${styles.mode}`} data-tone={m.available ? "ok" : "down"}>
                   <span className={styles.modeName}>{MODE_COPY[m.mode].label}</span>
                   <span className={styles.modeState}>
                     <span className={styles.dot} aria-hidden="true" />
@@ -90,7 +90,7 @@ export function StatusView() {
                 const used = r.slotsTotal - r.slotsFree;
                 const load = r.slotsTotal > 0 ? used / r.slotsTotal : 0;
                 return (
-                  <li key={r.region} className={styles.region}>
+                  <li key={r.region} className={`glass ${styles.region}`}>
                     <div className={styles.regionHead}>
                       <span className={styles.regionName}>{REGION_NAMES[r.region] ?? r.region.toUpperCase()}</span>
                       {r.updating && <span className={styles.badge}>Updating CS2</span>}
@@ -122,7 +122,7 @@ export function StatusView() {
                   </li>
                 );
               })}
-              <li className={styles.region}>
+              <li className={`glass ${styles.region}`}>
                 <div className={styles.regionHead}>
                   <span className={styles.regionName}>Surge capacity</span>
                   <span className={styles.badge} data-tone={s.surge.enabled ? "ok" : undefined}>

@@ -2,6 +2,7 @@
 
 import type { MyReport } from "@rushsite/shared";
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/Card";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { REASON } from "./copy";
 import { reviewApi } from "./api";
@@ -26,7 +27,7 @@ export function MatchReportOutcomes({ matchId, reported }: { matchId: string; re
 
   if (rows.length === 0) return null;
   return (
-    <section className={styles.outcomes} aria-labelledby="my-reports-heading">
+    <Card tone="flat" padded={false} className={styles.outcomes} aria-labelledby="my-reports-heading">
       <h2 id="my-reports-heading" className={styles.outcomesTitle}>
         Your reports
       </h2>
@@ -39,6 +40,6 @@ export function MatchReportOutcomes({ matchId, reported }: { matchId: string; re
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }

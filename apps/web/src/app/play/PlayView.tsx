@@ -276,7 +276,7 @@ export function PlayView() {
                     return (
                       <li key={mode}>
                         <label
-                          className={`${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""} ${readOnly ? styles.readOnly : ""}`}
+                          className={`glass ${styles.mode} ${checked ? styles.checked : ""} ${reason ? styles.disabled : ""} ${locked ? styles.locked : ""} ${readOnly ? styles.readOnly : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -330,7 +330,7 @@ export function PlayView() {
                 </ul>
               </fieldset>
 
-              <div className={styles.actionBar}>
+              <Card as="div" tone="flat" padded={false} className={styles.actionBar}>
                 {user ? (
                   <>
                     {isLeader ? (
@@ -364,7 +364,7 @@ export function PlayView() {
                     <p className={styles.hint}>Free. Sign in with your Steam account, pick modes, and we hand you a server to join.</p>
                   </>
                 )}
-              </div>
+              </Card>
               {user && (
                 <p id="queue-hint" className={styles.hint}>
                   {!isLeader
@@ -498,10 +498,10 @@ function YourStats({ profile }: { profile: Profile }) {
       <StatTile size="sm" label="Headshot" value={formatStat(weighted((m) => m.headshotPct), "pct", matches)} />
       <StatTile size="sm" label="K/D" value={formatStat(weighted((m) => m.kd), "kd", matches)} />
       <StatTile size="sm" label="Matches" value={matches} />
-      <div className={styles.form}>
+      <Card as="div" tone="flat" padded={false} className={styles.form}>
         <p className={styles.formLabel}>Last 5</p>
         <FormDots results={last.map((m) => ({ id: m.matchId, result: m.result }))} label="Last 5" />
-      </div>
+      </Card>
     </section>
   );
 }

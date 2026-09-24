@@ -4,6 +4,7 @@ import type { MatchMap, Mode } from "@rushsite/shared";
 import { Badge } from "@/components/ui/Badge";
 import type { TeamSide } from "@/components/ui/TeamMarker";
 import { DemoActions } from "@/components/match/DemoActions";
+import { cx } from "@/components/ui/cx";
 import { mapName } from "@/lib/modes";
 import styles from "./Room.module.css";
 
@@ -41,7 +42,7 @@ export function SeriesStrip({
       </div>
       <ol className={styles.maps}>
         {maps.map((m) => (
-          <li key={m.mapNumber} className={styles.map} data-status={m.status} aria-current={m.status === "live" ? "step" : undefined}>
+          <li key={m.mapNumber} className={cx("glass", styles.map)} data-status={m.status} aria-current={m.status === "live" ? "step" : undefined}>
             <div className={styles.mapTop}>
               <span>
                 <span className="muted">Map {m.mapNumber} </span>

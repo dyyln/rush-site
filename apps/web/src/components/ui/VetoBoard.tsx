@@ -91,7 +91,7 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
           return (
             <li
               key={i}
-              className={cx(styles.step, done && styles.stepDone, current && styles.stepCurrent, s.team === myTeam ? styles.stepUs : styles.stepThem)}
+              className={cx("glass", styles.step, done && styles.stepDone, current && styles.stepCurrent, s.team === myTeam ? styles.stepUs : styles.stepThem)}
               aria-current={current ? "step" : undefined}
             >
               <span className={styles.stepAction}>{s.action}</span>

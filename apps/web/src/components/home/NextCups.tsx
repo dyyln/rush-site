@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { LocalTime } from "@/components/tournaments/LocalTime";
 import { MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
@@ -52,14 +53,14 @@ function CupCard({ next }: { next: NextCup }) {
   const { mode, cup, entered } = next;
   if (!cup) {
     return (
-      <article className={`${styles.cup} ${styles.cupEmpty}`}>
+      <Card as="article" tone="flat" padded={false} className={`${styles.cup} ${styles.cupEmpty}`}>
         <p className={styles.cupMode}>{MODE_COPY[mode].label}</p>
         <p className="muted">No cup open for sign ups right now.</p>
-      </article>
+      </Card>
     );
   }
   return (
-    <article className={styles.cup}>
+    <Card as="article" tone="flat" padded={false} className={styles.cup}>
       <div className={styles.cupTop}>
         <p className={styles.cupMode}>{MODE_COPY[mode].label}</p>
         {entered ? <Badge tone="win">Entered</Badge> : <Badge>{cup.cadence}</Badge>}
@@ -77,6 +78,6 @@ function CupCard({ next }: { next: NextCup }) {
           {cup.entrantCount} / {cup.maxEntrants}
         </span>
       </p>
-    </article>
+    </Card>
   );
 }

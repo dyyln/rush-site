@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
+import { Card } from "@/components/ui/Card";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
 import { mmss, signed } from "@/lib/format";
@@ -23,7 +24,7 @@ export function MatchSummary({ m, roster, ownIndex, viewer }: Props) {
   const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
 
   return (
-    <section className={styles.summary} aria-labelledby="summary-heading">
+    <Card tone="flat" className={styles.summary} aria-labelledby="summary-heading">
       <div className={styles.result}>
         <p className="eyebrow">Final</p>
         <h2 id="summary-heading" className={styles.headline} data-result={draw ? "draw" : played ? (ownWon ? "win" : "loss") : "neutral"}>
@@ -92,6 +93,6 @@ export function MatchSummary({ m, roster, ownIndex, viewer }: Props) {
           <p className="muted">Rating changes are not available for this match yet.</p>
         )}
       </div>
-    </section>
+    </Card>
   );
 }

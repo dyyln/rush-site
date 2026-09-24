@@ -153,7 +153,7 @@ function Tile({
 function HealthTile({ name, health }: { name: string; health?: Health }) {
   const tone = !health ? "off" : health.ok ? ((health.latencyMs ?? 0) > 250 ? "warn" : "ok") : "bad";
   return (
-    <div className={styles.health}>
+    <div className={`glass ${styles.health}`}>
       <span className={styles.healthName}>
         <Dot tone={tone} />
         {name}

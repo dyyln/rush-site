@@ -111,7 +111,7 @@ function MatchBox({ match, byId, highlight, onPath, isNext }: MatchBoxProps) {
   const href = matchLink(match);
   const placed = !!highlight && (match.a === highlight || match.b === highlight);
   return (
-    <div className={cx(styles.match, match.status === "live" && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
+    <div className={cx("glass", styles.match, match.status === "live" && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
       {onPath && <span className="visually-hidden">{placed ? "Your match. " : "On your route. "}</span>}
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;

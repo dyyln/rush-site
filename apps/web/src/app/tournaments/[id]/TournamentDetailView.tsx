@@ -284,7 +284,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
         ) : (
           <ol className={styles.entrants}>
             {t.entries.map((e) => (
-              <li key={e.id} className={styles.entrant}>
+              <li key={e.id} className={`glass ${styles.entrant}`}>
                 <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
                   <Avatar name={entryName(e)} src={captainAvatar(e)} size="sm" />
                   <span className={styles.entrantName}>{entryName(e)}</span>

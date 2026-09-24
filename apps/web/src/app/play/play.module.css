@@ -188,9 +188,6 @@
 }
 .form {
   padding: var(--space-2) var(--space-3);
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 .formLabel {
   font-size: var(--text-xs);
@@ -248,9 +245,6 @@
   gap: var(--space-4);
   flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
-  background: var(--color-surface-1);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
 }
 .actionBar .hint {
   margin: 0;

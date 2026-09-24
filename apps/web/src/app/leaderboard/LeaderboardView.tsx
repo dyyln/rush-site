@@ -9,6 +9,7 @@ import { TierDistributionBar } from "@/components/stats/TierDistributionBar";
 import { statsApi, type FriendRow, type FriendsLeaderboard } from "@/components/stats/statsApi";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
 import { Tabs } from "@/components/ui/Tabs";
@@ -298,10 +299,10 @@ export function LeaderboardView() {
               </p>
             )}
             {friends && !user && !sessionLoading ? (
-              <div className={styles.notice}>
+              <Card as="div" tone="flat" padded={false} className={styles.notice}>
                 <p>Sign in to see where you stand against your Steam friends.</p>
                 <ButtonLink href="/login">Sign in with Steam</ButtonLink>
-              </div>
+              </Card>
             ) : data.status === "error" ? (
               <div className={styles.error} role="alert">
                 <p>Could not load the leaderboard.</p>

@@ -2,6 +2,8 @@
   margin-top: var(--space-8);
   border-top: 1px solid var(--color-border);
   background: var(--color-surface-1);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 .inner {
   display: flex;

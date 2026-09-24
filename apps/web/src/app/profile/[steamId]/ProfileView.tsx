@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { cx } from "@/components/ui/cx";
 import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendButton } from "@/components/friends/FriendButton";
 import { RatingChart } from "@/components/ui/RatingChart";
@@ -107,7 +108,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
 
   return (
     <div className="container page">
-      <header className={styles.hero}>
+      <header className={cx(styles.hero, "title-band")}>
         <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
         <div className={styles.heroText}>
           <h1>{profile.user.displayName}</h1>
@@ -167,7 +168,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
           ) : (
             <ul className={styles.badges}>
               {profile.badges.map((b) => (
-                <li key={b.id} className={styles.badge} data-kind={b.kind}>
+                <li key={b.id} className={cx("glass", styles.badge)} data-kind={b.kind}>
                   <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" className={styles.badgeIcon}>
                     <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="currentColor" />
                   </svg>
@@ -192,7 +193,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
 
 function RatingCard({ mode, stats, active, onSelect }: { mode: Mode; stats?: ModeStats; active: boolean; onSelect: () => void }) {
   return (
-    <button type="button" className={`${styles.ratingCard} ${active ? styles.active : ""}`} onClick={onSelect} aria-pressed={active}>
+    <button type="button" className={cx("glass", styles.ratingCard, active && styles.active)} onClick={onSelect} aria-pressed={active}>
       <span className={styles.ratingTop}>
         <span className="eyebrow">{MODE_COPY[mode].label}</span>
       </span>
