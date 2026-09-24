@@ -1,4 +1,4 @@
-import { ServerMessageSchema } from "@rushsite/shared"
+import { ServerMessageSchema, TournamentBracketResponseSchema } from "@rushsite/shared"
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterEach, describe, expect, it } from "vitest"
 import { type CupDefinition, DEFAULT_CUPS } from "./config.js"
@@ -444,6 +444,61 @@ describe("running a cup", () => {
     expect(again.source).toMatchObject({ gameNumber: 1, bestOf: 3 })
     expect(again.source.priorMaps).toBeUndefined()
     expect(bm("r3m0").games).toEqual([])
+  })
+
+  it("serves round and map scores with room links in one score lookup", async () => {
+    const t = await fiveEntrants()
+    await h.startNow(t.startsAt)
+    const lookups: string[][] = []
+    const original = h.store.gameScores.bind(h.store)
+    h.store.gameScores = async (ids) => {
+      lookups.push(ids)
+      return original(ids)
+    }
+    const get = async () => {
+      const res = await h.app.inject({ url: `/tournaments/${t.id}/bracket` })
+      const body = TournamentBracketResponseSchema.parse(res.json())
+      return (key: string) => body.bracket!.matches.find((m) => m.id === key)!
+    }
+    const forfeited = liveGame("r1m1").matchId
+    h.store.games.set(forfeited, { matchId: forfeited, slug: "slow-grey-crow", status: "abandoned", mapId: "aim_map", score: { A: 2, B: 0 }, maps: [] })
+    await h.result({ matchId: forfeited, outcome: "abandoned", reason: "no_show", missingSteamIds: ["p5"] })
+
+    // Live Bo1 semi
+    const semi = liveGame("r2m1").matchId
+    h.store.games.set(semi, { matchId: semi, slug: "brave-amber-falcon", status: "live", mapId: "aim_map", score: { A: 6, B: 4 }, maps: [] })
+    let m = await get()
+    expect(m("r1m1")).toMatchObject({ resolution: "forfeit", score: null, room: null })
+    expect(m("r2m1")).toMatchObject({ status: "live", score: { a: 6, b: 4 }, room: "brave-amber-falcon" })
+    expect(lookups).toHaveLength(1)
+
+    h.store.games.set(semi, { ...h.store.games.get(semi)!, status: "completed", score: { A: 14, B: 16 } })
+    await win("r2m1", "B")
+    const other = liveGame("r2m0").matchId
+    h.store.games.set(other, { matchId: other, slug: null, status: "completed", mapId: "aim_map", score: { A: 13, B: 9 }, maps: [] })
+    await win("r2m0", "A")
+    m = await get()
+    expect(m("r2m1")).toMatchObject({ status: "done", score: { a: 14, b: 16 } })
+    expect(m("r2m0")).toMatchObject({ score: { a: 13, b: 9 }, room: other })
+
+    // Bo3 final on one server
+    const final = liveGame("r3m0").matchId
+    const maps = [
+      { mapNumber: 1, mapId: "aim_map", status: "done", winnerTeam: "B", score: { A: 10, B: 13 }, playedIn: null },
+      { mapNumber: 2, mapId: "aim_usp", status: "live", winnerTeam: null, score: { A: 3, B: 1 }, playedIn: null },
+    ]
+    h.store.games.set(final, { matchId: final, slug: "calm-iron-owl", status: "live", mapId: "aim_usp", score: { A: 0, B: 1 }, maps })
+    await h.mapResult({ matchId: final, mapNumber: 1, winnerTeam: "B" })
+    m = await get()
+    expect(m("r3m0")).toMatchObject({ status: "live", bestOf: 3, score: { a: 0, b: 1 }, room: "calm-iron-owl" })
+    expect(m("r3m0").maps?.map((x) => [x.status, x.score, x.winner])).toEqual([
+      ["done", { a: 10, b: 13 }, "b"],
+      ["live", { a: 3, b: 1 }, null],
+    ])
+
+    const detail = (await h.app.inject({ url: `/tournaments/${t.id}` })).json().tournament
+    expect(detail.bracket.matches.find((x: { id: string }) => x.id === "r3m0").score).toEqual({ a: 0, b: 1 })
+    expect(lookups.every((ids) => new Set(ids).size === ids.length)).toBe(true)
   })
 
   it("ignores results for unknown or repeated games", async () => {

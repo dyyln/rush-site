@@ -2,6 +2,7 @@ import { and, arrayContains, asc, count, eq, getTableColumns, inArray, isNull, l
 import type { Bracket, BracketMatch, Resolution } from "./bracket.js"
 import type { CupFormat } from "./config.js"
 import { adminAudit } from "../admin/schema.js"
+import { matchMaps, matches } from "../../db/schema.js"
 import { badges, bracketMatches, brackets, cupSchedules, tournamentEntries, tournaments } from "./schema.js"
 import type { BadgeKind, CupCadence, Db, Mode, TournamentStatus, TrustLevel } from "./types.js"
 
@@ -88,6 +89,23 @@ export interface StoredBracket {
   provisioningAt: Record<string, number>
 }
 
+// Score data of one CS2 match a bracket game ran on. Keys of score are team names
+export interface GameScoreRecord {
+  matchId: string
+  slug: string | null
+  status: string
+  mapId: string | null
+  score: Record<string, number> | null
+  maps: {
+    mapNumber: number
+    mapId: string
+    status: string
+    winnerTeam: string | null
+    score: Record<string, number>
+    playedIn: string | null
+  }[]
+}
+
 export interface TournamentFilter {
   status?: TournamentStatus[]
   mode?: Mode
@@ -118,6 +136,8 @@ export interface TournamentStore {
   saveBracket(tournamentId: string, stored: StoredBracket): Promise<number>
   loadBracket(tournamentId: string): Promise<StoredBracket | null>
   findTournamentByLiveMatch(matchId: string): Promise<string | null>
+  // Scores and map rows of the given matches in one query
+  gameScores(matchIds: string[]): Promise<GameScoreRecord[]>
   insertBadges(rows: BadgeRecord[]): Promise<void>
   // Returns how many badges were removed.
   deleteBadges(tournamentId: string, steamIds: string[]): Promise<number>
@@ -426,6 +446,47 @@ export class DrizzleTournamentStore implements TournamentStore {
       .where(eq(bracketMatches.liveMatchId, matchId))
       .limit(1)
     return row?.tournamentId ?? null
+  }
+
+  async gameScores(matchIds: string[]): Promise<GameScoreRecord[]> {
+    const ids = [...new Set(matchIds.filter(isUuid))]
+    if (ids.length === 0) return []
+    const rows = await this.db
+      .select({
+        matchId: matches.id,
+        slug: matches.slug,
+        status: matches.status,
+        mapId: matches.mapId,
+        score: matches.score,
+        mapNumber: matchMaps.mapNumber,
+        mapMapId: matchMaps.mapId,
+        mapStatus: matchMaps.status,
+        mapWinner: matchMaps.winnerTeam,
+        mapScore: matchMaps.score,
+        playedIn: matchMaps.playedIn,
+      })
+      .from(matches)
+      .leftJoin(matchMaps, eq(matchMaps.matchId, matches.id))
+      .where(inArray(matches.id, ids))
+    const out = new Map<string, GameScoreRecord>()
+    for (const r of rows) {
+      let g = out.get(r.matchId)
+      if (!g) {
+        g = { matchId: r.matchId, slug: r.slug, status: r.status, mapId: r.mapId, score: r.score, maps: [] }
+        out.set(r.matchId, g)
+      }
+      if (r.mapNumber !== null) {
+        g.maps.push({
+          mapNumber: r.mapNumber,
+          mapId: r.mapMapId ?? "",
+          status: r.mapStatus ?? "live",
+          winnerTeam: r.mapWinner,
+          score: r.mapScore ?? {},
+          playedIn: r.playedIn,
+        })
+      }
+    }
+    return [...out.values()]
   }
 
   async insertBadges(rows: BadgeRecord[]): Promise<void> {

@@ -58,7 +58,7 @@
 }
 .side {
   display: grid;
-  grid-template-columns: 36px 1fr 28px;
+  grid-template-columns: 36px 1fr minmax(32px, auto);
   align-items: center;
   gap: var(--space-2);
   min-height: 36px;
@@ -85,11 +85,84 @@
 }
 .score {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.won .entry,
-.won .score {
+.won .entry {
   color: var(--color-text);
   font-weight: 700;
+}
+.won .score {
+  font-weight: 700;
+}
+.scoreWon {
+  color: var(--color-win);
+}
+.scoreLive {
+  color: var(--color-text);
+}
+.maps {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.map {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 24px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.mapLive {
+  color: var(--color-text);
+}
+.mapName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mapName > :last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mapNo {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  line-height: 14px;
+  font-size: 10px;
+}
+.mapScore {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.mapTag {
+  margin-left: var(--space-1);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.mapLive .mapTag {
+  color: var(--color-win);
 }
 .lost .entry {
   color: var(--color-text-muted);

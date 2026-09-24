@@ -211,6 +211,21 @@ export type TournamentEntry = z.infer<typeof TournamentEntrySchema>
 
 export const BracketSideSchema = z.enum(["a", "b"])
 
+// Round score for one game, or maps won for a series
+export const BracketScoreSchema = z.object({ a: z.number().int().nonnegative(), b: z.number().int().nonnegative() })
+export type BracketScore = z.infer<typeof BracketScoreSchema>
+
+// One map of a best-of series with its round score
+export const BracketMapScoreSchema = z.object({
+  mapNumber: z.number().int().positive(),
+  mapId: z.string().nullable(),
+  status: z.enum(["live", "done"]),
+  score: BracketScoreSchema,
+  // null while live or when the map was drawn
+  winner: BracketSideSchema.nullable(),
+})
+export type BracketMapScore = z.infer<typeof BracketMapScoreSchema>
+
 export const BracketMatchSchema = z.object({
   // Stable key such as r1m0
   id: z.string(),
@@ -232,6 +247,12 @@ export const BracketMatchSchema = z.object({
   resolution: z
     .enum(["played", "bye", "walkover", "forfeit", "double_forfeit", "void", "disqualified", "admin_decision"])
     .nullable(),
+  // Round score of a single game or maps won in a series. null before any game has a score
+  score: BracketScoreSchema.nullable().optional(),
+  // Series only. Maps started or decided so far in map order
+  maps: z.array(BracketMapScoreSchema).optional(),
+  // Match room id of the live game or the last game played, for /matches/<room>
+  room: z.string().nullable().optional(),
 })
 export type BracketMatchView = z.infer<typeof BracketMatchSchema>
 

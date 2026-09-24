@@ -9,6 +9,7 @@ import { LocalTime } from "@/components/tournaments/LocalTime";
 import { VerifiedNote } from "@/components/tournaments/VerifiedNote";
 import { WithdrawDialog } from "@/components/tournaments/WithdrawDialog";
 import { registeredToast } from "@/components/tournaments/toasts";
+import { useLiveScores } from "@/components/tournaments/useLiveScores";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { BracketView, entryName, entryPlayers } from "@/components/ui/BracketView";
@@ -59,7 +60,14 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     }
   }, [detail]);
 
-  const refresh = useCallback(async () => {
+  // Round scores do not move the version, so a bracket with a live game is fetched in full
+  const hasLive = useRef(false);
+  const current = live && detail && live.version >= detail.bracketVersion ? live.bracket : detail?.bracket;
+  useEffect(() => {
+    hasLive.current = !!current?.matches.some((m) => m.status === "live");
+  }, [current]);
+
+  const refresh = useCallback(async (full = false) => {
     if (inFlight.current) {
       again.current = true;
       return;
@@ -68,8 +76,9 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     try {
       do {
         again.current = false;
-        const next = await api.tournaments.bracket(id, version.current).catch(() => null);
-        if (next && next.tournamentId === id && (version.current === undefined || next.version > version.current)) {
+        const next = await api.tournaments.bracket(id, full ? undefined : version.current).catch(() => null);
+        const newer = version.current === undefined || (next && (next.version > version.current || (full && next.version === version.current)));
+        if (next && next.tournamentId === id && newer) {
           version.current = next.version;
           setLive(next);
         }
@@ -79,7 +88,7 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     }
   }, [id]);
 
-  useVisibleInterval(() => void refresh(), BRACKET_POLL_MS, !loading && !signedIn);
+  useVisibleInterval(() => void refresh(hasLive.current), BRACKET_POLL_MS, !loading && !signedIn);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -109,7 +118,7 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     };
   }, [id, reload, refresh, signedIn]);
 
-  return live && detail && live.version > detail.bracketVersion ? live : null;
+  return live && detail && live.version >= detail.bracketVersion ? live : null;
 }
 
 export function TournamentDetailView({ id }: { id: string }) {
@@ -153,6 +162,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const [teamName, setTeamName] = useState("");
   const [teamNameError, setTeamNameError] = useState<string>();
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+  const bracket = useLiveScores(t.bracket, !!user);
 
   async function toggleEntry() {
     let name: string | undefined;
@@ -273,7 +283,7 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
       {t.bracket && (
         <section aria-labelledby="bracket-heading" className="stack">
           <h2 id="bracket-heading">Bracket</h2>
-          <BracketView bracket={t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} />
+          <BracketView bracket={bracket ?? t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} mode={t.mode} />
         </section>
       )}
       <section aria-labelledby="entrants-heading" className="stack">

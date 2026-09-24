@@ -20,6 +20,7 @@ import {
   startGame,
 } from "./bracket.js"
 import { randomUUID } from "node:crypto"
+import { gameMatchIds, withScores } from "./scores.js"
 import {
   REGISTRATION_OPENS_HOURS,
   defaultCupName,
@@ -36,7 +37,13 @@ import type {
   TournamentRecord,
   TournamentStore,
 } from "./store.js"
-import { CUP_ENTRANT_PREVIEW_MAX, type CupEntrantPreview, type CupSchedule, type CupWinner } from "@rushsite/shared"
+import {
+  type BracketView,
+  CUP_ENTRANT_PREVIEW_MAX,
+  type CupEntrantPreview,
+  type CupSchedule,
+  type CupWinner,
+} from "@rushsite/shared"
 import { getModeConfig, tierForRating, trustAtLeast } from "@rushsite/shared"
 import { eachLimit } from "../../lib/async.js"
 import {
@@ -211,7 +218,7 @@ export class TournamentService {
       entrantPreview: active.slice(0, CUP_ENTRANT_PREVIEW_MAX).map((e) => previewOf(e, profiles.profiles)),
       winner: champion ? winnerOf(champion, profiles.profiles) : null,
       entries: entries.map((e) => toEntryView(e, profiles)),
-      bracket: stored?.bracket ?? null,
+      bracket: await this.scoredBracket(stored?.bracket ?? null),
       bracketVersion: t.bracketVersion,
       myEntryId: mine?.id ?? null,
     }
@@ -221,13 +228,27 @@ export class TournamentService {
   async bracket(
     id: string,
     knownVersion: number | null,
-  ): Promise<{ version: number; bracket?: Bracket | null }> {
+  ): Promise<{ version: number; bracket?: BracketView | null }> {
     // Version is read before the bracket so the bracket is never older than the version.
     const t = await this.d.store.getTournament(id)
     if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
     if (knownVersion === t.bracketVersion) return { version: t.bracketVersion }
     const stored = await this.d.store.loadBracket(id)
-    return { version: t.bracketVersion, bracket: stored?.bracket ?? null }
+    return { version: t.bracketVersion, bracket: await this.scoredBracket(stored?.bracket ?? null) }
+  }
+
+  // Round and map scores from the matches the bracket ran on. One store query
+  private async scoredBracket(bracket: Bracket | null): Promise<BracketView | null> {
+    if (!bracket) return null
+    const ids = gameMatchIds(bracket)
+    const games =
+      ids.length === 0
+        ? []
+        : await this.d.store.gameScores(ids).catch((err) => {
+            this.d.log.warn({ err }, "bracket score lookup failed")
+            return []
+          })
+    return withScores(bracket, games)
   }
 
   // Sign-up

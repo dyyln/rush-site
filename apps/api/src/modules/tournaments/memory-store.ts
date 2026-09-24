@@ -4,6 +4,7 @@ import type {
   AuditRow,
   BadgeRecord,
   EntryRecord,
+  GameScoreRecord,
   NewEntry,
   NewSchedule,
   NewTournament,
@@ -21,6 +22,8 @@ export class MemoryTournamentStore implements TournamentStore {
   badges: BadgeRecord[] = []
   schedules = new Map<string, ScheduleRecord>()
   audit: AuditRow[] = []
+  // Stand in for the matches and match_maps tables
+  games = new Map<string, GameScoreRecord>()
   private locks = new Map<string, Promise<unknown>>()
   private clock = 0
 
@@ -160,6 +163,13 @@ export class MemoryTournamentStore implements TournamentStore {
       if (s.bracket.matches.some((m) => m.liveMatchId === matchId)) return id
     }
     return null
+  }
+
+  async gameScores(matchIds: string[]) {
+    return [...new Set(matchIds)].flatMap((id) => {
+      const g = this.games.get(id)
+      return g ? [structuredClone(g)] : []
+    })
   }
 
   async insertBadges(rows: BadgeRecord[]) {

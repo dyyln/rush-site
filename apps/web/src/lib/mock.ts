@@ -413,13 +413,33 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
         !done && round === completedRounds + 1 && !!a && !!b && (index === 0 || a === mine || b === mine) && t.status === "running";
       let winner: string | null = null;
       const games: BracketMatch["games"] = [];
+      // The last first round pairing of a running cup is won by forfeit
+      const forfeited = done && !bye && round === 1 && index === count - 1 && t.status === "running";
+      let score: BracketMatch["score"] = null;
+      let maps: BracketMatch["maps"];
       if (bye) winner = a ?? b;
       else if (done) {
         const aWins = a === mine ? true : b === mine ? false : r() > 0.35;
         winner = aWins ? a : b;
-        const need = Math.ceil(bestOf / 2);
-        for (let g = 0; g < need; g++) games.push({ matchId: mockUuid(`${t.id}-${round}-${index}-${g}`), winner: aWins ? "a" : "b" });
-        if (bestOf > 1) games.splice(1, 0, { matchId: mockUuid(`${t.id}-${round}-${index}-x`), winner: aWins ? "b" : "a" });
+        if (!forfeited) {
+          const need = Math.ceil(bestOf / 2);
+          for (let g = 0; g < need; g++) games.push({ matchId: mockUuid(`${t.id}-${round}-${index}-${g}`), winner: aWins ? "a" : "b" });
+          if (bestOf > 1) games.splice(1, 0, { matchId: mockUuid(`${t.id}-${round}-${index}-x`), winner: aWins ? "b" : "a" });
+          const played = games.map((g) => mockRoundScore(t.mode, g.winner, r));
+          if (bestOf > 1) {
+            maps = games.map((g, i) => ({ mapNumber: i + 1, mapId: mockCupMap(t.mode, i), status: "done", score: played[i]!, winner: g.winner }));
+            score = { a: games.filter((g) => g.winner === "a").length, b: games.filter((g) => g.winner === "b").length };
+          } else score = played[0]!;
+        }
+      }
+      if (live) {
+        score = bestOf > 1 ? { a: 1, b: 0 } : { a: 5 + Math.floor(r() * 4), b: 3 + Math.floor(r() * 4) };
+        if (bestOf > 1) {
+          maps = [
+            { mapNumber: 1, mapId: mockCupMap(t.mode, 0), status: "done", score: mockRoundScore(t.mode, "a", r), winner: "a" },
+            { mapNumber: 2, mapId: mockCupMap(t.mode, 1), status: "live", score: { a: 4, b: 6 }, winner: null },
+          ];
+        }
       }
       winners.push(winner);
       matches.push({
@@ -437,12 +457,28 @@ function mockBracket(t: TournamentSummary, entries: EntryView[]): Bracket {
         games,
         liveMatchId: live ? MOCK_LIVE_MATCH_ID : null,
         winner,
-        resolution: bye ? "bye" : done ? "played" : null,
+        resolution: bye ? "bye" : forfeited ? "forfeit" : done ? "played" : null,
+        score,
+        ...(maps ? { maps } : {}),
+        room: live ? MOCK_LIVE_MATCH_ID : (games.at(-1)?.matchId ?? null),
       });
     }
     prevWinners = winners;
   }
   return { size, rounds, matches };
+}
+
+// First to 13 in aim with the odd overtime, 8 round wins in Rush
+function mockRoundScore(mode: Mode, winner: "a" | "b", r: () => number): { a: number; b: number } {
+  const rush = mode === "rush3v3";
+  const overtime = !rush && r() < 0.15;
+  const win = rush ? 8 : overtime ? 16 : 13;
+  const lose = rush ? Math.floor(r() * 8) : overtime ? 14 : Math.floor(r() * 12);
+  return winner === "a" ? { a: win, b: lose } : { a: lose, b: win };
+}
+
+function mockCupMap(mode: Mode, i: number): string {
+  return mode === "rush3v3" ? RUSH_MAP.id : AIM_MAPS[i % AIM_MAPS.length]!.id;
 }
 
 // Bumped by the mock realtime client to simulate bracket changes
