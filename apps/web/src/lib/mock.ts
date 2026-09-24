@@ -8,6 +8,7 @@ import {
   RUSH_ROOMS,
   RUSH_SERIES_ROOM_VETO,
   createSeriesRoomVeto,
+  createVeto,
   seriesRushRoomsFromVeto,
   tierForRating,
   type MatchMap,
@@ -555,6 +556,15 @@ export const MOCK_SERIES_RUSH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000f6";
 // Rush Bo3 cup final in the series room pick before map 1. The mock socket runs the veto, see ws-mock.ts
 export const MOCK_SERIES_VETO_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a7";
 export const MOCK_SERIES_VETO_SLUG = "steady-violet-lynx";
+// Aim 2v2 Bo3 cup final in the map pick and ban before map 1. Runs on the same mock socket code
+export const MOCK_AIM_BO3_VETO_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000a8";
+export const MOCK_AIM_BO3_VETO_SLUG = "brisk-amber-heron";
+// The two mock series vetoes, by match id
+export const MOCK_BO3_VETOES = {
+  [MOCK_SERIES_VETO_ID]: { slug: MOCK_SERIES_VETO_SLUG, mode: "rush3v3", kind: "series-rooms" },
+  [MOCK_AIM_BO3_VETO_ID]: { slug: MOCK_AIM_BO3_VETO_SLUG, mode: "aim2v2", kind: "maps" },
+} as const satisfies Record<string, { slug: string; mode: Mode; kind: "series-rooms" | "maps" }>;
+export const isMockBo3Veto = (id: string): id is keyof typeof MOCK_BO3_VETOES => id in MOCK_BO3_VETOES;
 // Finished with the viewer playing and no demo uploaded
 export const MOCK_NODEMO_MATCH_ID = "7a1e0c52-9b1d-4c7e-8f00-0000000000c3";
 
@@ -813,12 +823,27 @@ function mockRoomDetail(): MatchDetail {
   return { ...base, ...mockMatchExtras(base, 1, { demo: false }) };
 }
 
-// Series room pick state for MOCK_SERIES_VETO_ID. The mock socket votes and resolves steps and writes it back here,
-// so a refetch sees the same veto. Created on first use, reset by a page load
-let seriesVeto: { state: VetoState; stepDeadline: number | null } | null = null;
+// Veto state for the mock series vetoes in MOCK_BO3_VETOES. The mock socket votes and resolves steps and writes it
+// back here, so a refetch sees the same veto. Created on first use, reset by a page load
+const seriesVetoes = new Map<string, { state: VetoState; stepDeadline: number | null }>();
 
-export function mockSeriesVeto(): { state: VetoState; stepDeadline: number | null } {
-  if (!seriesVeto) {
+export function mockSeriesVeto(id: string = MOCK_SERIES_VETO_ID): { state: VetoState; stepDeadline: number | null } {
+  let cur = seriesVetoes.get(id);
+  if (!cur && id === MOCK_AIM_BO3_VETO_ID) {
+    // Team B is the higher seed and bans first, so the viewer's team makes the second ban and the second pick
+    const state = createVeto({
+      pool: AIM_MAPS.map((m) => m.id),
+      teams: [
+        { id: "team_a", steamIds: [MOCK_ME.steamId, mockSteamId(4)] },
+        { id: "team_b", steamIds: [mockSteamId(20), mockSteamId(21)] },
+      ],
+      format: "bo3-pickban",
+      firstTeam: 1,
+    });
+    cur = { state, stepDeadline: Date.now() + 20_000 };
+    seriesVetoes.set(id, cur);
+  }
+  if (!cur) {
     const size = teamSize("rush3v3");
     const us = [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4))];
     const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
@@ -833,13 +858,49 @@ export function mockSeriesVeto(): { state: VetoState; stepDeadline: number | nul
       1,
       () => 0.3,
     );
-    seriesVeto = { state, stepDeadline: Date.now() + 20_000 };
+    cur = { state, stepDeadline: Date.now() + 20_000 };
+    seriesVetoes.set(id, cur);
   }
-  return seriesVeto;
+  return cur;
 }
 
-export function setMockSeriesVeto(state: VetoState, stepDeadline: number | null) {
-  seriesVeto = { state, stepDeadline };
+export function setMockSeriesVeto(state: VetoState, stepDeadline: number | null, id: string = MOCK_SERIES_VETO_ID) {
+  seriesVetoes.set(id, { state, stepDeadline });
+}
+
+// Aim Bo3 in its pick and ban. Maps are known once the veto is done: the two picks, then the decider
+function mockAimBo3VetoDetail(): MatchDetail {
+  const { state, stepDeadline } = mockSeriesVeto(MOCK_AIM_BO3_VETO_ID);
+  const player = (steamId: string): MatchPlayer => {
+    const u = mockUserBySteamId(steamId);
+    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1700).id, rating: 1700, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+  };
+  const names = state.teams.map((t) => t.id);
+  const maps: MatchMap[] = state.done
+    ? state.maps.slice(0, 3).map((mapId, i) => ({
+        mapNumber: i + 1,
+        mapId,
+        status: "upcoming",
+        winnerTeam: null,
+        score: Object.fromEntries(names.map((x) => [x, 0])),
+      }))
+    : [];
+  return {
+    id: MOCK_AIM_BO3_VETO_ID,
+    slug: MOCK_AIM_BO3_VETO_SLUG,
+    mode: "aim2v2",
+    mapId: maps[0]?.mapId ?? AIM_MAPS[0]!.id,
+    status: state.done ? "allocating" : "veto",
+    driver: null,
+    startedAt: null,
+    endedAt: null,
+    teams: state.teams.map((t) => ({ name: t.id, score: 0, players: t.steamIds.map(player) })),
+    rounds: [],
+    bestOf: 3,
+    maps,
+    tournament: { id: MOCK_TOURNAMENT_IDS[1]!, name: "Daily Aim Cup", bracketMatchId: "final", bestOf: 3, gameNumber: 1 },
+    veto: { state: structuredClone(state), stepDeadline },
+  };
 }
 
 function mockSeriesVetoDetail(): MatchDetail {
@@ -922,6 +983,7 @@ export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
     );
   }
   if (id === MOCK_SERIES_VETO_ID || id === MOCK_SERIES_VETO_SLUG) return mockSeriesVetoDetail();
+  if (id === MOCK_AIM_BO3_VETO_ID || id === MOCK_AIM_BO3_VETO_SLUG) return mockAimBo3VetoDetail();
   if (id === MOCK_NODEMO_MATCH_ID) return build(id, "aim2v2", "aim_redline", 19, null, now - 26 * 3_600_000, true, false);
   const seed = hash(id);
   const modes: Mode[] = ["aim1v1", "aim2v2", "rush3v3"];
