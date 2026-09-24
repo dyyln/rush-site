@@ -197,6 +197,7 @@ API_URL=https://$API_DOMAIN WEB_URL=https://$SITE_DOMAIN AGENT_URLS=http://local
 
   ```bash
   cp /srv/rushsite/infra/systemd/rushsite-autodeploy.{service,timer} /etc/systemd/system/
+  install -o deploy -g deploy -m 755 /srv/rushsite/infra/scripts/autodeploy.sh /home/deploy/bin/rushsite-autodeploy
   systemctl daemon-reload && systemctl enable --now rushsite-autodeploy.timer
   ```
 

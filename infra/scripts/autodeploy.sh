@@ -34,6 +34,16 @@ main() {
     exit 1
   fi
 
+  # The unit runs an installed copy so a checkout without this file cannot break the timer.
+  # Refresh that copy from the repo. mv swaps the inode, so the parsed run carries on.
+  local self
+  self="$(readlink -f "$0")"
+  if [[ -f infra/scripts/autodeploy.sh && "$self" != "$(readlink -f infra/scripts/autodeploy.sh)" ]] \
+    && ! cmp -s infra/scripts/autodeploy.sh "$self"; then
+    install -m 755 infra/scripts/autodeploy.sh "$self.new" && mv "$self.new" "$self"
+    echo "updated $self"
+  fi
+
   changed="$(git diff --name-only "$old" "$new")"
   if ! grep -qvE '^(docs/|agent/|plugin/|worker/)|\.md$' <<<"$changed"; then
     echo "no site files changed, deployed $(git log -1 --oneline) without a rebuild"
