@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { isTestMode, type Mode } from "@rushsite/shared";
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -17,10 +17,12 @@ type ChallengeButtonProps = {
   defaultMode?: Mode;
   variant?: ButtonProps["variant"];
   label?: string;
+  // Custom opener, e.g. an icon button. Gets the handler that opens the mode picker
+  trigger?: (open: () => void) => ReactNode;
 };
 
 // Opens a mode picker and sends a direct challenge. Hidden when signed out or on your own profile
-export function ChallengeButton({ target, defaultMode = "aim1v1", variant = "secondary", label = "Challenge" }: ChallengeButtonProps) {
+export function ChallengeButton({ target, defaultMode = "aim1v1", variant = "secondary", label = "Challenge", trigger }: ChallengeButtonProps) {
   const { user } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -46,9 +48,13 @@ export function ChallengeButton({ target, defaultMode = "aim1v1", variant = "sec
 
   return (
     <>
-      <Button variant={variant} onClick={() => setOpen(true)} aria-haspopup="dialog">
-        {label}
-      </Button>
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <Button variant={variant} onClick={() => setOpen(true)} aria-haspopup="dialog">
+          {label}
+        </Button>
+      )}
       <Modal
         open={open}
         onClose={() => setOpen(false)}

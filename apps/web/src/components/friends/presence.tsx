@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { isRushMode, type Presence, type PresenceDetail } from "@rushsite/shared";
 import { mapName, modeLabel, MODE_COPY } from "@/lib/modes";
-import { joinQueueHref, type JoinableModes } from "./useJoinQueue";
 import styles from "./friends.module.css";
 import { describeError } from "@/lib/errors";
 
@@ -35,17 +33,9 @@ function mapLabel(d: PresenceDetail): string | null {
   return d.mapId ? mapName(d.mode, d.mapId) : null;
 }
 
-// One line under a friend's name. A live match gets its score and a Watch link.
-// A queued friend gets a Join queue link when the viewer may queue the same modes
-export function PresenceLine({
-  presence,
-  detail,
-  joinable,
-}: {
-  presence: Presence;
-  detail?: PresenceDetail;
-  joinable?: JoinableModes;
-}) {
+// One line of text under a friend's name: live match with its score, queued modes, or plain presence.
+// Watch and Join queue live on the row as icon buttons (see FriendRow)
+export function PresenceLine({ presence, detail }: { presence: Presence; detail?: PresenceDetail }) {
   if (presence === "match" && detail?.mode) {
     const map = mapLabel(detail);
     const parts = [modeLabel(detail.mode), map].filter(Boolean).join(" · ");
@@ -62,25 +52,14 @@ export function PresenceLine({
             </>
           )}
         </span>
-        {detail.matchId && (
-          <Link href={`/matches/${detail.matchId}`} className={styles.watch}>
-            Watch<span className="visually-hidden"> match</span>
-          </Link>
-        )}
       </span>
     );
   }
   if (presence === "queue" && detail?.modes?.length) {
     const labels = detail.modes.map((m) => MODE_COPY[m].label).join(", ");
-    const join = joinable?.(detail.modes) ?? [];
     return (
       <span className={styles.presenceLine}>
         <span className={styles.presenceText}>Queue: {labels}</span>
-        {join.length > 0 && (
-          <Link href={joinQueueHref(join)} className={styles.watch}>
-            Join queue<span className="visually-hidden"> for {join.map((m) => MODE_COPY[m].label).join(", ")}</span>
-          </Link>
-        )}
       </span>
     );
   }
@@ -91,8 +70,19 @@ export function PresenceLine({
   );
 }
 
-// Avatar initials or image with a presence dot. Colour is backed by the text line and a hidden label
-export function PresenceAvatar({ name, src, presence }: { name: string; src: string | null; presence: Presence }) {
+// Avatar initials or image with a presence dot. Colour is backed by the text line and a hidden label.
+// Pass labelled={false} when nearby text already says the presence, so screen readers do not hear it twice
+export function PresenceAvatar({
+  name,
+  src,
+  presence,
+  labelled = true,
+}: {
+  name: string;
+  src: string | null;
+  presence: Presence;
+  labelled?: boolean;
+}) {
   const initials = name.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
   return (
     <span className={styles.avatar}>
@@ -105,7 +95,7 @@ export function PresenceAvatar({ name, src, presence }: { name: string; src: str
         </span>
       )}
       <span className={`${styles.dot} ${styles[presence]}`}>
-        <span className="visually-hidden">{PRESENCE_LABEL[presence]}</span>
+        {labelled && <span className="visually-hidden">{PRESENCE_LABEL[presence]}</span>}
       </span>
     </span>
   );
