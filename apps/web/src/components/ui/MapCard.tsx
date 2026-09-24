@@ -73,6 +73,8 @@ export function MapCard({
         ? `${count} of ${voterTotal} ${who} voted`
         : `${count} ${count === 1 ? "vote" : "votes"}`;
   const stamp = state === "available" ? null : STAMP[state];
+  // What choosing this card does. Shown on hover and focus, and kept once the viewer has voted
+  const intent = onSelect && state === "available" ? (actionLabel.toLowerCase() === "pick" ? "pick" : "ban") : null;
 
   const body = (
     <>
@@ -81,6 +83,11 @@ export function MapCard({
         {stamp && (
           <span className={cx(styles.stamp, styles[`stamp_${state}`])} aria-hidden="true">
             {stamp}
+          </span>
+        )}
+        {intent && (
+          <span className={cx(styles.intent, intent === "pick" ? styles.intentPick : styles.intentBan)} aria-hidden="true">
+            {actionLabel}
           </span>
         )}
       </span>
@@ -129,7 +136,14 @@ export function MapCard({
     </>
   );
 
-  const cls = cx("glass", styles.card, styles[state], voted && styles.voted, onSelect && !disabled && styles.interactive);
+  const cls = cx(
+    "glass",
+    styles.card,
+    styles[state],
+    voted && styles.voted,
+    onSelect && !disabled && styles.interactive,
+    intent === "pick" ? styles.actPick : intent === "ban" ? styles.actBan : null,
+  );
   if (onSelect) {
     const others = voters?.filter((v) => !v.me).map((v) => v.name) ?? [];
     const label = [`${actionLabel} ${name}`, voted ? "your vote" : null, voteText, others.length ? `voted by ${others.join(", ")}` : null]
