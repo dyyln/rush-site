@@ -58,11 +58,6 @@ function MessageRow({ message: m, canModerate, onModerate }: { message: ChatMess
               <span className="visually-hidden">{tier} tier</span>
             </span>
           )}
-          {m.author.trustLevel !== "new" && (
-            <span className={styles.trust} title={`${m.author.trustLevel === "trusted" ? "Trusted" : "Verified"} player`}>
-              {m.author.trustLevel === "trusted" ? "Trusted" : "Verified"}
-            </span>
-          )}
           <time className={styles.time} dateTime={m.createdAt} title={fullFmt.format(at)}>
             {timeFmt.format(at)}
           </time>

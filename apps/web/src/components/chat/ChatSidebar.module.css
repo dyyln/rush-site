@@ -171,15 +171,6 @@
   color: var(--tier-elite);
 }
 
-.trust {
-  color: var(--color-info);
-  font-family: var(--font-display);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .time {
   margin-left: auto;
   color: var(--color-text-muted);
