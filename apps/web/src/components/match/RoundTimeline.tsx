@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { cx } from "@/components/ui/cx";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { RoomImage } from "@/components/rush/RoomImage";
 import { rushRoomName } from "@/lib/rushRooms";
@@ -10,6 +11,7 @@ import type { MatchKill, MatchRound } from "@/lib/types";
 import { ChevronIcon } from "./icons";
 import { KillFeed } from "./KillFeed";
 import type { Roster } from "./roster";
+import type { RushRoundPath } from "./RushRoomTrack";
 import styles from "./RoundTimeline.module.css";
 
 type Props = {
@@ -23,9 +25,11 @@ type Props = {
   roster: Roster;
   // Player to mark in the kill feed
   highlight?: string;
+  // Rush only. Draws where play was each round under the segments
+  rushPath?: RushRoundPath | null;
 };
 
-export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight }: Props) {
+export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight, rushPath }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const [all, setAll] = useState(false);
   const panelId = useId();
@@ -146,9 +150,21 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
                   {score}
                 </span>
               )}
+              {rushPath && (
+                <PathCell path={rushPath} slot={rushPath.slotOf.get(r.round)} next={next ? rushPath.slotOf.get(next.round) : (rushPath.pending ?? undefined)} side={side} />
+              )}
             </li>
           );
         })}
+        {rushPath && rushPath.pending !== null && (
+          <li className={styles.round} title={`Round ${(rounds.at(-1)?.round ?? 0) + 1}, being played`}>
+            <span className={styles.hitPending}>
+              <span className={cx(styles.seg, styles.segPending)} />
+              <span className="visually-hidden">Round {(rounds.at(-1)?.round ?? 0) + 1} is being played</span>
+            </span>
+            <PathCell path={rushPath} slot={rushPath.pending} pending />
+          </li>
+        )}
       </ol>
 
       <div id={panelId} className={styles.panelWrap}>
@@ -212,4 +228,35 @@ function RoundTitle({ r, side, score, rush }: { r: MatchRound; side: TeamSide; s
 
 function NoKills() {
   return <p className="muted">Kills show here once the round is recorded.</p>;
+}
+
+const PATH_ROW = 14;
+const PATH_PAD = 6;
+
+// One round's column of the Rush graph: guide rows for the seven rooms, the round's marker at the
+// room it was played in, and a line to the next round. Cells are equal width, so a line to the
+// middle of the next cell runs from 50 to 150 on a 0-100 box
+function PathCell({ path, slot, next, side, pending }: { path: RushRoundPath; slot: number | undefined; next?: number; side?: TeamSide; pending?: boolean }) {
+  const y = (s: number) => PATH_PAD + s * PATH_ROW;
+  const height = y(path.slots - 1) + PATH_PAD;
+  return (
+    <span className={styles.path} style={{ height }} aria-hidden="true">
+      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" width="100%" height={height}>
+        {Array.from({ length: path.slots }, (_, s) => (
+          <line key={s} className={styles.pathGuide} data-castle={s === 0 || s === path.slots - 1 || undefined} x1={0} x2={100} y1={y(s)} y2={y(s)} vectorEffect="non-scaling-stroke" />
+        ))}
+        {slot !== undefined && next !== undefined && (
+          <line className={styles.pathLine} data-side={side} x1={50} y1={y(slot)} x2={150} y2={y(next)} vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+      {slot !== undefined &&
+        (pending ? (
+          <span className={cx(styles.pathPoint, styles.pathPending)} style={{ top: y(slot) }} />
+        ) : (
+          <span className={styles.pathPoint} data-side={side} style={{ top: y(slot) }}>
+            {side && <TeamMarker side={side} />}
+          </span>
+        ))}
+    </span>
+  );
 }

@@ -35,35 +35,71 @@
     grid-template-columns: repeat(7, minmax(104px, 1fr));
     gap: var(--space-2);
     padding: 2px 2px var(--space-2);
+  }
+  /* The track scrolls sideways when the columns do not fit */
+  .scroll {
     overflow-x: auto;
     overscroll-behavior-x: contain;
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-strong) transparent;
   }
 }
 
 .slot,
 .decider {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-1) var(--space-3);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: 0 var(--space-3) 0 0;
   background: var(--color-surface-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
-/* Room screenshot, capped so the phone list stays short */
-.thumb {
+/* Phones: the image on the left and the details beside it. Wider: the image across the top */
+.frame {
+  position: relative;
   display: block;
-  width: 100%;
-  max-width: 160px;
+  overflow: hidden;
+  border-radius: calc(var(--radius-md) - 1px) 0 0 calc(var(--radius-md) - 1px);
 }
-.thumbEmpty {
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) 0;
+}
+.meta:empty {
+  display: none;
+}
+@media (min-width: 640px) {
+  .slot,
+  .decider {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+  .frame {
+    border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+  }
+  .meta {
+    padding: var(--space-2);
+  }
+}
+/* Rooms play never reached sit back */
+.unreached .frame img {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+.frame img,
+.frame > span:first-child {
+  border-radius: 0;
+}
+.blank {
+  display: block;
   aspect-ratio: 16 / 10;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
 }
 /* Link between neighbouring rooms */
 .slot + .slot::before {
@@ -100,8 +136,7 @@
   border-style: dashed;
   border-color: var(--color-border-strong);
 }
-.slot[data-kind="castle"] .name,
-.slot[data-kind="castle"] .marks {
+.slot[data-kind="castle"] .name {
   color: var(--color-text);
 }
 
@@ -122,24 +157,28 @@
   color: var(--color-text-muted);
 }
 
-.kind {
-  font-family: var(--font-display);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-.slot[data-kind="castle"] .kind {
-  color: inherit;
-}
+/* Name over the bottom of the image, on a dark band so it reads on any screenshot */
 .name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) var(--space-2);
+  background: rgb(8 7 11 / 0.78);
   font-family: var(--font-display);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.2;
   color: var(--color-text);
   overflow-wrap: anywhere;
+}
+.nameNote {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 .unknown {
   font-family: var(--font-body);
@@ -185,51 +224,6 @@
   flex: none;
   background: var(--color-accent-hover);
   animation: pulse 1.6s ease-in-out infinite;
-}
-
-.marks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 4px;
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-}
-.mark[data-side="own"] {
-  color: var(--team-own);
-}
-.mark[data-side="enemy"] {
-  color: var(--team-enemy);
-  border-style: dashed;
-}
-/* Arrow points the way play moved: toward the CT castle is right, or down on phones */
-.arrow {
-  flex: none;
-}
-.arrow[data-toward="t"] {
-  transform: rotate(-90deg);
-}
-.arrow[data-toward="ct"] {
-  transform: rotate(90deg);
-}
-@media (min-width: 640px) {
-  .arrow[data-toward="t"] {
-    transform: rotate(180deg);
-  }
-  .arrow[data-toward="ct"] {
-    transform: none;
-  }
 }
 
 .decider {
@@ -286,5 +280,30 @@
 @media (prefers-reduced-motion: reduce) {
   .slot[data-latest] .name {
     animation: none;
+  }
+}
+
+/* Live control. Rooms behind play take the colour of the team holding them. The room in play
+   is split between the two, T side first (top on phones, left from 640px), and lifts slightly */
+.track .slot[data-control] {
+  border-width: 2px;
+}
+.track .slot[data-control="own"] {
+  border-color: var(--team-own);
+}
+.track .slot[data-control="enemy"] {
+  border-color: var(--team-enemy);
+}
+.track .slot[data-contested] {
+  --split-dir: 180deg;
+  border-width: 3px;
+  border-style: solid;
+  border-image: linear-gradient(var(--split-dir), var(--split-t) 50%, var(--split-ct) 50%) 1;
+  background: linear-gradient(rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.07)), var(--color-surface-2);
+  box-shadow: none;
+}
+@media (min-width: 640px) {
+  .track .slot[data-contested] {
+    --split-dir: 90deg;
   }
 }

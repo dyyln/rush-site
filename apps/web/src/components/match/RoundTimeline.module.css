@@ -149,3 +149,72 @@
   padding: 0;
   gap: 0;
 }
+
+/* Rush graph under the segments. One cell per round, lined up with its segment */
+.path {
+  position: relative;
+  display: block;
+  margin-top: 14px;
+}
+.path svg {
+  display: block;
+  overflow: visible;
+}
+.pathGuide {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+.pathGuide[data-castle] {
+  stroke: var(--color-border-strong);
+}
+.pathLine {
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.pathLine[data-side="own"] {
+  stroke: var(--team-own);
+}
+.pathLine[data-side="enemy"] {
+  stroke: var(--team-enemy);
+}
+.pathPoint {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+}
+.pathPoint[data-side="own"] {
+  color: var(--team-own);
+}
+.pathPoint[data-side="enemy"] {
+  color: var(--team-enemy);
+}
+.pathPending {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-text);
+  border-radius: 50%;
+  background: var(--color-surface-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pathPending {
+    animation: path-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes path-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* The round being played: an outlined segment, not selectable until it has a result */
+.hitPending {
+  display: block;
+  width: 100%;
+  height: var(--target-min);
+  padding: 12px 0;
+}
+.segPending {
+  border: 1px dashed var(--color-text-muted);
+}

@@ -30,10 +30,14 @@ export function ComplexLayout({ slots, sideOf, nextSlot = null, pendingLabel = "
             data-source={s.source}
             aria-current={s.slot === nextSlot ? "step" : undefined}
           >
-            <span className={styles.slotLabel}>{rushSlotLabel(s.slot)}</span>
-            {s.room ? <RoomImage room={s.room} /> : <span className={styles.slotEmpty} aria-hidden="true" />}
-            <span className={styles.slotName}>{s.room ? rushRoomName(s.room) : s.slot === nextSlot ? "Next pick" : "Open"}</span>
-            {s.source !== "open" && <span className={styles.slotHow}>{how}</span>}
+            {/* Which slot is only spoken. The image and the room name carry the rest */}
+            <span className="visually-hidden">{rushSlotLabel(s.slot)}: </span>
+            <span className={styles.slotFrame}>
+              {s.room ? <RoomImage room={s.room} /> : <span className={styles.slotEmpty} aria-hidden="true" />}
+              {s.room && <span className={styles.slotName}>{rushRoomName(s.room)}</span>}
+            </span>
+            {!s.room && <span className="visually-hidden">{s.slot === nextSlot ? "next pick" : pendingLabel}</span>}
+            {s.room && s.source !== "open" && s.source !== "castle" && <span className={styles.slotHow}>{how}</span>}
           </li>
         );
       })}

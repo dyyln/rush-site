@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type CSSProperties } from "react";
 import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RushRoom } from "@rushsite/shared";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
@@ -124,28 +124,27 @@ export function buildRushTrack(rooms: readonly (number | null)[] | undefined, ro
 
 const SLOT_LABEL: Record<Slot["kind"], string> = { castle: "Castle", start: "Start room", mid: "Mid room" };
 
-function visitText(v: Visit): string {
-  if (!v.team) return `Round ${v.round}, draw`;
-  const toward = v.toward === "ct" ? RUSH_ROOMS.castles.ct.displayName : RUSH_ROOMS.castles.t.displayName;
-  return `Round ${v.round} won by ${v.team.label}, play moved toward ${toward}`;
-}
 
 export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "Room track" }: Props) {
   const headingId = useId();
   const listRef = useRef<HTMLOListElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const track = buildRushTrack(rooms, rounds, teams);
   const playing = live && !track.over;
   const current = playing ? track.current : null;
   const tTeam = playOf(teams, 0) === "t" ? teams[0] : teams[1];
   const ctTeam = tTeam === teams[0] ? teams[1] : teams[0];
   const defender = (i: number) => (i === 0 ? tTeam : i === LAST_SLOT ? ctTeam : null);
+  // While live, every room between play and a castle is held by that castle's team. The room in play is contested
+  const front = typeof current === "number" ? current : null;
+  const holder = (i: number) => (front === null || i === front ? null : i < front ? tTeam : ctTeam);
 
   // Keeps the current room in view where the track scrolls
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>("[aria-current]");
-    if (!el || !listRef.current || listRef.current.scrollWidth <= listRef.current.clientWidth) return;
-    const list = listRef.current;
-    list.scrollLeft = el.offsetLeft - (list.clientWidth - el.offsetWidth) / 2;
+    const box = scrollRef.current;
+    if (!el || !box || box.scrollWidth <= box.clientWidth) return;
+    box.scrollLeft = el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2;
   }, [current, rounds.length]);
 
   const nameOf = (w: Where | null) => (w === null ? "" : w === "decider" ? RUSH_ROOMS.decider.displayName : track.slots[w]!.room?.displayName ?? `slot ${w}`);
@@ -174,12 +173,18 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
           </p>
         )}
       </div>
-      <ol className={styles.track} ref={listRef}>
+      <div className={styles.scroll} ref={scrollRef}>
+      <ol
+        className={styles.track}
+        ref={listRef}
+        style={front !== null ? ({ "--split-t": `var(--team-${tTeam.side})`, "--split-ct": `var(--team-${ctTeam.side})` } as CSSProperties) : undefined}
+      >
         {track.slots.map((slot) => {
           const isCurrent = current === slot.index;
           const isLast = !playing && track.last === slot.index;
           const def = defender(slot.index);
           const reached = slot.visits.length > 0 || isCurrent;
+          const held = holder(slot.index);
           return (
             <li
               key={slot.index}
@@ -187,116 +192,111 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
               data-kind={slot.kind}
               data-side={def?.side}
               data-current={isCurrent || undefined}
+              data-control={held?.side}
+              data-contested={(isCurrent && front !== null) || undefined}
               data-last={isLast || undefined}
               data-empty={(building && !slot.room) || undefined}
               data-latest={(building && building.latestSlot === slot.index) || undefined}
               aria-current={isCurrent ? "step" : undefined}
             >
-              <span className={styles.kind}>
-                {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}
-                <span className="visually-hidden">, slot {slot.index}</span>
+              {/* The kind shows in the border (castle colour, dashed start room), so it is only spoken */}
+              <span className="visually-hidden">
+                {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}, slot {slot.index}
+                {held ? `, held by ${held.label}` : ""}:{" "}
               </span>
-              {slot.room ? (
-                <span className={styles.thumb}>
-                  <RoomImage room={String(slot.room.id)} />
-                </span>
-              ) : (
-                building && <span className={cx(styles.thumb, styles.thumbEmpty)} aria-hidden="true" />
-              )}
-              <span className={styles.name}>
-                {slot.room?.displayName ?? (
-                  <span className={styles.unknown}>{building ? `Slot ${slot.index} · ${slot.kind === "start" ? "start" : "mid"}` : playing ? "Not drawn yet" : "Not played"}</span>
+              <span className={styles.frame}>
+                {slot.room ? <RoomImage room={String(slot.room.id)} /> : <span className={styles.blank} aria-hidden="true" />}
+                {/* An empty slot in the veto preview is just an empty frame. The spoken label says which slot */}
+                {slot.room ? (
+                  <span className={styles.name}>{slot.room.displayName}</span>
+                ) : building ? (
+                  <span className="visually-hidden">not picked yet</span>
+                ) : (
+                  <span className={styles.name}>
+                    <span className={styles.unknown}>{playing ? "Not drawn yet" : "Not played"}</span>
+                  </span>
                 )}
               </span>
-              {def && (
-                <span className={styles.defender} data-side={def.side}>
-                  <TeamMarker side={def.side} />
-                  <span>Defended by {def.label}</span>
-                </span>
-              )}
-              {isCurrent && (
-                <span key={`now-${rounds.length}`} className={styles.now}>
-                  <span className={styles.pulse} aria-hidden="true" />
-                  Current room
-                </span>
-              )}
-              {isLast && track.over && (
-                <span className={styles.final}>{track.captured === slot.index ? "Castle taken" : "Final round"}</span>
-              )}
-              {slot.visits.length > 0 && (
-                <ul className={styles.marks} aria-label={`Rounds in ${slot.room?.displayName ?? `slot ${slot.index}`}`}>
-                  {slot.visits.map((v) => (
-                    <Mark key={v.round} v={v} />
-                  ))}
-                </ul>
-              )}
+              <span className={styles.meta}>
+                {def && (
+                  <span className={styles.defender} data-side={def.side}>
+                    <TeamMarker side={def.side} />
+                    <span>Defended by {def.label}</span>
+                  </span>
+                )}
+                {isCurrent && (
+                  <span key={`now-${rounds.length}`} className={styles.now}>
+                    <span className={styles.pulse} aria-hidden="true" />
+                    Current room
+                  </span>
+                )}
+                {isLast && track.over && (
+                  <span className={styles.final}>{track.captured === slot.index ? "Castle taken" : "Final round"}</span>
+                )}
+              </span>
             </li>
           );
         })}
       </ol>
+      </div>
       {(track.decider.length > 0 || current === "decider") && (
         <div className={styles.decider} data-current={current === "decider" || undefined} aria-current={current === "decider" ? "step" : undefined}>
-          <span className={styles.kind}>Decider at 7-7</span>
-          <span className={styles.thumb}>
+          <span className="visually-hidden">Decider at 7-7: </span>
+          <span className={styles.frame}>
             <RoomImage room={String(RUSH_ROOMS.decider.id)} />
-          </span>
-          <span className={styles.name}>{RUSH_ROOMS.decider.displayName}</span>
-          {current === "decider" && (
-            <span className={styles.now}>
-              <span className={styles.pulse} aria-hidden="true" />
-              Current room
+            <span className={styles.name}>
+              {RUSH_ROOMS.decider.displayName}
+              <span className={styles.nameNote}>Decider at 7-7</span>
             </span>
-          )}
-          {track.decider.length > 0 && (
-            <ul className={styles.marks} aria-label={`Rounds in ${RUSH_ROOMS.decider.displayName}`}>
-              {track.decider.map((v) => (
-                <Mark key={v.round} v={v} />
-              ))}
-            </ul>
-          )}
+          </span>
+          <span className={styles.meta}>
+            {current === "decider" && (
+              <span className={styles.now}>
+                <span className={styles.pulse} aria-hidden="true" />
+                Current room
+              </span>
+            )}
+          </span>
         </div>
       )}
     </Card>
   );
 }
 
-// One round in a room. Shape, arrow and text carry the result as well as colour
-function Mark({ v }: { v: Visit }) {
-  const text = visitText(v);
-  return (
-    <li className={styles.mark} data-side={v.team?.side} title={text}>
-      {v.team ? <TeamMarker side={v.team.side} /> : null}
-      <span className="mono" aria-hidden="true">
-        {v.round}
-      </span>
-      {v.toward && (
-        <svg className={styles.arrow} data-toward={v.toward} viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" focusable="false">
-          <path d="M2 5h6M5.5 2.5L8 5 5.5 7.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-      <span className="visually-hidden">{text}</span>
-    </li>
-  );
-}
 
 // Match page wrapper. mapNumber picks one map of a series, where each map is its own Rush match
-export function MatchRushTrack({ m, rounds, mapNumber, sideOf }: { m: MatchDetail; rounds: MatchRound[]; mapNumber?: number; sideOf: (i: number) => TeamSide }) {
+// Rooms, live state and teams for one map of a Rush match, as the track and the round graph need them
+function rushInputs(m: MatchDetail, mapNumber: number | undefined, sideOf: (i: number) => TeamSide) {
   const [a, b] = m.teams;
   if (!a || !b) return null;
   const map = mapNumber === undefined ? undefined : m.maps?.find((x) => x.mapNumber === mapNumber);
-  const rooms = map ? map.rushRooms : m.rushRooms;
-  const live = m.status === "live" && (!map || map.status === "live");
+  const teams: readonly [RushTrackTeam, RushTrackTeam] = [
+    { name: a.name, label: a.displayName ?? a.name, side: sideOf(0), play: a.side },
+    { name: b.name, label: b.displayName ?? b.name, side: sideOf(1), play: b.side },
+  ];
+  return { rooms: map ? map.rushRooms : m.rushRooms, live: m.status === "live" && (!map || map.status === "live"), teams };
+}
+
+export function MatchRushTrack({ m, rounds, mapNumber, sideOf }: { m: MatchDetail; rounds: MatchRound[]; mapNumber?: number; sideOf: (i: number) => TeamSide }) {
+  const inputs = rushInputs(m, mapNumber, sideOf);
+  if (!inputs) return null;
   // Before the first round only a known room draw is worth showing
-  if (rounds.length === 0 && !(live && rooms)) return null;
-  return (
-    <RushRoomTrack
-      rooms={rooms}
-      rounds={rounds}
-      live={live}
-      teams={[
-        { name: a.name, label: a.displayName ?? a.name, side: sideOf(0), play: a.side },
-        { name: b.name, label: b.displayName ?? b.name, side: sideOf(1), play: b.side },
-      ]}
-    />
-  );
+  if (rounds.length === 0 && !(inputs.live && inputs.rooms)) return null;
+  return <RushRoomTrack rooms={inputs.rooms} rounds={rounds} live={inputs.live} teams={inputs.teams} />;
+}
+
+// Where play was in each round, as a slot from 0 (T castle) to 6 (CT castle), for the round graph.
+// pending is the slot of the round being played, which has no result yet
+export type RushRoundPath = { slotOf: ReadonlyMap<number, number>; pending: number | null; slots: number };
+
+export function rushRoundPath(m: MatchDetail, rounds: MatchRound[], mapNumber: number | undefined, sideOf: (i: number) => TeamSide): RushRoundPath | null {
+  const inputs = rushInputs(m, mapNumber, sideOf);
+  if (!inputs) return null;
+  const track = buildRushTrack(inputs.rooms, rounds, inputs.teams);
+  const slotOf = new Map<number, number>();
+  for (const s of track.slots) for (const v of s.visits) slotOf.set(v.round, s.index);
+  // Convoy at 7-7 replaces the room in play, drawn in the middle
+  for (const v of track.decider) slotOf.set(v.round, START_SLOT);
+  const now = inputs.live && !track.over ? track.current : null;
+  return { slotOf, pending: now === null ? null : now === "decider" ? START_SLOT : now, slots: RUSH_RULES.roomSlots };
 }

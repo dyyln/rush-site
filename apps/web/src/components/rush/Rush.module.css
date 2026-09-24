@@ -61,50 +61,51 @@
 }
 .slot {
   display: grid;
-  grid-template-columns: 72px 1fr;
-  grid-template-areas:
-    "img label"
-    "img name"
-    "img how";
+  grid-template-columns: 112px minmax(0, 1fr);
   column-gap: var(--space-3);
   align-items: center;
-  padding: var(--space-2);
+  padding: 0 var(--space-2) 0 0;
   background: var(--color-surface-2);
   border: var(--card-border);
   border-left: 3px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   min-height: var(--target-min);
+  overflow: hidden;
 }
-.slot > .image,
-.slot > .placeholder,
+/* The room image with its name over the bottom, full width from 760px */
+.slotFrame {
+  position: relative;
+  display: block;
+}
+.slotFrame > .image,
+.slotFrame > .placeholder,
 .slotEmpty {
-  grid-area: img;
+  border-radius: 0;
 }
-.slot > .placeholder {
+.slotFrame > .placeholder {
   font-size: 0.625rem;
 }
 .slotEmpty {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-sm);
-}
-.slotLabel {
-  grid-area: label;
-  font-family: var(--font-display);
-  font-size: var(--text-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  background: var(--color-surface-1);
 }
 .slotName {
-  grid-area: name;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px var(--space-2);
+  background: rgb(8 7 11 / 0.78);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .slotHow {
-  grid-area: how;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
@@ -117,9 +118,6 @@
 .slot[data-source="leftover"] {
   border-left-color: var(--color-text-muted);
 }
-.slot[data-source="open"] .slotName {
-  color: var(--color-text-muted);
-}
 .slotNext {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
@@ -130,15 +128,13 @@
   }
   .slot {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "label"
-      "img"
-      "name"
-      "how";
-    row-gap: var(--space-1);
     align-items: start;
+    padding: 0;
     border-left-width: 1px;
     border-top: 3px solid var(--color-border-strong);
+  }
+  .slotHow {
+    padding: var(--space-1) var(--space-2);
   }
   .slot[data-side="own"] {
     border-left-color: var(--color-border);
