@@ -1,5 +1,5 @@
 // Deterministic mock data so server and client renders match.
-import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, findRushRoom, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
+import { AIM_MAPS, isRushMode, MODES, RANKED_MODES, RUSH_MAP, RUSH_ROOMS, tierForRating, type Mode, type PartyUpdatePayload } from "@rushsite/shared";
 import { teamSize } from "./modes";
 import { MOCK_TRUST } from "./trust";
 import type {
@@ -575,7 +575,8 @@ function playOutRush(seed: number): { winners: number[]; arenas: string[]; rooms
   let decider = false;
   for (;;) {
     const w = r() < bias ? 0 : 1;
-    arenas.push(decider ? RUSH_ROOMS.decider.displayName : findRushRoom(rooms[pos]!)!.displayName);
+    // Room ids as the plugin reports them
+    arenas.push(decider ? RUSH_ROOMS.decider.id : String(rooms[pos]!));
     winners.push(w);
     score[w]!++;
     if (decider || score[w]! >= 8) break;
@@ -621,7 +622,7 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
       round: i + 1,
       winnerTeam: w,
       score: { ...score },
-      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.displayName : undefined,
+      arena: isRushMode(mode) ? plan.arenas[i] ?? RUSH_ROOMS.decider.id : undefined,
       endedAt: new Date(startedAt + (i + 1) * 60_000).toISOString(),
     });
   }

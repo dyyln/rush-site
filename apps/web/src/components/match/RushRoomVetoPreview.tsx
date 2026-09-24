@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { RUSH_ROOMS, RUSH_RULES, type RushRoom } from "@rushsite/shared";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cx } from "@/components/ui/cx";
+import { MapCard, type MapCardState } from "@/components/ui/MapCard";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { RushRoomTrack, type RushTrackTeam } from "./RushRoomTrack";
+import { rushRoomImage } from "@/lib/rushRooms";
 import styles from "./RushRoomVetoPreview.module.css";
 
 // Prototype format. The real one is still open, see docs/RUSH-ROOM-VETO.md
@@ -201,41 +202,23 @@ export function RushRoomVetoPreview() {
 }
 
 const STAMP: Record<RoomMark["state"], string> = { banned: "Banned", picked: "Picked", left: "Left over" };
+const CARD_STATE: Record<RoomMark["state"], MapCardState> = { banned: "banned", picked: "picked", left: "decider" };
 
+// Same card as the map veto, with the room screenshot as its art
 function RoomCard({ room, mark, step, onChoose }: { room: RushRoom; mark?: RoomMark; step?: VetoStep; onChoose: (id: number) => void }) {
   const team = mark?.team ? TEAMS[mark.team] : null;
-  const body = (
-    <>
-      <span className={cx(styles.roomName, "mono")}>{room.displayName}</span>
-      {mark && (
-        <span className={styles.stamp} data-state={mark.state} data-side={team?.side}>
-          {STAMP[mark.state]}
-        </span>
-      )}
-      {mark && (
-        <span className={styles.by}>
-          {team && <TeamMarker side={team.side} />}
-          {team ? `by ${team.label}` : ""}
-          {mark.slot !== undefined ? `${team ? ", " : ""}slot ${mark.slot}` : ""}
-        </span>
-      )}
-    </>
-  );
-  if (step && !mark) {
-    const verb = step.action === "ban" ? "Ban" : "Pick";
-    return (
-      <button type="button" className={cx(styles.room, styles.choosable)} data-side={TEAMS[step.team].side} onClick={() => onChoose(room.id as number)}>
-        {body}
-        <span className={styles.action} aria-hidden="true">
-          {verb}
-        </span>
-        <span className="visually-hidden">, {verb.toLowerCase()} for {TEAMS[step.team].label}</span>
-      </button>
-    );
-  }
+  const choosable = !!step && !mark;
   return (
-    <div className={styles.room} data-state={mark?.state}>
-      {body}
-    </div>
+    <MapCard
+      mapId={String(room.id)}
+      name={room.displayName}
+      imageSrc={rushRoomImage(String(room.id))}
+      state={mark ? CARD_STATE[mark.state] : "available"}
+      stampLabel={mark ? STAMP[mark.state] : undefined}
+      by={team ? { label: team.label, side: team.side } : undefined}
+      note={mark?.slot !== undefined ? `Slot ${mark.slot}` : undefined}
+      onSelect={choosable ? () => onChoose(room.id as number) : undefined}
+      actionLabel={step?.action === "ban" ? "Ban" : "Pick"}
+    />
   );
 }

@@ -15,6 +15,7 @@ import { useLiveData } from "../../_lib/live";
 import type { MatchPlayerView } from "../../_lib/types";
 import { ErrorPanel, MatchStatus, PageHeader, PlayerLink } from "../../_components/parts";
 import { CancelMatchDialog } from "../../_components/CancelMatchDialog";
+import { rushRoomName } from "@/lib/rushRooms";
 import styles from "../../admin.module.css";
 
 const ACTIVE = ["accepting", "veto", "allocating", "starting", "ready", "live"];
@@ -85,7 +86,7 @@ export default function AdminMatchPage() {
                     <dt className="mono">R{r.round}</dt>
                     <dd>
                       {r.winnerTeam} <span className="mono">{scoreLine(r.score)}</span>
-                      {r.arena ? ` on ${r.arena}` : ""}
+                      {r.arena ? ` on ${rushRoomName(r.arena)}` : ""}
                     </dd>
                   </div>
                 ))}

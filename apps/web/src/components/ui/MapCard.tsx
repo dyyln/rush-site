@@ -14,6 +14,10 @@ export type MapCardVoter = {
 type MapCardProps = {
   mapId: string;
   name: string;
+  // Image in place of the map preview, like a Rush room screenshot
+  imageSrc?: string | null;
+  // Stamp text in place of the state name, like "Left over"
+  stampLabel?: string;
   state?: MapCardState;
   // Current viewer voted for this map
   voted?: boolean;
@@ -50,6 +54,8 @@ function initial(name: string): string {
 export function MapCard({
   mapId,
   name,
+  imageSrc,
+  stampLabel,
   state = "available",
   voted,
   votes,
@@ -72,14 +78,14 @@ export function MapCard({
       : voterTotal
         ? `${count} of ${voterTotal} ${who} voted`
         : `${count} ${count === 1 ? "vote" : "votes"}`;
-  const stamp = state === "available" ? null : STAMP[state];
+  const stamp = state === "available" ? null : (stampLabel ?? STAMP[state]);
   // What choosing this card does. Shown on hover and focus, and kept once the viewer has voted
   const intent = onSelect && state === "available" ? (actionLabel.toLowerCase() === "pick" ? "pick" : "ban") : null;
 
   const body = (
     <>
       <span className={styles.art}>
-        <MapThumb mapId={mapId} className={styles.thumb} />
+        <MapThumb mapId={mapId} src={imageSrc} className={styles.thumb} />
         {stamp && (
           <span className={cx(styles.stamp, styles[`stamp_${state}`])} aria-hidden="true">
             {stamp}
@@ -101,7 +107,7 @@ export function MapCard({
           <span className={styles.status}>
             <span className={cx(styles.stateLabel, styles[`label_${state}`])}>{stamp}</span>
             {by && <span className={cx(styles.by, by.side === "own" ? styles.sideOwn : styles.sideEnemy)}>by {by.label}</span>}
-            {!by && state === "decider" && <span className={styles.note}>Map to play</span>}
+            {!by && !note && state === "decider" && <span className={styles.note}>Map to play</span>}
           </span>
         )}
         {note && <span className={styles.note}>{note}</span>}

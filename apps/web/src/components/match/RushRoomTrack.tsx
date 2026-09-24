@@ -5,6 +5,7 @@ import { ALL_RUSH_ROOMS, RUSH_ROOMS, RUSH_RULES, findRushRoom, type RushRoom } f
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
+import { RoomImage } from "@/components/rush/RoomImage";
 import type { MatchDetail, MatchRound } from "@/lib/types";
 import styles from "./RushRoomTrack.module.css";
 
@@ -195,6 +196,13 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                 {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}
                 <span className="visually-hidden">, slot {slot.index}</span>
               </span>
+              {slot.room ? (
+                <span className={styles.thumb}>
+                  <RoomImage room={String(slot.room.id)} />
+                </span>
+              ) : (
+                building && <span className={cx(styles.thumb, styles.thumbEmpty)} aria-hidden="true" />
+              )}
               <span className={styles.name}>
                 {slot.room?.displayName ?? (
                   <span className={styles.unknown}>{building ? `Slot ${slot.index} · ${slot.kind === "start" ? "start" : "mid"}` : playing ? "Not drawn yet" : "Not played"}</span>
@@ -229,6 +237,9 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
       {(track.decider.length > 0 || current === "decider") && (
         <div className={styles.decider} data-current={current === "decider" || undefined} aria-current={current === "decider" ? "step" : undefined}>
           <span className={styles.kind}>Decider at 7-7</span>
+          <span className={styles.thumb}>
+            <RoomImage room={String(RUSH_ROOMS.decider.id)} />
+          </span>
           <span className={styles.name}>{RUSH_ROOMS.decider.displayName}</span>
           {current === "decider" && (
             <span className={styles.now}>

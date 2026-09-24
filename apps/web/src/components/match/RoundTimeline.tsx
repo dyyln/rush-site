@@ -4,6 +4,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
+import { RoomImage } from "@/components/rush/RoomImage";
+import { rushRoomName } from "@/lib/rushRooms";
 import type { MatchKill, MatchRound } from "@/lib/types";
 import { ChevronIcon } from "./icons";
 import { KillFeed } from "./KillFeed";
@@ -115,7 +117,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
           if (streakEnd) lastTick = r.round;
           const side = sideOf(r.winnerTeam);
           const score = scoreOf(r);
-          const label = `Round ${r.round}, ${r.winnerTeam}, ${score}${rush && r.arena ? `, ${r.arena}` : ""}`;
+          const label = `Round ${r.round}, ${r.winnerTeam}, ${score}${rush && r.arena ? `, ${rushRoomName(r.arena)}` : ""}`;
           const selected = r.round === open;
           return (
             <li key={r.round} className={styles.round}>
@@ -198,7 +200,12 @@ function RoundTitle({ r, side, score, rush }: { r: MatchRound; side: TeamSide; s
         {r.winnerTeam === "draw" ? "Draw" : `${r.winnerTeam} won`}
       </span>
       <span className="mono muted">{score}</span>
-      {rush && r.arena && <span className="muted">{r.arena}</span>}
+      {rush && r.arena && (
+        <span className={styles.arena}>
+          <RoomImage room={r.arena} />
+          <span className="muted">{rushRoomName(r.arena)}</span>
+        </span>
+      )}
     </h3>
   );
 }

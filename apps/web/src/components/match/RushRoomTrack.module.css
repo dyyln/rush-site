@@ -54,6 +54,17 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+/* Room screenshot, capped so the phone list stays short */
+.thumb {
+  display: block;
+  width: 100%;
+  max-width: 160px;
+}
+.thumbEmpty {
+  aspect-ratio: 16 / 10;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
 /* Link between neighbouring rooms */
 .slot + .slot::before {
   content: "";
