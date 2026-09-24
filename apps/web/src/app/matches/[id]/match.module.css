@@ -270,7 +270,9 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   overflow: hidden;
-  transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-normal) var(--ease);
+  transition:
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-normal) var(--ease);
 }
 .totalsTab {
   padding: var(--space-3) var(--space-4);
@@ -292,7 +294,9 @@
 .mapTab[aria-selected="true"] {
   color: var(--color-text);
   border-color: var(--color-accent-hover);
-  box-shadow: inset 0 0 0 1px var(--color-accent), 0 0 24px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 24px color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 .totalsTab:focus-visible,
 .mapTab:focus-visible {
@@ -394,7 +398,9 @@
   display: block;
   border-radius: 2px;
   overflow: hidden;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.5);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.7),
+    0 2px 8px rgb(0 0 0 / 0.5);
 }
 .roomRowItem img,
 .roomRowItem > span {
@@ -509,4 +515,83 @@
 }
 .teamPanel .playerName {
   min-height: 36px;
+}
+
+/* The score block already sits under the hero's own rule, so ResultHeader's rule and spacing go */
+.hero .heroScore > * {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Error state: one glass panel with the title in the hero's type */
+.errorPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+}
+.errorPanel .title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.errorPanel p {
+  margin: 0;
+}
+.errorLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  font-weight: 600;
+}
+
+/* A note straight on the scene: full-strength text with a shadow, never muted */
+.sceneNote {
+  margin: 0;
+  color: var(--color-text);
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.7);
+}
+
+/* Post-match tabs: the top bar's tabs, smaller, straight on the scene. Unselected tabs are
+   full-strength text dimmed like the top bar's, the selected one gets the accent underline */
+.postTabs [role="tablist"] {
+  gap: var(--space-6);
+  border-bottom-color: rgb(255 255 255 / 0.16);
+}
+.postTabs [role="tab"] {
+  display: inline-flex;
+  align-items: flex-end;
+  padding: 0 0 var(--space-2);
+  border-bottom-width: 3px;
+  color: var(--color-text);
+  opacity: 0.72;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.6);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+.postTabs [role="tab"]:hover {
+  opacity: 0.9;
+}
+.postTabs [role="tab"][aria-selected="true"] {
+  opacity: 1;
+  border-bottom-color: var(--color-accent);
+}
+.postTabs [role="tab"]:focus-visible {
+  opacity: 1;
+}
+.postTabs [role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-top: var(--space-5);
 }

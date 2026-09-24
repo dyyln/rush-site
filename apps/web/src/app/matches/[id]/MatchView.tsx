@@ -6,9 +6,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import { RUSH_ROOM_VETO, connectDeadlineOf, isRushMode, roomSlots, type MatchMap, type RoomStage, type RoomState } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/cx";
 import { Table, type Column } from "@/components/ui/Table";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { Throbber } from "@/components/ui/Throbber";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { TierChip } from "@/components/ui/TierChip";
@@ -72,15 +72,15 @@ export function MatchView({ id }: { id: string }) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
       <div className="container page">
-        <header className="page-header">
-          <h1>{notFound ? "Match not found" : "Could not load match"}</h1>
-        </header>
-        <Card>
+        <header className={cx("glass", styles.errorPanel)}>
+          <h1 className={styles.title}>{notFound ? "Match not found" : "Could not load match"}</h1>
           <p className="muted">{notFound ? "Check the link and try again." : "Try again in a moment."}</p>
           <p>
-            <Link href="/play">Back to Play</Link>
+            <Link href="/play" className={styles.errorLink}>
+              Back to Play
+            </Link>
           </p>
-        </Card>
+        </header>
       </div>
     );
   }
@@ -114,6 +114,9 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
   const [a, b] = m.teams;
   // Scores and stats once the server is up or rounds are in
   const scored = SCORED.includes(stage) || m.rounds.length > 0 || finished;
+  // Once a single match is over its details split into tabs. A series keeps its map tabs
+  const postMatch = !series && scored && (finished || m.status === "abandoned");
+  const reports = viewer && m.viewerReported && m.viewerReported.length > 0 ? <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} /> : null;
 
   return (
     <div className="container page">
@@ -185,18 +188,35 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
       </header>
 
       <RoomDock m={m} room={room} stage={stage} viewer={viewer} participant={participant} />
-      <StagePanel m={m} room={room} stage={stage} viewer={viewer} participant={participant} names={names} currentMapId={currentMapId} onRespond={onRespond} onVote={onVote} />
+      <StagePanel
+        m={m}
+        room={room}
+        stage={stage}
+        viewer={viewer}
+        participant={participant}
+        names={names}
+        currentMapId={currentMapId}
+        onRespond={onRespond}
+        onVote={onVote}
+      />
 
       {/* Before the match starts the Rush rooms stand on their own. Once it has a score they move into the
           flow card under the players. A series shows one per map in its map tab */}
       {isRushMode(m.mode) && stage !== "veto" && !series && !scored && (
-        <MatchRushTrack m={m} rounds={m.rounds} sideOf={sideOf} picks={room.veto?.kind === "rooms" && room.veto.state.done ? roomSlots(room.veto.state, RUSH_ROOM_VETO.format) : null} />
+        <MatchRushTrack
+          m={m}
+          rounds={m.rounds}
+          sideOf={sideOf}
+          picks={room.veto?.kind === "rooms" && room.veto.state.done ? roomSlots(room.veto.state, RUSH_ROOM_VETO.format) : null}
+        />
       )}
 
-      {viewer && m.viewerReported && m.viewerReported.length > 0 && <MatchReportOutcomes matchId={m.id} reported={m.viewerReported} />}
+      {!postMatch && reports}
 
       {series ? (
         <SeriesView m={m} maps={maps} liveMap={liveMap?.mapNumber ?? null} sideOf={sideOf} roster={roster} before={<Lineup m={m} sideOf={sideOf} />} />
+      ) : postMatch ? (
+        <PostMatchTabs m={m} sideOf={sideOf} roster={roster} reports={reports} />
       ) : scored ? (
         <MapStats m={m} sideOf={sideOf} roster={roster} />
       ) : (
@@ -233,7 +253,9 @@ function StagePanel({ m, room, stage, viewer, participant, names, currentMapId, 
         />
       ) : null;
     case "veto":
-      return <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} flip={isRushMode(m.mode) && rushFlip(m)} />;
+      return (
+        <VetoPanel mode={m.mode} veto={participant ? room.veto : null} viewer={me} names={names} onVote={onVote} flip={isRushMode(m.mode) && rushFlip(m)} />
+      );
     case "allocating":
       return participant ? <AllocatingPanel mode={m.mode} step={room.status === "starting" ? "starting" : "allocating"} veto={room.veto} viewer={me} /> : null;
     case "connect":
@@ -262,7 +284,7 @@ function mergedMaps(rest: MatchMap[] | undefined, live: RoomState["maps"]): Matc
   if (live.length === 0) return rest ?? [];
   return live.map((x) => {
     const r = rest?.find((y) => y.mapNumber === x.mapNumber);
-    return { ...r, ...x, ...(r?.players ? { players: r.players } : {}), ...(x.demo ?? r?.demo ? { demo: x.demo ?? r?.demo } : {}) };
+    return { ...r, ...x, ...(r?.players ? { players: r.players } : {}), ...((x.demo ?? r?.demo) ? { demo: x.demo ?? r?.demo } : {}) };
   });
 }
 
@@ -296,6 +318,44 @@ function Lineup({ m, sideOf }: Pick<StatsProps, "m" | "sideOf">) {
 }
 
 function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: number }) {
+  return (
+    <>
+      <PlayerTables m={m} sideOf={sideOf} />
+      <MapRounds m={m} sideOf={sideOf} roster={roster} mapNumber={mapNumber} />
+    </>
+  );
+}
+
+type PostTab = "scoreboard" | "rounds" | "reports";
+
+// A finished single match: the scoreboard, the rounds and the viewer's reports each get a tab.
+// Rounds needs recorded rounds and Reports needs a report, otherwise the tab is left out
+function PostMatchTabs({ m, sideOf, roster, reports }: StatsProps & { reports: ReactNode }) {
+  const [tab, setTab] = useState<PostTab>("scoreboard");
+  const items: TabItem<PostTab>[] = [
+    { key: "scoreboard", label: "Scoreboard" },
+    ...(m.rounds.length > 0 ? [{ key: "rounds" as const, label: "Rounds" }] : []),
+    ...(reports ? [{ key: "reports" as const, label: "Reports" }] : []),
+  ];
+  if (items.length === 1) return <PlayerTables m={m} sideOf={sideOf} />;
+  const current = items.some((i) => i.key === tab) ? tab : "scoreboard";
+  return (
+    <div className={styles.postTabs}>
+      <Tabs label="Match details" items={items} value={current} onChange={setTab} idPrefix="match">
+        {current === "scoreboard" ? (
+          <PlayerTables m={m} sideOf={sideOf} />
+        ) : current === "rounds" ? (
+          <MapRounds m={m} sideOf={sideOf} roster={roster} />
+        ) : (
+          reports
+        )}
+      </Tabs>
+    </div>
+  );
+}
+
+// The round timeline with its kill feed. Rush adds the room track above it
+function MapRounds({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: number }) {
   const [a, b] = m.teams;
   const rounds = mapNumber === undefined ? m.rounds : m.rounds.filter((r) => (r.mapNumber ?? 1) === mapNumber);
   const kills = mapNumber === undefined ? m.kills : m.kills?.filter((k) => (k.mapNumber ?? 1) === mapNumber);
@@ -315,7 +375,6 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
   );
   return (
     <>
-      <PlayerTables m={m} sideOf={sideOf} />
       {/* Rush: the rooms and the rounds tell the same story, one by room and one by round, so they sit together on the page */}
       {rush ? (
         <div className={styles.flow}>
@@ -429,7 +488,9 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
                     <span aria-hidden="true"> : </span>
                     <span className="visually-hidden"> to </span>
                     <span data-side={sideOf(1)}>{x.score[b.name] ?? 0}</span>
-                    {x.winnerTeam && <span className="visually-hidden">. Won by {x.winnerTeam === a.name ? (a.displayName ?? a.name) : (b.displayName ?? b.name)}</span>}
+                    {x.winnerTeam && (
+                      <span className="visually-hidden">. Won by {x.winnerTeam === a.name ? (a.displayName ?? a.name) : (b.displayName ?? b.name)}</span>
+                    )}
                   </span>
                 )}
               </span>
@@ -451,7 +512,7 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
           </>
         ) : (
           <>
-            <p className="muted">Player stats add up every map played.</p>
+            <p className={styles.sceneNote}>Player stats add up every map played.</p>
             <MapStats m={{ ...m, rounds: [] }} sideOf={sideOf} roster={roster} />
           </>
         )}
