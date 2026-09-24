@@ -681,6 +681,12 @@ export class MatchFlow {
           }
         }
       } catch (err) {
+        // A cancel during boot deletes the server under the start call. That is expected, not an error
+        const [cur] = await this.d.db.select({ status: matches.status }).from(matches).where(eq(matches.id, matchId))
+        if (cur && TERMINAL.has(cur.status)) {
+          this.d.log.info({ matchId, err: (err as Error).message }, "server start stopped because the match ended")
+          return
+        }
         this.d.log.error({ err, matchId }, "server start failed")
         this.d.events?.record({ kind: "error", type: "allocation_error", message: (err as Error).message, matchId })
         if (expired) await this.cancelMatch(matchId, "server_start_failed", { requeue: true })
