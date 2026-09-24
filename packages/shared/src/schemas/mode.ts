@@ -22,6 +22,10 @@ export const MapEntrySchema = z.object({
   workshopId: z.string().optional(),
   mapName: z.string().optional(),
   loadout: MapLoadoutSchema.optional(),
+  // Series map entries in match.json only. Rush rooms for this map, T castle first, from the series room veto
+  rushRooms: z.array(z.number().int().positive()).length(7).optional(),
+  // Series map entries in match.json only. Name of the team that plays CT on this map. Teams keep their sides for the whole map
+  ctTeam: z.string().min(1).optional(),
 })
 export type MapEntry = z.infer<typeof MapEntrySchema>
 

@@ -64,3 +64,45 @@ export const RUSH_ROOM_VETO: RoomVetoConfig = {
 
 // First team index for the sequence. The API decides it per match
 export const ROOM_VETO_FIRST_TEAM: TeamIndex = 0
+
+// Room pick for a Rush Bo3, run once before map 1. No bans and no repeats: the three maps use all 12 mid rooms
+// and three of the four start rooms. Rules the engine applies (veto/series-rooms.ts):
+// - first is the higher seed, second the other team. The coin flip before the veto makes flipWinner team A of the last map
+// - side: the acting team chooses the side it plays on that map. A map with no side step swaps the previous map's sides
+// - mid: the pick goes next to the picking team's own castle, first pick beside the castle (T fills 1 then 2, CT 5 then 4)
+// - mid slots still open when a map's mid picks end take the mid rooms no map used, beside the castle first. Only the last map may do this
+// - start: the pick becomes slot 3
+export type SeriesRoomRole = "first" | "second" | "flipWinner" | "flipLoser"
+export type SeriesRoomStepKind = "side" | "mid" | "start"
+export type SeriesRoomStep = { map: number; kind: SeriesRoomStepKind; team: SeriesRoomRole }
+export type SeriesRoomVetoFormat = { maps: number; steps: readonly SeriesRoomStep[] }
+
+export const RUSH_SERIES_ROOM_VETO: { format: SeriesRoomVetoFormat } = {
+  format: {
+    maps: 3,
+    steps: [
+      // Map 1. The higher seed picks mid rooms first, so the other team chooses sides and the start room
+      { map: 1, kind: "side", team: "second" },
+      { map: 1, kind: "mid", team: "first" },
+      { map: 1, kind: "mid", team: "second" },
+      { map: 1, kind: "mid", team: "first" },
+      { map: 1, kind: "mid", team: "second" },
+      { map: 1, kind: "start", team: "second" },
+      // Map 2. Sides swap. The other team picks mid rooms first and the higher seed chooses the start room
+      { map: 2, kind: "mid", team: "second" },
+      { map: 2, kind: "mid", team: "first" },
+      { map: 2, kind: "mid", team: "second" },
+      { map: 2, kind: "mid", team: "first" },
+      { map: 2, kind: "start", team: "first" },
+      // Map 3. The flip winner (team A) chooses sides, team B takes 2 of the 4 mid rooms left, A gets the other 2 and chooses the start room
+      { map: 3, kind: "side", team: "flipWinner" },
+      { map: 3, kind: "mid", team: "flipLoser" },
+      { map: 3, kind: "mid", team: "flipLoser" },
+      { map: 3, kind: "start", team: "flipWinner" },
+    ],
+  },
+}
+
+// Key voted on for a side step, such as side:1:ct
+export const sideKey = (map: number, side: "ct" | "t"): string => `side:${map}:${side}`
+export const sideOfKey = (key: string): "ct" | "t" | null => (key.endsWith(":ct") ? "ct" : key.endsWith(":t") ? "t" : null)

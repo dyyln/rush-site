@@ -540,6 +540,7 @@ export class TournamentService {
               bestOf: m.bestOf,
               // A series resumed after a crash starts after the maps already decided
               ...(m.bestOf > 1 && m.games.length > 0 ? { priorMaps: priorMaps(m) } : {}),
+              ...(higherSeed(m) !== undefined ? { higherSeed: higherSeed(m) } : {}),
             },
           },
         })
@@ -1070,6 +1071,12 @@ function sideOfTeam(team: string): Side | null {
 }
 
 // Maps decided on earlier servers of a series. Older records count in order from map 1
+// Team a is index 0. A lower seed number is the higher seed. Unknown when either seed is missing or they tie
+function higherSeed(m: BracketMatch): 0 | 1 | undefined {
+  if (m.aSeed == null || m.bSeed == null || m.aSeed === m.bSeed) return undefined
+  return m.aSeed < m.bSeed ? 0 : 1
+}
+
 function priorMaps(m: BracketMatch): { mapNumber: number; winnerTeam: string; matchId: string }[] {
   return m.games.map((g, i) => ({ mapNumber: g.map ?? i + 1, winnerTeam: TEAM_NAMES[g.winner], matchId: g.matchId }))
 }

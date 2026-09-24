@@ -49,7 +49,7 @@ export type RoomSlot = {
 }
 
 // A phase is over once the veto is past its last step
-function phaseDone(state: VetoState, phase: number): boolean {
+export function roomPhaseDone(state: VetoState, phase: number): boolean {
   if (state.done) return true
   const last = state.steps.reduce((n, s, i) => (s.phase === phase ? i : n), -1)
   return last >= 0 && state.stepIndex > last
@@ -68,7 +68,7 @@ export function roomSlots(state: VetoState, format: RoomVetoFormat): RoomSlot[] 
     if (slot !== undefined) slots[slot] = { slot, room: h.mapId, source: "pick", team: h.team }
   }
   format.phases.forEach((phase, idx) => {
-    if (phase.leftoverSlots.length === 0 || !phaseDone(state, idx)) return
+    if (phase.leftoverSlots.length === 0 || !roomPhaseDone(state, idx)) return
     const left = state.available.filter((r) => phase.pool.includes(r))
     phase.leftoverSlots.forEach((slot, i) => {
       const room = left[i]

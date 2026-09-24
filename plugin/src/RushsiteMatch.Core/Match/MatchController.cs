@@ -122,7 +122,6 @@ public sealed class MatchController
         _store = store;
 
         _presence = new PresenceTracker(cfg.AllowedSteamIds, clock.UtcNow);
-        _sides = NewSideMap();
         _stats = new StatsAggregator(cfg.AllowedSteamIds, cfg.TeamOf);
         _teamScore = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
         _msg = new MatchMessages(cfg);
@@ -139,9 +138,24 @@ public sealed class MatchController
 
         if (cfg.Series is { } s)
             _series = new SeriesTracker(s.BestOf, cfg.Teams.Select(t => t.Name), cfg.AllowedSteamIds, s.StartMapNumber, s.Wins);
+        // After the series tracker. Sides can differ per map.
+        _sides = NewSideMap();
     }
 
-    private SideMap NewSideMap() => new(_cfg, fixedFromConfig: !_cfg.ParsedWinCondition.PluginManagesMatch);
+    private SideMap NewSideMap() => new(_cfg, fixedFromConfig: !_cfg.ParsedWinCondition.PluginManagesMatch, mapNumber: MapNumber);
+
+    // Logs this map's sides. A ctTeam that names no team is ignored with a warning, never fails the match.
+    private void LogMapSides()
+    {
+        if (_cfg.InvalidCtTeamFor(MapNumber) is { } bad)
+            _game.Log($"warning: ignoring ctTeam '{bad}' for map {MapNumber}, it is not a team name. Using the team sides.");
+        if (IsRush)
+            _game.Log($"sides for {(_series is null ? "the match" : "map " + MapNumber)}: " +
+                      string.Join(", ", _cfg.Teams.Select(t => $"{t.Name} {_sides.ConfiguredSide(t.Name)}")) + ".");
+    }
+
+    // Sides are per map in a series, so chat does not promise them for the whole match.
+    private string SidesScope => _series is null ? "in this match" : "on this map";
 
     private FirstToScoreTracker NewFirstTo() =>
         new(_cfg.ParsedWinCondition.RoundsToWin, _cfg.Teams.Select(t => t.Name), _settings.OvertimeMaxRounds);
@@ -178,6 +192,7 @@ public sealed class MatchController
         BeginMapWarmup();
         LoadRushRooms();
         FireRushRooms();
+        LogMapSides();
         _game.Log($"match {_cfg.MatchId} mode {_cfg.Mode} win condition {_cfg.WinCondition}. " +
                   (ManagesMatch ? "Plugin manages warmup and rounds." : "Valve's Rush rules. Plugin holds teams on their configured sides.") +
                   (_series is null ? "" : $" Series Bo{_series.BestOf} starting on map {MapNumber} {CurrentMapId}."));
@@ -222,6 +237,8 @@ public sealed class MatchController
         foreach (var t in _teamScore.Keys.ToList())
             _teamScore[t] = st.Score.TryGetValue(t, out var v) ? v : 0;
         _series?.Restore(st.MapNumber ?? MapNumber, st.SeriesWins, st.MapResults, st.SeriesPlayers, st.SeriesOver ?? false);
+        // The saved map can differ from the start map, and so can its sides.
+        _sides = NewSideMap();
         _firstTo?.Restore(_teamScore, _round, st.OvertimeBase, st.OvertimePeriodStart ?? 0);
         if (_rush is not null)
         {
@@ -639,11 +656,11 @@ public sealed class MatchController
                 _game.Log($"kicking {steamId} after {refusals} joins to the wrong side.");
                 _joinRefusals[steamId] = 0;
                 _game.KickPlayer(steamId,
-                    $"Your team plays {SideName(required)} in this match. Reconnect and join {SideName(required)}.");
+                    $"Your team plays {SideName(required)} {SidesScope}. Reconnect and join {SideName(required)}.");
                 return false;
             }
             _game.PrintToPlayer(steamId,
-                _msg.Line($"Your team plays {SideName(required)} in this match. Moving you there."));
+                _msg.Line($"Your team plays {SideName(required)} {SidesScope}. Moving you there."));
         }
         _game.ForceJoinTeam(steamId, required);
         if (_settings.TryChangeTeam) _game.TryMovePlayer(steamId, required);
@@ -1217,6 +1234,7 @@ public sealed class MatchController
         }
         _mapLoadingSince = now;
         _game.Log($"loading map {MapNumber} of {_series.BestOf} ({CurrentMapId}) with {cmd}.");
+        LogMapSides();
         SaveState();
         _game.ExecuteCommand(cmd);
     }

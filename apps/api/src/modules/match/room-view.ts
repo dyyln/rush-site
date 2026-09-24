@@ -45,7 +45,7 @@ export async function buildRoomView(db: Db, m: MatchRow, players: PlayerRow[], v
       veto: {
         state: vetoViewFor(state, me.team),
         stepDeadline: state.done ? null : (row.stepDeadline?.getTime() ?? null),
-        ...(kind === "rooms" ? { kind } : {}),
+        ...(kind !== "maps" ? { kind } : {}),
       },
     }
   }

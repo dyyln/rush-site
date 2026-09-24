@@ -173,6 +173,7 @@ export const queueTickets = pgTable(
 )
 
 export type TeamRosterJson = { name: string; steamIds: string[]; displayName?: string }
+export type SeriesRoomsJson = { mapNumber: number; rushRooms: number[]; ctTeam: string }[]
 
 export const matches = pgTable(
   "matches",
@@ -189,6 +190,8 @@ export const matches = pgTable(
     maps: jsonb("maps").$type<string[]>(),
     // Rush room ids from T castle to CT castle, set when the room veto ran
     rushRooms: jsonb("rush_rooms").$type<number[]>(),
+    // Rush series only. Rooms and the CT team name per map from the series room veto, map 1 first
+    seriesRooms: jsonb("series_rooms").$type<SeriesRoomsJson>(),
     mapId: text("map_id"),
     winnerTeam: text("winner_team"),
     score: jsonb("score").$type<Record<string, number>>(),

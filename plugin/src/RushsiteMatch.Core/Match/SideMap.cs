@@ -4,7 +4,9 @@ namespace RushsiteMatch.Core.Match;
 
 // Tracks which side each config team is on. Nothing here moves players.
 //
-// Fixed mode (Rush). Each team's side comes from the config and never changes.
+// Built per map. The configured side is the map entry's ctTeam, else the team sides from the config.
+//
+// Fixed mode (Rush). Each team's side comes from the config and never changes during the map.
 // Where players stand never changes the mapping. Rush has mp_halftime 0 so sides never swap.
 //
 // Observed mode (aim). A team's side is where most of its players stand. A tie keeps the previous side,
@@ -13,13 +15,15 @@ public sealed class SideMap
 {
     private readonly MatchConfig _cfg;
     private readonly bool _fixed;
+    private readonly int _mapNumber;
     private readonly Dictionary<string, Side> _playerSide = new();
     private readonly Dictionary<string, Side> _teamSide = new();
 
-    public SideMap(MatchConfig cfg, bool fixedFromConfig = false)
+    public SideMap(MatchConfig cfg, bool fixedFromConfig = false, int mapNumber = 1)
     {
         _cfg = cfg;
         _fixed = fixedFromConfig;
+        _mapNumber = mapNumber;
         if (_fixed)
             foreach (var t in cfg.Teams) _teamSide[t.Name] = ConfiguredSide(t.Name);
     }
@@ -27,7 +31,7 @@ public sealed class SideMap
     public bool IsFixed => _fixed;
 
     public Side ConfiguredSide(string team) =>
-        _cfg.ConfiguredSide(team) == TeamConfig.SideT ? Side.T : Side.CT;
+        _cfg.ConfiguredSide(team, _mapNumber) == TeamConfig.SideT ? Side.T : Side.CT;
 
     public Side SideOfPlayer(string steamId) =>
         _playerSide.TryGetValue(steamId, out var s) ? s : Side.None;
@@ -71,7 +75,7 @@ public sealed class SideMap
 
     // Fixed mode returns the configured side.
     // Observed mode. Teammates already on a side decide it. Otherwise an opponent already on a side decides it.
-    // Otherwise the configured side, which is teams[0] CT and teams[1] T by default.
+    // Otherwise the configured side, which is the map's ctTeam or teams[0] CT and teams[1] T by default.
     public Side? RequiredSide(string steamId)
     {
         var team = _cfg.TeamOf(steamId);

@@ -104,10 +104,12 @@ export function seriesParams(
   const ids = padMaps(m.maps ?? [], bestOf)
   if (ids.length !== bestOf) return null
   const maps: MapEntry[] = []
-  for (const id of ids) {
+  for (const [i, id] of ids.entries()) {
     const map = lookup(m.mode, id)
     if (!map) return null
-    maps.push(map)
+    // A Rush series room veto gives every map its own rooms and sides
+    const rooms = m.seriesRooms?.find((r) => r.mapNumber === i + 1)
+    maps.push(rooms ? { ...map, rushRooms: [...rooms.rushRooms], ctTeam: rooms.ctTeam } : map)
   }
   return { bestOf, maps, startMapNumber: m.gameNumber ?? 1, wins: mapWins(m.teams, rows) }
 }
@@ -116,6 +118,10 @@ export function seriesParams(
 export function mapViews(m: MatchRow, rows: MapRow[]): MatchMap[] {
   const ids = padMaps(m.maps ?? [], m.bestOf ?? 1)
   const zero = Object.fromEntries(m.teams.map((t) => [t.name, 0]))
+  const rooms = (mapNumber: number) => {
+    const r = m.seriesRooms?.find((x) => x.mapNumber === mapNumber)
+    return r ? { rushRooms: [...r.rushRooms], ctTeam: r.ctTeam } : undefined
+  }
   return ids.map((mapId, i) => {
     const r = rows.find((x) => x.mapNumber === i + 1)
     return {
@@ -125,6 +131,7 @@ export function mapViews(m: MatchRow, rows: MapRow[]): MatchMap[] {
       winnerTeam: r?.winnerTeam ?? null,
       score: r && Object.keys(r.score).length > 0 ? r.score : zero,
       ...(r?.playedIn ? { playedIn: r.playedIn } : {}),
+      ...(rooms(i + 1) ?? {}),
     }
   })
 }

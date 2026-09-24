@@ -25,15 +25,19 @@ import {
   type VetoState,
   type VetoStatePayload,
   type VetoKind,
+  type TeamIndex,
   RUSH_ROOM_VETO,
+  RUSH_SERIES_ROOM_VETO,
   createRoomVeto,
+  createSeriesRoomVeto,
   rushRoomsFromVeto,
+  seriesRushRoomsFromVeto,
 } from "@rushsite/shared"
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm"
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "../../db/client.js"
-import { cooldowns, demos, matchMaps, matchPlayers, matchRounds, matches, vetoes, type TeamRosterJson } from "../../db/schema.js"
+import { cooldowns, demos, matchMaps, matchPlayers, matchRounds, matches, vetoes, type SeriesRoomsJson, type TeamRosterJson } from "../../db/schema.js"
 import type { Rng } from "../../lib/clock.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { EventLog } from "../../lib/event-log.js"
@@ -50,7 +54,7 @@ import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
 import { newMatchSlug } from "./slug.js"
-import { ROOM_VETO_FORMAT, vetoKindOf } from "./room-veto.js"
+import { ROOM_VETO_FORMAT, SERIES_ROOM_VETO_FORMAT, vetoKindOf } from "./room-veto.js"
 import { connectDeadline } from "./room-view.js"
 import { demoKey } from "./storage.js"
 import {
@@ -99,6 +103,8 @@ export type TournamentMatchParams = {
     gameNumber: number
     bestOf: number
     priorMaps?: PriorMap[]
+    // The higher seed. It picks first in a Rush series room veto. Random when left out
+    higherSeed?: TeamIndex
   }
 }
 
@@ -325,7 +331,7 @@ export class MatchFlow {
         await tx.insert(matchPlayers).values(
           params.teams.flatMap((t, idx) => t.steamIds.map((steamId) => ({ matchId, steamId, team: idx, accepted: true }))),
         )
-        const post = await this.enterPostAccept(tx, m!)
+        const post = await this.enterPostAccept(tx, m!, params.source.higherSeed)
         await this.carryPriorMaps(tx, m!, params.source.priorMaps ?? [])
         return post
       })
@@ -464,8 +470,62 @@ export class MatchFlow {
     return isRushMode(m.mode) && !isSeries(m) && (this.d.options.rushRoomVeto ?? RUSH_ROOM_VETO.enabled)
   }
 
-  // Runs inside the accept transaction. Starts the veto or goes straight to allocation
-  private async enterPostAccept(tx: Db, m: MatchRow): Promise<PostAccept> {
+  // A Rush series picks rooms for every map once, before map 1. Only for the series length the format covers
+  private seriesRoomVetoOn(m: MatchRow): boolean {
+    return (
+      isRushMode(m.mode) &&
+      isSeries(m) &&
+      m.bestOf === RUSH_SERIES_ROOM_VETO.format.maps &&
+      (this.d.options.rushRoomVeto ?? RUSH_ROOM_VETO.enabled)
+    )
+  }
+
+  // Runs inside the accept transaction. Starts the veto or goes straight to allocation.
+  // firstTeam is the higher seed when the caller knows it
+  private async enterPostAccept(tx: Db, m: MatchRow, firstTeam?: TeamIndex): Promise<PostAccept> {
+    // A later game or a resumed series plays the maps and rooms the first veto chose
+    let earlier: { maps: string[] | null; seriesRooms: SeriesRoomsJson | null } | null = null
+    if (m.source === "tournament" && (m.gameNumber ?? 1) > 1 && m.tournamentId && m.bracketMatchKey) {
+      const [g1] = await tx
+        .select({ maps: matches.maps, seriesRooms: matches.seriesRooms })
+        .from(matches)
+        .where(
+          and(
+            eq(matches.tournamentId, m.tournamentId),
+            eq(matches.bracketMatchKey, m.bracketMatchKey),
+            isNotNull(matches.maps),
+          ),
+        )
+        .orderBy(desc(matches.createdAt))
+        .limit(1)
+      earlier = g1 ?? null
+    }
+    if (this.seriesRoomVetoOn(m)) {
+      if (earlier?.seriesRooms) {
+        const rushMap = getModeConfig(m.mode).maps[0]!.id
+        await tx
+          .update(matches)
+          .set({ status: "allocating", maps: padMaps([rushMap], m.bestOf ?? 1), mapId: rushMap, seriesRooms: earlier.seriesRooms, allocationStartedAt: new Date(this.now()) })
+          .where(eq(matches.id, m.id))
+        return { kind: "allocate" }
+      }
+      // A resume whose first match had no room veto keeps Valve's random draw
+      if ((m.gameNumber ?? 1) === 1) {
+        const state = createSeriesRoomVeto(
+          [
+            { id: m.teams[0]!.name, steamIds: m.teams[0]!.steamIds },
+            { id: m.teams[1]!.name, steamIds: m.teams[1]!.steamIds },
+          ],
+          RUSH_SERIES_ROOM_VETO.format,
+          firstTeam ?? (this.rng() < 0.5 ? 0 : 1),
+          this.rng,
+        )
+        const stepDeadline = this.now() + VETO_STEP_SEC * 1000
+        await tx.insert(vetoes).values({ matchId: m.id, format: SERIES_ROOM_VETO_FORMAT, state, stepDeadline: new Date(stepDeadline) })
+        await tx.update(matches).set({ status: "veto" }).where(eq(matches.id, m.id))
+        return { kind: "veto", state, stepDeadline, format: SERIES_ROOM_VETO_FORMAT }
+      }
+    }
     if (this.roomVetoOn(m)) {
       const state = createRoomVeto(
         [
@@ -480,24 +540,7 @@ export class MatchFlow {
       await tx.update(matches).set({ status: "veto" }).where(eq(matches.id, m.id))
       return { kind: "veto", state, stepDeadline, format: ROOM_VETO_FORMAT }
     }
-    let game1Maps: string[] | null = null
-    // A later game or a resumed series plays the maps the first veto chose
-    if (m.source === "tournament" && (m.gameNumber ?? 1) > 1 && m.tournamentId && m.bracketMatchKey) {
-      const [g1] = await tx
-        .select({ maps: matches.maps })
-        .from(matches)
-        .where(
-          and(
-            eq(matches.tournamentId, m.tournamentId),
-            eq(matches.bracketMatchKey, m.bracketMatchKey),
-            isNotNull(matches.maps),
-          ),
-        )
-        .orderBy(desc(matches.createdAt))
-        .limit(1)
-      game1Maps = g1?.maps ?? null
-    }
-    const plan = this.vetoPlan(m, game1Maps)
+    const plan = this.vetoPlan(m, earlier?.maps ?? null)
     const nowDate = new Date(this.now())
     if ("maps" in plan) {
       const maps = isSeries(m) ? padMaps(plan.maps, m.bestOf ?? 1) : plan.maps
@@ -539,7 +582,7 @@ export class MatchFlow {
     const acting = state.done ? null : state.steps[state.stepIndex]?.team ?? null
     m.teams.forEach((team, idx) => {
       const view: VetoState = acting === idx || acting === null ? state : { ...state, votes: {} }
-      const payload: VetoStatePayload = { matchId: m.id, ...(m.slug ? { slug: m.slug } : {}), mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline, ...(kind === "rooms" ? { kind } : {}) }
+      const payload: VetoStatePayload = { matchId: m.id, ...(m.slug ? { slug: m.slug } : {}), mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline, ...(kind !== "maps" ? { kind } : {}) }
       toUsers(this.d.notifier, team.steamIds, "veto_state", payload)
     })
   }
@@ -579,6 +622,18 @@ export class MatchFlow {
       await tx
         .update(matches)
         .set({ status: "allocating", maps: [rushMap], mapId: rushMap, rushRooms, allocationStartedAt: new Date(this.now()) })
+        .where(eq(matches.id, m.id))
+    } else if (state.done && format === SERIES_ROOM_VETO_FORMAT) {
+      // Every map of the series is rush_001 with its own rooms and sides
+      const seriesRooms: SeriesRoomsJson = seriesRushRoomsFromVeto(state, RUSH_SERIES_ROOM_VETO.format).map((r) => ({
+        mapNumber: r.mapNumber,
+        rushRooms: r.rushRooms,
+        ctTeam: m.teams[r.ctTeam]!.name,
+      }))
+      const rushMap = getModeConfig(m.mode).maps[0]!.id
+      await tx
+        .update(matches)
+        .set({ status: "allocating", maps: padMaps([rushMap], m.bestOf ?? 1), mapId: rushMap, seriesRooms, allocationStartedAt: new Date(this.now()) })
         .where(eq(matches.id, m.id))
     } else if (state.done) {
       const maps = isSeries(m) ? padMaps(state.maps, m.bestOf ?? 1) : state.maps
@@ -1448,7 +1503,7 @@ export class MatchFlow {
           mode: m.mode,
           state: view,
           stepDeadline: row.stepDeadline?.getTime() ?? null,
-          ...(vetoKindOf(row.format) === "rooms" ? { kind: "rooms" as const } : {}),
+          ...(vetoKindOf(row.format) !== "maps" ? { kind: vetoKindOf(row.format) } : {}),
         }
         toUsers(this.d.notifier, [steamId], "veto_state", payload)
       }

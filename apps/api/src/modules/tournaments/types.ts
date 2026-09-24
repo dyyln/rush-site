@@ -35,6 +35,8 @@ export interface StartMatchParams {
     gameNumber: number
     bestOf: number
     priorMaps?: SeriesMap[]
+    // Team index of the higher seed (the lower seed number). It picks first in a Rush series room veto
+    higherSeed?: 0 | 1
   }
 }
 

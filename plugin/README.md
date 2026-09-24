@@ -29,6 +29,7 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
   - A teammate already on a side decides the side.
   - Otherwise an opponent already on a side decides it.
   - Otherwise `teams[0]` goes CT and `teams[1]` goes T, matching `mp_teamname_1` and `mp_teamname_2`.
+  - A series map entry's `ctTeam` changes only this last default. Aim sides stay observed.
 - There is no ready-up. Once every match player is connected and the teams sit on opposite sides, a countdown of `rushsite_start_countdown` seconds starts. If a player leaves or changes side during it, the countdown stops and the plugin waits again. The connect and disconnect graces still abandon the match as before.
 - `!ready` only replies that the match starts on its own.
 - The mode cfg is exec'd again at match start because Valve's `gamemode_competitive.cfg` runs on map load after the agent's command line `+exec`. Without it aim plays with $800, buy zones and C4. It runs before `mp_warmup_pausetimer 0` (the cfg sets it to 1) and before `mp_warmup_end`, whose restart applies `mp_startmoney 16000`. Rush never runs it.
@@ -104,7 +105,7 @@ When `match.json` has a `series`, the whole series is played on this server:
 
 - The server launches on map `series.startMapNumber`, normally 1. `series.wins` holds maps already won before it, which is non-zero only when a series resumes after a crash.
 - When a map ends, the plugin sends `map_end` and keeps everyone on the server. That includes the last map. It stops the demo after `tv_delay` + `rushsite_demo_stop_extra`, and waits at least `rushsite_series_map_break` seconds. In Rush that is about 110 s because of `tv_delay 105`. Then it loads the next map with `host_workshop_map <workshopId>` or `changelevel <mapName>`.
-- On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Both count down again once everyone is in. Rush holds warmup again and waits for the new map's rooms. Sides are not swapped between maps.
+- On the new map it runs mode.cfg again and starts a fresh warmup. It uses the same whitelist, password and teams, with scores and rounds reset. Both count down again once everyone is in. Rush holds warmup again and waits for the new map's rooms. Sides only change between maps when the map entries set `ctTeam`, see Rush teams.
 - Players reload with the map. The plugin sends `player_disconnected` for each of them when it changes the map. It sends `player_connected` again as each one is fully in on the new map.
 - Once a team has a majority of maps, or the last map is played, the plugin sends `match_end` with the series result and then kicks everyone. A drawn Rush map credits nobody. If the maps run out level, `match_end` is `draw`.
 - `match_abandoned` ends the whole series. That can be a no-show, a disconnect past the grace, or a next map that has not loaded within 5 minutes (`map_load_failed`).
@@ -113,9 +114,10 @@ When `match.json` has a `series`, the whole series is played on this server:
 
 ## Rush teams
 
-The side each config team plays is fixed for the whole match:
+The side each config team plays is fixed for the whole map:
 
-- `teams[0]` plays CT and `teams[1]` plays T.
+- A series map entry may set `ctTeam` to a team name. That team plays CT on the map and the other plays T. It wins over the rules below. A value that names no team is logged as a warning and ignored. The plugin rebuilds the mapping after each level change, and after a reload from the saved map number.
+- Otherwise `teams[0]` plays CT and `teams[1]` plays T.
 - A team may set `"side": "ct"` or `"side": "t"` in `match.json` to override this. Setting one side is enough, the other team gets the opposite. Two teams on the same side is a config error. This field is optional and not in CONTRACTS.md yet.
 - The mapping never changes from where players stand. `gamemode_rush.cfg` sets `mp_halftime 0`, so Rush never swaps sides. Round and match winners are credited from this mapping only.
 
@@ -123,7 +125,7 @@ Enforcement, all through the `jointeam` listener and without `ChangeTeam`:
 
 - A match player may only join their team's side. Any other `jointeam`, spectator included, is blocked. The plugin tells the player their side and makes them run `jointeam <side>` on the next frame.
 - `jointeam 0` (auto select) is redirected the same way and never counts against the player.
-- After `rushsite_team_refusals` (default 3) wrong joins the player is kicked with "Your team plays CT in this match. Reconnect and join CT." They can reconnect. The disconnect grace applies.
+- After `rushsite_team_refusals` (default 3) wrong joins the player is kicked with "Your team plays CT in this match. Reconnect and join CT." They can reconnect. The disconnect grace applies. In a series the text says "on this map" instead.
 - If the game puts a player on the wrong side without a `jointeam`, for example auto assign, the plugin sends them back, at most 5 times per player. After that it logs that something else is assigning teams.
 - A side holds only its own team's players, so it never holds more than the team size. A join is refused when the side already has that many players who are not from the other team.
 - A player who is not connected, or connected but not on their side, counts as not ready. `rushsite_status` shows the lineup, the players on the wrong side and whether warmup is held. Wrong-side players are reminded every 15 seconds.

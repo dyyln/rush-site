@@ -61,12 +61,28 @@ public sealed class MatchConfig
         return mapNumber == Series.StartMapNumber ? DemoUpload : null;
     }
 
-    // Side each team plays. teams[0] is CT and teams[1] is T unless a team sets side.
-    // Fixed for the whole match. Never derived from where players stand.
-    public string ConfiguredSide(string team)
+    // Team that plays CT on a 1-based map number, from the map entry's ctTeam. Null when unset or not a team name.
+    public string? CtTeamFor(int mapNumber)
+    {
+        var ct = MapAt(mapNumber)?.CtTeam;
+        return ct is not null && Teams.Any(t => t.Name == ct) ? ct : null;
+    }
+
+    // The map entry's ctTeam when it is set but names no team. Such a value is ignored.
+    public string? InvalidCtTeamFor(int mapNumber)
+    {
+        var ct = MapAt(mapNumber)?.CtTeam;
+        return ct is not null && CtTeamFor(mapNumber) is null ? ct : null;
+    }
+
+    // Side each team plays on a 1-based map number. The map entry's ctTeam decides when valid.
+    // Otherwise teams[0] is CT and teams[1] is T unless a team sets side.
+    // Fixed for the whole map. Never derived from where players stand.
+    public string ConfiguredSide(string team, int mapNumber = 1)
     {
         var idx = Teams.FindIndex(t => t.Name == team);
         if (idx < 0) return "";
+        if (CtTeamFor(mapNumber) is { } ct) return team == ct ? TeamConfig.SideCt : TeamConfig.SideT;
         var own = TeamConfig.NormalizeSide(Teams[idx].Side);
         if (own is not null) return own;
         var other = Teams.Count == 2 ? TeamConfig.NormalizeSide(Teams[1 - idx].Side) : null;
@@ -121,6 +137,9 @@ public sealed class MapConfig
     public LoadoutConfig? Loadout { get; init; }
     // Optional. Rush rooms for slots 1 to 5 on this map. See MatchConfig.RushRooms.
     public JsonElement? RushRooms { get; init; }
+    // Optional. Team name that plays CT on this map, the other team plays T. Wins over teams[].side.
+    // A value that names no team is ignored and the match goes on with the team sides.
+    public string? CtTeam { get; init; }
 
     // Console command that loads this map on a running server.
     public string? LoadCommand() =>

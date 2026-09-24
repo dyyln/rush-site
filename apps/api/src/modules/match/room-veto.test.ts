@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { createHarness, makeUsers, withServers, type Harness } from "../../../test/helpers.js"
 import { matches, vetoes } from "../../db/schema.js"
 import { matchmakeAll } from "../queue/loop.js"
-import { ROOM_VETO_FORMAT } from "./room-veto.js"
+import { ROOM_VETO_FORMAT, SERIES_ROOM_VETO_FORMAT } from "./room-veto.js"
 import { matchView } from "./routes.js"
 
 describe("rush room veto", () => {
@@ -147,5 +147,108 @@ describe("rush room veto", () => {
     expect(m.mapId).toBe("rush_001")
     expect(isValidRushPath(m.rushRooms!)).toBe(true)
     expect(h.agent.started[0]!.rushRooms).toEqual(m.rushRooms)
+  })
+})
+
+describe("rush series room veto", () => {
+  let h: Harness
+  afterEach(async () => {
+    await h.close()
+  })
+
+  async function setup(flag: "true" | "false") {
+    h = await createHarness({ rng: () => 0, env: { RUSH_ROOM_VETO: flag } })
+    await withServers(h)
+  }
+
+  async function bo3(opts: { gameNumber?: number; tournamentId?: string; higherSeed?: 0 | 1 } = {}) {
+    const ids = await makeUsers(h.db, 6)
+    const { matchId } = await h.ctx.flow.createTournamentMatch({
+      mode: "rush3v3",
+      teams: [
+        { name: "A", steamIds: ids.slice(0, 3) },
+        { name: "B", steamIds: ids.slice(3) },
+      ],
+      source: {
+        kind: "tournament",
+        tournamentId: opts.tournamentId ?? crypto.randomUUID(),
+        bracketMatchId: "r3m0",
+        gameNumber: opts.gameNumber ?? 1,
+        bestOf: 3,
+        ...(opts.gameNumber && opts.gameNumber > 1 ? { priorMaps: [{ mapNumber: 1, winnerTeam: "A", matchId: crypto.randomUUID() }] } : {}),
+        ...(opts.higherSeed !== undefined ? { higherSeed: opts.higherSeed } : {}),
+      },
+    })
+    return matchId
+  }
+
+  const load = async (matchId: string) => {
+    const [row] = await h.db.select().from(vetoes).where(eq(vetoes.matchId, matchId))
+    return row ? { row, state: row.state as VetoState } : null
+  }
+  const match = async (matchId: string) => (await h.db.select().from(matches).where(eq(matches.id, matchId)))[0]!
+
+  async function playAll(matchId: string) {
+    for (;;) {
+      const cur = await load(matchId)
+      if (!cur || cur.state.done) return
+      const team = cur.state.teams[cur.state.steps[cur.state.stepIndex]!.team]
+      const choice = stepAvailable(cur.state)[0]!
+      for (const id of team.steamIds) await h.ctx.flow.vote(id, matchId, choice)
+    }
+  }
+
+  it("leaves a Rush series on Valve's draw with the flag off", async () => {
+    await setup("false")
+    const matchId = await bo3()
+    expect(await load(matchId)).toBeNull()
+    expect((await match(matchId)).seriesRooms).toBeNull()
+  })
+
+  it("picks rooms and sides for all three maps and sends them per map to the server", async () => {
+    await setup("true")
+    const matchId = await bo3({ higherSeed: 1 })
+    const first = (await load(matchId))!
+    expect(first.row.format).toBe(SERIES_ROOM_VETO_FORMAT)
+    expect(first.state.steps).toHaveLength(15)
+    // The other team chooses map 1 sides, the higher seed picks the first mid room
+    expect(first.state.steps[0]).toMatchObject({ action: "side", team: 0 })
+    expect(first.state.steps[1]).toMatchObject({ action: "pick", team: 1 })
+    const viewer = first.state.teams[0].steamIds[0]!
+    expect((await matchView(h.ctx, matchId, viewer))!.veto!.kind).toBe("series-rooms")
+    const sent = h.notifier.ofType("veto_state").map((s) => s.msg.payload as VetoStatePayload)
+    expect(sent.every((p) => p.kind === "series-rooms")).toBe(true)
+
+    await playAll(matchId)
+    const m = await match(matchId)
+    expect(m.status).toBe("starting")
+    expect(m.maps).toEqual(["rush_001", "rush_001", "rush_001"])
+    expect(m.seriesRooms).toHaveLength(3)
+    // Team A took CT first on map 1, map 2 swaps
+    expect(m.seriesRooms!.map((r) => r.ctTeam)).toEqual(["A", "B", expect.any(String)])
+    const mids = m.seriesRooms!.flatMap((r) => [r.rushRooms[1], r.rushRooms[2], r.rushRooms[4], r.rushRooms[5]].map(String))
+    expect(new Set(mids)).toEqual(new Set(RUSH_MID_POOL))
+    for (const r of m.seriesRooms!) expect(isValidRushPath(r.rushRooms)).toBe(true)
+
+    const req = h.agent.started.at(-1)!
+    expect(req.rushRooms).toBeUndefined()
+    expect(req.series!.maps.map((x) => x.rushRooms)).toEqual(m.seriesRooms!.map((r) => r.rushRooms))
+    expect(req.series!.maps.map((x) => x.ctTeam)).toEqual(m.seriesRooms!.map((r) => r.ctTeam))
+    const page = await matchView(h.ctx, matchId, viewer)
+    expect(page!.maps!.map((x) => x.ctTeam)).toEqual(m.seriesRooms!.map((r) => r.ctTeam))
+    expect(page!.maps!.map((x) => x.rushRooms)).toEqual(m.seriesRooms!.map((r) => r.rushRooms))
+  })
+
+  it("a resumed series keeps the rooms its first match picked", async () => {
+    await setup("true")
+    const tournamentId = crypto.randomUUID()
+    const firstId = await bo3({ tournamentId })
+    await playAll(firstId)
+    const rooms = (await match(firstId)).seriesRooms
+    await h.ctx.flow.cancelMatch(firstId, "server_crashed", { requeue: false })
+    const resumed = await bo3({ tournamentId, gameNumber: 2 })
+    expect(await load(resumed)).toBeNull()
+    expect((await match(resumed)).seriesRooms).toEqual(rooms)
+    expect(h.agent.started.at(-1)!.series!.maps[1]!.rushRooms).toEqual(rooms![1]!.rushRooms)
   })
 })

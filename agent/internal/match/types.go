@@ -19,6 +19,10 @@ type MapEntry struct {
 	WorkshopID  string   `json:"workshopId,omitempty"`
 	MapName     string   `json:"mapName,omitempty"`
 	Loadout     *Loadout `json:"loadout,omitempty"`
+	// Series map entries only. Rush rooms for this map, T castle first, from the series room veto.
+	RushRooms []int `json:"rushRooms,omitempty"`
+	// Series map entries only. Name of the team that plays CT on this map.
+	CtTeam string `json:"ctTeam,omitempty"`
 }
 
 // WeaponPair is one loadout slot per side. Empty means the plugin default.

@@ -82,6 +82,8 @@ export const MatchMapSchema = z.object({
   players: z.array(MatchDetailPlayerSchema).optional(),
   // Rush only. Room ids for the 7 slots of this map, T castle first. See MatchDetail.rushRooms
   rushRooms: RushRoomsSchema.optional(),
+  // Rush series room veto only. Name of the team that plays CT on this map. Sides swap from map 1 to map 2
+  ctTeam: z.string().optional(),
 })
 export type MatchMap = z.infer<typeof MatchMapSchema>
 

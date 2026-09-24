@@ -315,6 +315,117 @@ public class SeriesTests
         Assert.Equal("{\"event\":{\"type\":\"map_end\",\"mapNumber\":2,\"mapId\":\"aim_usp\",\"winnerTeam\":\"alpha\",\"score\":{\"alpha\":13,\"bravo\":4}," +
                      "\"players\":[{\"steamId\":\"" + A1 + "\",\"kills\":1,\"deaths\":2,\"headshots\":0,\"damage\":50}],\"demoUploaded\":false}}", json);
     }
+
+    // Rush Bo3 with one ctTeam per map. Null leaves the field out.
+    private static MatchConfig RushBo3Sides(string? m1, string? m2, string? m3 = null)
+    {
+        string Entry(string? ct) => ct is null
+            ? """{ "id": "rush_001", "mapName": "rush_001" }"""
+            : $$"""{ "id": "rush_001", "mapName": "rush_001", "ctTeam": "{{ct}}" }""";
+        return MatchConfigLoader.Parse(WithSeries(Json(),
+            $$"""  "series": { "bestOf": 3, "maps": [ {{Entry(m1)}}, {{Entry(m2)}}, {{Entry(m3)}} ] },"""));
+    }
+
+    private void JoinRush(MatchController m, Side alpha)
+    {
+        foreach (var id in new[] { A1, A2, A3 }) Join(m, id, alpha);
+        foreach (var id in new[] { B1, B2, B3 }) Join(m, id, alpha.Opposite());
+    }
+
+    private void WinRushMap(MatchController m, Side winner)
+    {
+        m.OnRoundFreezeEnd(isWarmup: false);
+        for (var i = 0; i < 4; i++) m.OnRoundEnd(winner, false, false);
+        m.OnWinPanelMatch();
+    }
+
+    [Fact]
+    public void RushMapCtTeamPutsThatTeamOnCt()
+    {
+        var m = New(RushBo3Sides("bravo", "alpha"));
+        Assert.True(m.OnJoinTeamRequest(B1, Side.CT));
+        Assert.False(m.OnJoinTeamRequest(A1, Side.CT));
+        Assert.True(m.OnJoinTeamRequest(A1, Side.T));
+        Assert.Contains(_game.Logs, l => l.Contains("sides for map 1: alpha T, bravo CT"));
+        JoinRush(m, Side.T);
+        WinRushMap(m, Side.CT);
+        Assert.Equal("bravo", _sink.Last<MapEnd>().WinnerTeam);
+    }
+
+    [Fact]
+    public void RushCtTeamSwapsAfterTheLevelChange()
+    {
+        var m = New(RushBo3Sides("bravo", "alpha"));
+        JoinRush(m, Side.T);
+        WinRushMap(m, Side.T);
+        Assert.Equal("alpha", _sink.Last<MapEnd>().WinnerTeam);
+        NextMap(m);
+        Assert.Equal(2, m.MapNumber);
+        _game.ForcedJoins.Clear();
+        Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
+        Assert.False(m.OnJoinTeamRequest(B1, Side.CT));
+        Assert.Equal((B1, Side.T), Assert.Single(_game.ForcedJoins));
+        JoinRush(m, Side.CT);
+        WinRushMap(m, Side.CT);
+        Assert.Equal("alpha", _sink.Last<MatchEnd>().WinnerTeam);
+    }
+
+    [Fact]
+    public void RushMissingCtTeamFallsBackToTheTeamSides()
+    {
+        // Map 1 sets bravo on CT. Map 2 has no ctTeam, so teams[0] alpha is CT again.
+        var m = New(RushBo3Sides("bravo", null));
+        JoinRush(m, Side.T);
+        WinRushMap(m, Side.CT);
+        NextMap(m);
+        Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
+        Assert.False(m.OnJoinTeamRequest(B1, Side.CT));
+        JoinRush(m, Side.CT);
+        m.OnRoundFreezeEnd(isWarmup: false);
+        m.OnRoundEnd(Side.CT, false, false);
+        Assert.Equal("alpha", _sink.Last<RoundEnd>().WinnerTeam);
+    }
+
+    [Fact]
+    public void RushInvalidCtTeamIsLoggedAndFallsBack()
+    {
+        var m = New(RushBo3Sides("charlie", "alpha"));
+        Assert.Contains("server_ready", _sink.Types);
+        Assert.Contains(_game.Logs, l => l.StartsWith("warning: ignoring ctTeam 'charlie' for map 1"));
+        Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
+        Assert.False(m.OnJoinTeamRequest(B1, Side.CT));
+        JoinRush(m, Side.CT);
+        m.OnRoundFreezeEnd(isWarmup: false);
+        m.OnRoundEnd(Side.T, false, false);
+        Assert.Equal("bravo", _sink.Last<RoundEnd>().WinnerTeam);
+    }
+
+    [Fact]
+    public void RestoreOnALaterMapUsesThatMapsSides()
+    {
+        var m = New(RushBo3Sides("bravo", "alpha"));
+        JoinRush(m, Side.T);
+        WinRushMap(m, Side.CT);
+        NextMap(m);
+        var saved = _store.State!;
+        Assert.Equal(2, saved.MapNumber);
+
+        var r = new MatchController(RushBo3Sides("bravo", "alpha"), Fast, _game, _sink, _clock, _uploader, _store);
+        r.Restore(saved);
+        Assert.True(r.OnJoinTeamRequest(A1, Side.CT));
+        Assert.False(r.OnJoinTeamRequest(B1, Side.CT));
+    }
+
+    [Fact]
+    public void AimCtTeamOnlySetsTheDefaultSide()
+    {
+        // Aim stays observed. ctTeam picks the side before anyone stands on one.
+        var cfg = MatchConfigLoader.Parse(WithSeries(Json("aim1v1", "first_to_13", 1),
+            SeriesJson.Replace("\"id\": \"aim_map\",", "\"id\": \"aim_map\", \"ctTeam\": \"bravo\",")));
+        var m = New(cfg);
+        Assert.False(m.OnJoinTeamRequest(A1, Side.CT));
+        Assert.True(m.OnJoinTeamRequest(A1, Side.T));
+    }
 }
 
 public class SeriesTrackerTests
