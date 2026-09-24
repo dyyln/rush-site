@@ -10,9 +10,10 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-/* A column the height of the screen, so the footer sits at the bottom on short pages */
+/* A column the height of the screen. The bottom padding keeps content clear of the fixed dock */
 body {
   margin: 0;
+  padding-bottom: var(--dock-h);
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;

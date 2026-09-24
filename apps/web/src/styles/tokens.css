@@ -133,6 +133,8 @@
   /* Chat sidebar on desktop, open and collapsed */
   --chat-width: 320px;
   --chat-rail: 56px;
+  /* Queue dock fixed to the bottom of every page */
+  --dock-h: 72px;
 
   /* Motion */
   --duration-fast: 120ms;

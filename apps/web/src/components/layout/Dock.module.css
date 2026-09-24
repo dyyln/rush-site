@@ -1,0 +1,217 @@
+/* Fixed to the bottom of the window, stopping at the chat panel. Body keeps --dock-h of room below the content */
+.dock {
+  position: fixed;
+  left: 0;
+  right: var(--chat-offset, 0px);
+  bottom: 0;
+  z-index: var(--z-header);
+  border-top: 1px solid var(--color-border-strong);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.inner {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--dock-h);
+}
+.left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.status:hover {
+  border-color: var(--color-accent);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.status[data-tone="up"] .dot {
+  background: var(--color-win);
+  box-shadow: 0 0 6px var(--color-win);
+}
+.status[data-tone="warn"] .dot {
+  background: var(--color-warn);
+}
+.status[data-tone="down"] .dot {
+  background: var(--color-loss);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.label {
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.value {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pick {
+  color: var(--color-accent-hover);
+}
+
+.go {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 220px;
+  padding: 0 var(--space-5);
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease), box-shadow var(--duration-normal) var(--ease);
+}
+.go:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.go:disabled {
+  background: var(--color-disabled-surface);
+  color: var(--color-disabled-text-strong);
+  cursor: not-allowed;
+}
+.go:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+.goSmall {
+  font-size: var(--text-md);
+  letter-spacing: 0.1em;
+}
+/* In a match GO becomes a link back to the room */
+.goMatch {
+  background: var(--color-win);
+  color: var(--color-text-on-accent);
+  font-size: var(--text-lg);
+  letter-spacing: 0.14em;
+}
+.goMatch:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-win) 85%, white);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--color-win) 45%, transparent);
+}
+
+.searching {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+}
+.timer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 150px;
+  padding: 0 var(--space-5);
+  border-left: 3px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .timer {
+    animation: searching 1.6s var(--ease) infinite alternate;
+  }
+}
+@keyframes searching {
+  to {
+    background: color-mix(in srgb, var(--color-accent) 38%, transparent);
+  }
+}
+.timerValue {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.timerSub {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.cancel {
+  min-width: 110px;
+  border: 0;
+  border-left: 1px solid var(--color-border-strong);
+  background: rgb(255 255 255 / 0.06);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.cancel:hover {
+  background: color-mix(in srgb, var(--color-loss) 25%, transparent);
+}
+
+@media (max-width: 640px) {
+  .left {
+    gap: var(--space-3);
+  }
+  .statusText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .status {
+    min-width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+  .go {
+    min-width: 110px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-xl);
+  }
+  .goMatch,
+  .goSmall {
+    font-size: var(--text-sm);
+    letter-spacing: 0.06em;
+  }
+  .timer {
+    min-width: 0;
+    padding: 0 var(--space-3);
+  }
+  .timerValue {
+    font-size: var(--text-lg);
+  }
+  .cancel {
+    min-width: 72px;
+  }
+}

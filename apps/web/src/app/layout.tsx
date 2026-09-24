@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Chakra_Petch, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { BRAND_NAME } from "@rushsite/shared";
 import { Backdrop } from "@/components/layout/Backdrop";
-import { SiteFooter } from "@/components/layout/SiteFooter";
-import { SiteHeader } from "@/components/layout/SiteHeader";
+import { Dock } from "@/components/layout/Dock";
+import { TopBar } from "@/components/layout/TopBar";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { ChallengeInbox } from "@/components/challenges/ChallengeInbox";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -59,13 +59,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <SessionProvider>
           <ToastProvider>
-            <SiteHeader />
+            <TopBar />
             <AnnouncementBanner />
             <ChallengeInbox />
             <InviteInbox />
             <NotifyListener />
             <main id="main">{children}</main>
-            <SiteFooter />
+            <Dock />
             <ChatSidebar />
           </ToastProvider>
         </SessionProvider>

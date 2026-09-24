@@ -3,7 +3,7 @@
   z-index: var(--z-toast);
   right: calc(var(--gutter) + var(--chat-offset, 0px));
   left: var(--gutter);
-  bottom: var(--gutter);
+  bottom: calc(var(--dock-h) + var(--gutter));
   pointer-events: none;
 }
 @media (min-width: 600px) {
