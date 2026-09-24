@@ -33,6 +33,8 @@ x-api-env: &api-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
   RUSH1V1_TEST_QUEUE: ${RUSH1V1_TEST_QUEUE:-false}
   RUSH2V2_TEST_QUEUE: ${RUSH2V2_TEST_QUEUE:-false}
+  # Empty follows the shared config default
+  RUSH_ROOM_VETO: ${RUSH_ROOM_VETO:-}
   # DatHost surge, off while DATHOST_EMAIL is empty
   DATHOST_EMAIL: ${DATHOST_EMAIL:-}
   DATHOST_PASSWORD: ${DATHOST_PASSWORD:-}

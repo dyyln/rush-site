@@ -98,8 +98,8 @@ export const EnvSchema = z.object({
   DEMO_WAIT_SEC: z.coerce.number().int().nonnegative().default(180),
   // Lets modes with placeholder map or game ids queue outside production
   ALLOW_UNRESOLVED_MODES: bool.default(false),
-  // Rush room ban and pick. Unset follows RUSH_ROOM_VETO.enabled in shared config
-  RUSH_ROOM_VETO: bool.optional(),
+  // Rush room ban and pick. Unset or empty follows RUSH_ROOM_VETO.enabled in shared config
+  RUSH_ROOM_VETO: z.preprocess((v) => (v === "" ? undefined : v), bool.optional()),
   // Opens the unrated 1v1 Rush test queue. Off hides it on the site and refuses joins
   RUSH1V1_TEST_QUEUE: bool.default(false),
   // Opens the unrated 2v2 Rush test queue. Off hides it on the site and refuses joins
