@@ -2,10 +2,10 @@
 
 import { RUSH_ROOM_VETO, VETO_STEP_SEC, currentRoomPhase, nextPickSlot, roomSlots, type RoomVetoFormat, type TeamIndex, type VetoState } from "@rushsite/shared";
 import type { TeamSide } from "@/components/ui/TeamMarker";
-import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
 import { VetoSteps } from "@/components/ui/VetoSteps";
-import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
+import { VetoHead } from "@/components/ui/VetoHead";
+import { nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
 import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
@@ -88,26 +88,23 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
 
   return (
     <section className={styles.board} aria-labelledby="room-veto-heading">
-      <header className={cx(styles.header, !state.done && turnClass.band)} data-turn={turn}>
-        <div>
-          <p className="eyebrow">
-            Room veto{running ? `, ${running.phase.label.toLowerCase()}, step ${phaseSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${phaseSteps.length}` : ""}
-          </p>
-          <VetoTurnChip turn={turn} next={next} />
-          <h2 id="room-veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
-            {headline}
-          </h2>
-          <p className={styles.sub} aria-live="polite">
-            {sub}
-          </p>
-          {lastAuto && !state.done && (
+      <VetoHead
+        id="room-veto-heading"
+        eyebrow={`Room veto${running ? `, ${running.phase.label.toLowerCase()}, step ${phaseSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${phaseSteps.length}` : ""}`}
+        turn={turn}
+        next={next}
+        headline={headline}
+        sub={sub}
+        notes={
+          lastAuto && !state.done ? (
             <p className={styles.sub} role="status">
               Time ran out. {rushRoomName(lastAuto.mapId)} was {lastAuto.action === "ban" ? "banned" : "picked"} at random.
             </p>
-          )}
-        </div>
-        {!state.done && stepDeadline !== null && <Timer until={stepDeadline} totalSec={VETO_STEP_SEC} label={myTurn ? "Your turn" : "Their turn"} size="lg" />}
-      </header>
+          ) : null
+        }
+        stepDeadline={stepDeadline}
+        totalSec={VETO_STEP_SEC}
+      />
 
       <ol className={styles.phases} aria-label="Veto phases">
         {format.phases.map((p, idx) => {

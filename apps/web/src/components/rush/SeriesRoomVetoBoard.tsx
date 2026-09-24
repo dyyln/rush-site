@@ -14,10 +14,10 @@ import {
   type VetoState,
 } from "@rushsite/shared";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
-import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
 import { VetoSteps } from "@/components/ui/VetoSteps";
-import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
+import { VetoHead } from "@/components/ui/VetoHead";
+import { nextIsMine, turnClass, vetoTurn, waitingOn } from "@/components/ui/VetoTurn";
 import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
@@ -81,7 +81,6 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
   // Steps of the map being decided. The map tracks carry the rest
   const mapSteps = cur ? state.steps.map((s, i) => ({ s, i })).filter(({ i }) => phaseAt(i)?.mapNumber === cur.mapNumber) : [];
   const pool = cur && cur.kind !== "side" && step?.phase !== undefined ? (phases[step.phase]?.pool ?? []) : [];
-  const lastMap = format.maps;
   const { previewRoom, previewOf } = usePreviewRoom(state.stepIndex);
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote);
 
@@ -113,34 +112,33 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
   const leftover = cur?.kind === "mid" ? MID_SLOTS - format.steps.filter((s) => s.map === cur.mapNumber && s.kind === "mid").length : 0;
   const leftoverNote = cur && leftover > 0 ? `The ${leftover} rooms left go to ${teamName(other(cur.team)).toLowerCase()}.` : null;
 
-  const flipWinner = state.flipWinner;
-  const flipNote =
-    flipWinner === undefined ? null : `Coin flip: ${teamName(flipWinner)} ${myTeam !== null && flipWinner !== myTeam ? "are" : "is"} team A on map ${lastMap}.`;
 
   return (
     <section className={styles.board} aria-labelledby="series-room-veto-heading">
-      <header className={cx(styles.header, !state.done && turnClass.band)} data-turn={turn}>
-        <div>
-          <p className="eyebrow">
-            Room pick{cur ? `, map ${cur.mapNumber}, step ${mapSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${mapSteps.length}` : ""}
-          </p>
-          <VetoTurnChip turn={turn} next={next} />
-          <h2 id="series-room-veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
-            {headline}
-          </h2>
-          <p className={styles.sub} aria-live="polite">
+      <VetoHead
+        id="series-room-veto-heading"
+        eyebrow={`Room pick${cur ? `, map ${cur.mapNumber}, step ${mapSteps.findIndex(({ i }) => i === state.stepIndex) + 1} of ${mapSteps.length}` : ""}`}
+        turn={turn}
+        next={next}
+        headline={headline}
+        sub={
+          <>
             {sub}
             {leftoverNote && ` ${leftoverNote}`}
-          </p>
-          {lastAuto && !state.done && (
-            <p className={styles.sub} role="status">
-              Time ran out. {keyLabel(lastAuto.mapId)} was {lastAuto.action === "side" ? "chosen" : "picked"} at random.
-            </p>
-          )}
-          {flipNote && <p className={own.flip}>{flipNote}</p>}
-        </div>
-        {!state.done && stepDeadline !== null && <Timer until={stepDeadline} totalSec={VETO_STEP_SEC} label={myTurn ? "Your turn" : "Their turn"} size="lg" />}
-      </header>
+          </>
+        }
+        notes={
+          <>
+            {lastAuto && !state.done && (
+              <p className={styles.sub} role="status">
+                Time ran out. {keyLabel(lastAuto.mapId)} was {lastAuto.action === "side" ? "chosen" : "picked"} at random.
+              </p>
+            )}
+          </>
+        }
+        stepDeadline={stepDeadline}
+        totalSec={VETO_STEP_SEC}
+      />
 
       <ol className={own.maps} aria-label="Maps">
         {maps.map((mp) => {

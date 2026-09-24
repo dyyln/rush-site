@@ -6,9 +6,9 @@ import { mapName } from "@/lib/modes";
 import { VetoSummary } from "@/components/play/VetoSummary";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { MapCard, type MapCardState, type MapCardVoter } from "./MapCard";
-import { Timer } from "./Timer";
 import { VetoSteps } from "./VetoSteps";
-import { VetoTurnChip, nextIsMine, turnClass, vetoTurn, waitingOn } from "./VetoTurn";
+import { VetoHead } from "@/components/ui/VetoHead";
+import { nextIsMine, turnClass, vetoTurn, waitingOn } from "./VetoTurn";
 import { cx } from "./cx";
 import styles from "./VetoBoard.module.css";
 
@@ -83,30 +83,29 @@ export function VetoBoard({ mode, state, mySteamId, stepDeadline, onVote, names 
 
   return (
     <section className={styles.board} aria-labelledby="veto-heading">
-      <header className={cx(styles.header, !state.done && turnClass.band)} data-turn={turn}>
-        <div>
-          <p className="eyebrow">
-            Map veto{step ? `, step ${state.stepIndex + 1} of ${state.steps.length}` : ""}
-          </p>
-          <VetoTurnChip turn={turn} next={next} />
-          <h2 id="veto-heading" className={cx(styles.headline, myTurn && styles.myTurn)}>
-            {headline}
-          </h2>
-          <p className={styles.sub} aria-live="polite">
-            {sub}
-          </p>
-          {waiting && <p className={styles.sub}>{waiting}.</p>}
-          {lastAuto && !state.done && (
-            <p className={styles.sub} role="status">
-              Time ran out. {mapName(mode, lastAuto.mapId)} was auto-{lastAuto.action === "ban" ? "banned" : "picked"}.
-            </p>
-          )}
-          <VetoSummary mode={mode} state={state} mySteamId={mySteamId} />
-        </div>
-        {!state.done && stepDeadline !== null && (
-          <Timer until={stepDeadline} frozenSec={frozenSec} totalSec={VETO_STEP_SEC} label={myTurn ? "Your turn" : "Their turn"} size="lg" />
-        )}
-      </header>
+      <VetoHead
+        id="veto-heading"
+        eyebrow={`Map veto${step ? `, step ${state.stepIndex + 1} of ${state.steps.length}` : ""}`}
+        turn={turn}
+        next={next}
+        headline={headline}
+        sub={sub}
+        notes={
+          <>
+            {waiting && <p className={styles.sub}>{waiting}.</p>}
+            {lastAuto && !state.done && (
+              <p className={styles.sub} role="status">
+                Time ran out. {mapName(mode, lastAuto.mapId)} was auto-{lastAuto.action === "ban" ? "banned" : "picked"}.
+              </p>
+            )}
+          </>
+        }
+        stepDeadline={stepDeadline}
+        totalSec={VETO_STEP_SEC}
+        frozenSec={frozenSec}
+      >
+        <VetoSummary mode={mode} state={state} mySteamId={mySteamId} />
+      </VetoHead>
 
       <ul className={cx(styles.grid, turnClass.grid)} data-turn={turn} role="list">
         {state.pool.map((mapId) => {

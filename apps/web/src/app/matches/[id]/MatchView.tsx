@@ -416,7 +416,8 @@ function SeriesView({ m, maps, liveMap, sideOf, roster, before }: StatsProps & {
                 <span className={styles.mapTabTop}>
                   <span className={styles.mapTabName}>
                     <span className="muted">Map {x.mapNumber} </span>
-                    <span className="mono">{mapName(m.mode, x.mapId)}</span>
+                    {/* Rush has one map, so the number is enough */}
+                    {!rush && <span className="mono">{mapName(m.mode, x.mapId)}</span>}
                   </span>
                   <Badge tone={x.status === "live" ? "win" : x.status === "done" ? "neutral" : "info"}>{SERIES_STATUS[x.status]}</Badge>
                 </span>

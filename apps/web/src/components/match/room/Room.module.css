@@ -99,3 +99,15 @@
   color: var(--color-accent-hover);
   font-weight: 600;
 }
+
+/* Veto boards sit on plain glass. The turn colour lives on the board's own header */
+.vetoPanel {
+  padding: var(--space-4);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+}
+@media (min-width: 700px) {
+  .vetoPanel {
+    padding: var(--space-5);
+  }
+}

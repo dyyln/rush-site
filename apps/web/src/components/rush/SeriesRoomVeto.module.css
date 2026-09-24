@@ -1,11 +1,5 @@
 /* Rush series room pick. Shares the board, steps and grid with Rush.module.css */
 
-.flip {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-
 /* One track per map, stacked. The map being decided is outlined, finished ones step back */
 .maps {
   list-style: none;

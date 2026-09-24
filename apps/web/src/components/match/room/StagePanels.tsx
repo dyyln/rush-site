@@ -79,8 +79,9 @@ export function VetoPanel({
       </Card>
     );
   }
+  // A plain glass panel. The header inside carries the turn colour
   return (
-    <Card tone="accent">
+    <section className={`glass ${styles.vetoPanel}`} aria-label="Veto">
       {veto.kind === "series-rooms" ? (
         <SeriesRoomVetoBoard state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
       ) : veto.kind === "rooms" ? (
@@ -88,7 +89,7 @@ export function VetoPanel({
       ) : (
         <VetoBoard mode={mode} state={veto.state} mySteamId={viewer} stepDeadline={veto.stepDeadline} onVote={onVote} names={names} />
       )}
-    </Card>
+    </section>
   );
 }
 
