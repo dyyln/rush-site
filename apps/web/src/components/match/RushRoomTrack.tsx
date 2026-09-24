@@ -140,7 +140,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
   // over the room play ended in, is split between the two. A finished Convoy takes its winner's colour
   const ended = !building && !playing && track.over ? endedIn(track) : null;
   // During a live Convoy decider the rooms either side of the room it replaced keep their holders
-  const front = typeof current === "number" ? current : current === "decider" ? replacedByDecider(track) : ended;
+  const front = typeof current === "number" ? current : current === "decider" ? replacedByDecider() : ended;
   const finalWinner = ended === null ? null : ([...track.slots.flatMap((sl) => sl.visits), ...track.decider].sort((x, y) => y.round - x.round)[0]?.team ?? null);
   // The room in play, or the room play ended in, stays split between the two
   const holder = (i: number) => (front === null || i === front ? null : i < front ? tTeam : ctTeam);
@@ -185,117 +185,116 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
         )}
       </div>
       <div className={styles.scroll} ref={scrollRef}>
-      <ol
-        className={styles.track}
-        ref={listRef}
-        style={splitStyle}
-      >
-        {shownSlots.map((slot) => {
-          const isCurrent = current === slot.index;
-          const isLast = !playing && track.last === slot.index;
-          const def = defender(slot.index);
-          const reached = slot.visits.length > 0 || isCurrent;
-          const held = holder(slot.index);
-          return (
-            <li
-              key={slot.index}
-              className={cx(styles.slot, !building && !reached && styles.unreached)}
-              data-kind={slot.kind}
-              data-side={def?.side}
-              data-current={isCurrent || undefined}
-              data-control={held?.side}
-              data-contested={slot.index === front || undefined}
-              data-last={isLast || undefined}
-              data-empty={(building && !slot.room) || undefined}
-              data-latest={(building && building.latestSlot === slot.index) || undefined}
-              aria-current={isCurrent ? "step" : undefined}
-            >
-              {/* The kind shows in the border (castle colour, dashed start room), so it is only spoken */}
-              <span className="visually-hidden">
-                {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}, slot {slot.index}
-                {held ? `, held by ${held.label}` : ""}:{" "}
-              </span>
-              <span className={styles.frame}>
-                {slot.room ? <RoomImage room={String(slot.room.id)} /> : <span className={styles.blank} aria-hidden="true" />}
-                {/* An empty slot in the veto preview is just an empty frame. The spoken label says which slot */}
-                {slot.room ? (
-                  <span className={styles.name}>{slot.room.displayName}</span>
-                ) : building ? (
-                  <span className="visually-hidden">not picked yet</span>
-                ) : (
-                  <span className={styles.name}>
-                    <span className={styles.unknown}>{playing ? "Not drawn yet" : "Not played"}</span>
-                  </span>
-                )}
-              </span>
-              <span className={styles.meta}>
-                {def && (
-                  <span className={styles.defender} data-side={def.side}>
-                    <TeamMarker side={def.side} />
-                    <span>Defended by {def.label}</span>
-                  </span>
-                )}
-                {isCurrent && (
-                  <span key={`now-${rounds.length}`} className={styles.now}>
-                    <span className={styles.pulse} aria-hidden="true" />
-                    Current room
-                  </span>
-                )}
-                {isLast && track.over && (
-                  <span className={styles.final}>{track.captured === slot.index ? "Castle taken" : "Final round"}</span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      </div>
-      {(track.decider.length > 0 || current === "decider") && (
-        <div
-          className={styles.decider}
-          data-current={current === "decider" || undefined}
-          data-control={(track.last === "decider" && ended !== null && finalWinner?.side) || undefined}
-          data-contested={current === "decider" || undefined}
+        <ol
+          className={styles.track}
+          ref={listRef}
           style={splitStyle}
-          aria-current={current === "decider" ? "step" : undefined}
         >
-          <span className="visually-hidden">Decider at 7-7: </span>
-          <span className={styles.frame}>
-            <RoomImage room={String(RUSH_ROOMS.decider.id)} />
-            <span className={styles.name}>
-              {RUSH_ROOMS.decider.displayName}
-              <span className={styles.nameNote}>Decider at 7-7</span>
-            </span>
-          </span>
-          <span className={styles.meta}>
-            {current === "decider" && (
-              <span className={styles.now}>
-                <span className={styles.pulse} aria-hidden="true" />
-                Current room
-              </span>
-            )}
-          </span>
-        </div>
-      )}
+          {shownSlots.map((slot) => {
+            const isCurrent = current === slot.index;
+            const isLast = !playing && track.last === slot.index;
+            const def = defender(slot.index);
+            const reached = slot.visits.length > 0 || isCurrent;
+            const held = holder(slot.index);
+            return (
+              <li
+                key={slot.index}
+                className={cx(styles.slot, !building && !reached && styles.unreached)}
+                data-kind={slot.kind}
+                data-side={def?.side}
+                data-current={isCurrent || undefined}
+                data-control={held?.side}
+                data-contested={slot.index === front || undefined}
+                data-last={isLast || undefined}
+                data-empty={(building && !slot.room) || undefined}
+                data-latest={(building && building.latestSlot === slot.index) || undefined}
+                aria-current={isCurrent ? "step" : undefined}
+              >
+                {/* The kind shows in the border (castle colour, dashed start room), so it is only spoken */}
+                <span className="visually-hidden">
+                  {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}, slot {slot.index}
+                  {held ? `, held by ${held.label}` : ""}:{" "}
+                </span>
+                <span className={styles.frame}>
+                  {slot.room ? <RoomImage room={String(slot.room.id)} /> : <span className={styles.blank} aria-hidden="true" />}
+                  {/* An empty slot in the veto preview is just an empty frame. The spoken label says which slot */}
+                  {slot.room ? (
+                    <span className={styles.name}>{slot.room.displayName}</span>
+                  ) : building ? (
+                    <span className="visually-hidden">not picked yet</span>
+                  ) : (
+                    <span className={styles.name}>
+                      <span className={styles.unknown}>{playing ? "Not drawn yet" : "Not played"}</span>
+                    </span>
+                  )}
+                </span>
+                <span className={styles.meta}>
+                  {def && (
+                    <span className={styles.defender} data-side={def.side}>
+                      <TeamMarker side={def.side} />
+                      <span>Defended by {def.label}</span>
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <span key={`now-${rounds.length}`} className={styles.now}>
+                      <span className={styles.pulse} aria-hidden="true" />
+                      Current room
+                    </span>
+                  )}
+                  {isLast && track.over && (
+                    <span className={styles.final}>{track.captured === slot.index ? "Castle taken" : "Final round"}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+          {(track.decider.length > 0 || current === "decider") && (
+            // Convoy hangs under the start room it replaces, in the middle column
+            <div className={styles.deciderRow}>
+              <div
+                className={styles.decider}
+                data-current={current === "decider" || undefined}
+                data-control={(track.last === "decider" && ended !== null && finalWinner?.side) || undefined}
+                data-contested={current === "decider" || undefined}
+                style={splitStyle}
+                aria-current={current === "decider" ? "step" : undefined}
+              >
+                <span className="visually-hidden">Decider at 7-7: </span>
+                <span className={styles.frame}>
+                  <RoomImage room={String(RUSH_ROOMS.decider.id)} />
+                  <span className={styles.name}>
+                    {RUSH_ROOMS.decider.displayName}
+                    <span className={styles.nameNote}>Decider at 7-7</span>
+                  </span>
+                </span>
+                <span className={styles.meta}>
+                  {current === "decider" && (
+                    <span className={styles.now}>
+                      <span className={styles.pulse} aria-hidden="true" />
+                      Current room
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+      </div>
     </Card>
   );
 }
 
-
 // Match page wrapper. mapNumber picks one map of a series, where each map is its own Rush match
-// The room play ended in. A match decided in Convoy ended in the room Convoy replaced at 7-7,
-// one step on from the last regular round in the direction that round moved play
+// The room play ended in. A match decided in Convoy ended in the room Convoy replaced at 7-7
 function endedIn(track: RushTrack): number | null {
   if (typeof track.last === "number") return track.last;
-  return track.last === "decider" ? replacedByDecider(track) : null;
+  return track.last === "decider" ? replacedByDecider() : null;
 }
 
-// The room Convoy took the place of at 7-7
-function replacedByDecider(track: RushTrack): number | null {
-  const regular = track.slots.flatMap((sl) => sl.visits.map((v) => ({ v, slot: sl.index }))).sort((x, y) => y.v.round - x.v.round)[0];
-  if (!regular) return null;
-  const step = regular.v.toward === "ct" ? 1 : regular.v.toward === "t" ? -1 : 0;
-  return Math.max(0, Math.min(LAST_SLOT, regular.slot + step));
+// The room Convoy takes the place of at 7-7. Every round moves play one room toward the loser's
+// castle, so with the wins level play is back in the start room
+function replacedByDecider(): number {
+  return START_SLOT;
 }
 
 // Rooms, live state and teams for one map of a Rush match, as the track and the round graph need them
