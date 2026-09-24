@@ -17,6 +17,7 @@ import { TierChip } from "@/components/ui/TierChip";
 import { MatchSkeleton } from "@/components/skeletons/MatchSkeleton";
 import { DemoActions } from "@/components/match/DemoActions";
 import { ResultHeader } from "@/components/match/ResultHeader";
+import { MapThumb } from "@/components/play/MapThumb";
 import { ReportButton } from "@/components/match/ReportDialog";
 import { RoundTimeline } from "@/components/match/RoundTimeline";
 import { MatchRushTrack, rushFlip, rushRoundPath } from "@/components/match/RushRoomTrack";
@@ -141,32 +142,38 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
             {participant && REPORTABLE.includes(m.status) && <ReportButton matchId={m.id} roster={roster} viewer={viewer!} serverReported={m.viewerReported} />}
           </div>
         </div>
-        <h1 className={styles.title}>
-          {modeLabel(m.mode)}
-          {currentMapId && !series && (
-            <>
-              {" "}
-              <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
-            </>
-          )}
-        </h1>
-        {m.slug && (
-          <p className={roomStyles.roomId}>
-            <span>Room</span>
-            <span className="mono">{m.slug}</span>
-          </p>
-        )}
-        {m.tournament && (
-          <p className={styles.cup}>
-            <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
-            {!series && m.tournament.bestOf > 1 && (
-              <span className="muted">
-                {" "}
-                Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
-              </span>
+        {/* An aim map's preview beside the title. Rush shows its rooms further down, a series has several maps */}
+        <div className={styles.titleRow}>
+          {currentMapId && !series && !isRushMode(m.mode) && <MapThumb mapId={currentMapId} className={styles.titleThumb} />}
+          <div className={styles.titleText}>
+            <h1 className={styles.title}>
+              {modeLabel(m.mode)}
+              {currentMapId && !series && (
+                <>
+                  {" "}
+                  <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
+                </>
+              )}
+            </h1>
+            {m.slug && (
+              <p className={roomStyles.roomId}>
+                <span>Room</span>
+                <span className="mono">{m.slug}</span>
+              </p>
             )}
-          </p>
-        )}
+            {m.tournament && (
+              <p className={styles.cup}>
+                <Link href={`/tournaments/${m.tournament.id}`}>{m.tournament.name}</Link>
+                {!series && m.tournament.bestOf > 1 && (
+                  <span className="muted">
+                    {" "}
+                    Game {m.tournament.gameNumber} of Bo{m.tournament.bestOf}
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
         {scored && <ResultHeader m={m} roster={roster} ownIndex={ownIndex} viewer={viewer} sideOf={sideOf} />}
       </header>
 

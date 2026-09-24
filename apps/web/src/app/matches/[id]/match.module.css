@@ -200,3 +200,26 @@
 .delta[data-sign="none"] {
   color: var(--color-text-muted);
 }
+
+/* Title with the aim map's preview beside it */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.titleRow .titleThumb {
+  flex: none;
+  width: 112px;
+  border: 1px solid var(--color-border-strong);
+}
+@media (min-width: 700px) {
+  .titleRow .titleThumb {
+    width: 152px;
+  }
+}
+.titleText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
