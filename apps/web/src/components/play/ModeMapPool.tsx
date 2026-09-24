@@ -69,11 +69,9 @@ export function ModeMapPool({ mode, reveal, children }: { mode: Mode; reveal: bo
               );
             })}
           </span>
-          {!note && (
-            <span className={styles.caption}>
-              <span className={styles.note}>{names}</span>
-            </span>
-          )}
+          <span className={styles.caption}>
+            <span className={styles.note}>{note ? "Valve's Rush across a range of arenas" : names}</span>
+          </span>
         </span>
       )}
     </span>
