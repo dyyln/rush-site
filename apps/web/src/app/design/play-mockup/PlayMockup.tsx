@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Mode } from "@rushsite/shared";
 import { Avatar } from "@/components/ui/Avatar";
 import { TierChip } from "@/components/ui/TierChip";
@@ -9,11 +9,19 @@ import { FormDots } from "@/components/ui/FormDots";
 import { PartySize } from "@/components/ui/PartySize";
 import { useBackdrop } from "@/lib/useBackdrop";
 import { cx } from "@/components/ui/cx";
+import { CupsTab } from "./CupsTab";
+import { LeaderboardTab } from "./LeaderboardTab";
 import styles from "./play-mockup.module.css";
 
 // Mockup only. Everything below is fake data held in local state
 
-type Tab = "ranked" | "cups" | "test";
+type Tab = "ranked" | "cups" | "leaderboard" | "test";
+const TAB_NAMES: Record<Tab, string> = {
+  ranked: "Ranked",
+  cups: "Cups",
+  leaderboard: "Leaderboard",
+  test: "Test",
+};
 type Tile = {
   mode: Mode;
   name: string;
@@ -27,22 +35,55 @@ type Tile = {
 };
 
 const RANKED: Tile[] = [
-  { mode: "rush3v3", name: "Rush", format: "3v3", size: 3, art: "/backdrops/rush_001_1.webp", blurb: "Valve's Rush on Complex", queue: 43, live: 13, tier: { tier: "gold", rating: 1712, rank: 214 } },
-  { mode: "aim1v1", name: "Aim", format: "1v1", size: 1, art: "/maps/aim_redline.webp", blurb: "Duel 1v1 in aim maps", queue: 18, live: 9, tier: { tier: "silver", rating: 1455 } },
-  { mode: "aim2v2", name: "Aim", format: "2v2", size: 2, art: "/maps/aim_deagle7k.webp", blurb: "Partner up in aim maps", queue: 11, live: 4 },
+  {
+    mode: "rush3v3",
+    name: "Rush",
+    format: "3v3",
+    size: 3,
+    art: "/backdrops/rush_001_1.webp",
+    blurb: "Valve's Rush on Complex",
+    queue: 43,
+    live: 13,
+    tier: { tier: "gold", rating: 1712, rank: 214 },
+  },
+  {
+    mode: "aim1v1",
+    name: "Aim",
+    format: "1v1",
+    size: 1,
+    art: "/maps/aim_redline.webp",
+    blurb: "Duel 1v1 in aim maps",
+    queue: 18,
+    live: 9,
+    tier: { tier: "silver", rating: 1455 },
+  },
+  {
+    mode: "aim2v2",
+    name: "Aim",
+    format: "2v2",
+    size: 2,
+    art: "/maps/aim_deagle7k.webp",
+    blurb: "Partner up in aim maps",
+    queue: 11,
+    live: 4,
+  },
 ];
 const TEST: Tile[] = [
-  { mode: "rush1v1", name: "Rush Test", format: "1v1", size: 1, art: "/rush-rooms/205.webp", blurb: "Unrated test queue for Rush with two players", queue: 2, live: 1 },
+  {
+    mode: "rush1v1",
+    name: "Rush Test",
+    format: "1v1",
+    size: 1,
+    art: "/rush-rooms/205.webp",
+    blurb: "Unrated test queue for Rush with two players",
+    queue: 2,
+    live: 1,
+  },
 ];
-const CUPS = [
-  { name: "Daily Rush Cup", when: "Starts 20:00", entries: "22 / 32", art: "/backdrops/rush_001_2.webp" },
-  { name: "Daily Aim Cup 2v2", when: "Starts 21:00", entries: "9 / 16", art: "/maps/aim_usp.webp" },
-  { name: "Weekly Rush Cup", when: "Sunday 18:00", entries: "41 / 64", art: "/backdrops/rush_001_4.webp" },
-];
-const PARTY = [
-  { name: "meridius", leader: true },
-  { name: "Mira", leader: false },
-];
+const ME = "meridius";
+const MAX_PARTY = 3;
+type Member = { name: string };
+const START_PARTY: Member[] = [{ name: ME }, { name: "Mira" }];
 const FRIENDS = [
   { name: "Kestrel", status: "In queue · Rush", tone: "ready" as const },
   { name: "Juno", status: "Online", tone: "online" as const },
@@ -50,6 +91,29 @@ const FRIENDS = [
   { name: "Ren", status: "Online", tone: "online" as const },
 ];
 const OFFLINE = ["Aster", "Bo", "Quill"];
+type ChatLine = {
+  time?: string;
+  name?: string;
+  text: string;
+  party?: boolean;
+  system?: boolean;
+};
+const CHAT: Record<"party" | "global", ChatLine[]> = {
+  party: [
+    { system: true, text: "Mira joined the party" },
+    { time: "16:24", name: "Mira", text: "rush or aim first?", party: true },
+    { time: "16:25", name: "meridius", text: "rush, need 1 more", party: true },
+    { time: "16:25", name: "Mira", text: "inviting kestrel", party: true },
+    { system: true, text: "meridius changed modes to 3v3 Rush" },
+  ],
+  global: [
+    { time: "16:26", name: "kestrel", text: "anyone for rush" },
+    { time: "16:27", name: "vanta", text: "gg that last round was close" },
+    { time: "16:29", name: "oxbow", text: "aim_redline is so good" },
+    { time: "16:31", name: "kestrel", text: "queue times fine tonight" },
+    { time: "16:32", name: "vanta", text: "2v2 duo? need one" },
+  ],
+};
 const TRUST = [
   { value: "new", label: "Any" },
   { value: "verified", label: "Verified" },
@@ -61,8 +125,44 @@ export function PlayMockup() {
   const [selected, setSelected] = useState<Mode[]>(["rush3v3"]);
   const [trust, setTrust] = useState<(typeof TRUST)[number]["value"]>("new");
   const [queuedAt, setQueuedAt] = useState<number | null>(null);
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [party, setParty] = useState<Member[]>(START_PARTY);
+  const [leader, setLeader] = useState(ME);
+  // Which party popover is open: "invite" or a member's name
+  const [menu, setMenu] = useState<string | null>(null);
+  const partyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const click = (e: MouseEvent) => !partyRef.current?.contains(e.target as Node) && setMenu(null);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
+    document.addEventListener("mousedown", click);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", click);
+      document.removeEventListener("keydown", key);
+    };
+  }, [menu]);
+  const PARTY = party;
+  const iLead = leader === ME;
+  // Others first, you always on the far right
+  const ordered = [...party.filter((m) => m.name !== ME), ...party.filter((m) => m.name === ME)];
+  const kick = (name: string) => {
+    setParty((p) => p.filter((m) => m.name !== name));
+    setMenu(null);
+  };
+  const promote = (name: string) => {
+    setLeader(name);
+    setMenu(null);
+  };
+  const leave = () => {
+    setParty([{ name: ME }]);
+    setLeader(ME);
+    setMenu(null);
+  };
+  const invite = (name: string) => {
+    if (party.length < MAX_PARTY && !party.some((m) => m.name === name)) setParty((p) => [...p, { name }]);
+  };
   const [rail, setRail] = useState<"friends" | "chat">("friends");
+  const [channel, setChannel] = useState<"party" | "global">("party");
   const now = useTicker(queuedAt !== null);
   useBackdrop(selected);
 
@@ -80,71 +180,110 @@ export function PlayMockup() {
         {/* 5. Tabs replace the title band. 3. Party slots sit on the right of the same row */}
         <div className={styles.topRow}>
           <nav className={styles.tabs} aria-label="Play">
-            {(["ranked", "cups", "test"] as const).map((t) => (
+            {(["ranked", "cups", "leaderboard", "test"] as const).map((t) => (
               <button key={t} type="button" className={styles.tab} aria-current={tab === t ? "page" : undefined} onClick={() => setTab(t)}>
-                {t === "ranked" ? "Ranked" : t === "cups" ? "Cups" : "Test"}
+                {TAB_NAMES[t]}
               </button>
             ))}
           </nav>
 
-          <div className={styles.party} aria-label="Party">
-            {PARTY.map((p) => (
-              <span key={p.name} className={styles.slot} title={p.leader ? `${p.name}, leader` : p.name}>
-                <Avatar name={p.name} size="lg" status="online" />
-                {p.leader && <span className={styles.crown} aria-label="Leader" />}
-              </span>
-            ))}
-            <span className={styles.inviteWrap}>
-              <button type="button" className={cx(styles.slot, styles.slotEmpty)} aria-label="Invite to party" aria-expanded={inviteOpen} onClick={() => setInviteOpen((o) => !o)}>
-                +
-              </button>
-              {inviteOpen && (
-                <span className={styles.popover} role="dialog" aria-label="Invite">
-                  <strong className={styles.popTitle}>Invite to party</strong>
-                  <span className={cx(styles.link, "mono")}>rushsite.gg/invite/k3v9-q2</span>
-                  <span className={styles.popRow}>
-                    <button type="button" className={styles.smallBtn}>Copy link</button>
-                    <button type="button" className={styles.smallBtnGhost}>New link</button>
+          <div ref={partyRef} className={styles.party} aria-label="Party">
+            {party.length < MAX_PARTY && (
+              <span className={styles.slotWrap}>
+                <button
+                  type="button"
+                  className={cx(styles.slot, styles.slotEmpty)}
+                  aria-label="Invite to party"
+                  aria-expanded={menu === "invite"}
+                  onClick={() => setMenu((m) => (m === "invite" ? null : "invite"))}
+                >
+                  +
+                </button>
+                {menu === "invite" && (
+                  <span className={styles.popover} role="dialog" aria-label="Invite">
+                    <strong className={styles.popTitle}>Invite to party</strong>
+                    <span className={cx(styles.link, "mono")}>rushsite.gg/invite/k3v9-q2</span>
+                    <span className={styles.popRow}>
+                      <button type="button" className={styles.smallBtn}>
+                        Copy link
+                      </button>
+                      <button type="button" className={styles.smallBtnGhost}>
+                        New link
+                      </button>
+                    </span>
+                    <span className="muted">Or pick a friend from the list on the right.</span>
                   </span>
-                  <span className="muted">Or pick a friend from the list on the right.</span>
+                )}
+              </span>
+            )}
+            {ordered.map((p) => {
+              const me = p.name === ME;
+              const isLeader = p.name === leader;
+              return (
+                <span key={p.name} className={styles.slotWrap}>
+                  <button
+                    type="button"
+                    className={cx(styles.slot, me && styles.slotMe)}
+                    aria-label={`${me ? "You" : p.name}${isLeader ? ", leader" : ""}`}
+                    aria-expanded={menu === p.name}
+                    aria-haspopup="menu"
+                    onClick={() => setMenu((m) => (m === p.name ? null : p.name))}
+                  >
+                    <Avatar name={p.name} size="lg" status="online" />
+                    {isLeader && <span className={styles.crown} aria-hidden="true" />}
+                  </button>
+                  {menu === p.name && (
+                    <span className={cx(styles.popover, styles.menu)} role="menu" aria-label={p.name}>
+                      <span className={styles.menuHead}>
+                        <strong>{p.name}</strong>
+                        <span className="muted">{isLeader ? "Party leader" : "Member"}</span>
+                      </span>
+                      <button type="button" role="menuitem" className={styles.menuItem} onClick={() => setMenu(null)}>
+                        View profile
+                      </button>
+                      {!me && iLead && (
+                        <>
+                          <button type="button" role="menuitem" className={styles.menuItem} onClick={() => promote(p.name)}>
+                            Make leader
+                          </button>
+                          <button type="button" role="menuitem" className={cx(styles.menuItem, styles.menuDanger)} onClick={() => kick(p.name)}>
+                            Kick from party
+                          </button>
+                        </>
+                      )}
+                      {me && party.length > 1 && (
+                        <button type="button" role="menuitem" className={cx(styles.menuItem, styles.menuDanger)} onClick={leave}>
+                          Leave party
+                        </button>
+                      )}
+                      {!me && !iLead && <span className={styles.menuNote}>Only the leader can promote or kick.</span>}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
+              );
+            })}
           </div>
         </div>
 
         <div className={styles.main}>
           <div className={styles.center}>
             {/* 6. Get Verified shrinks to one line */}
-            <p className={cx("glass", styles.notice)}>
-              <span className={styles.noticeTag}>Get Verified</span>
-              <span>Play 3 more clean matches to enter cups.</span>
-              <span className={styles.progress} aria-label="2 of 5">
-                {Array.from({ length: 5 }, (_, i) => (
-                  <span key={i} data-on={i < 2 || undefined} />
-                ))}
-              </span>
-            </p>
+            {tab !== "leaderboard" && (
+              <p className={cx("glass", styles.notice)}>
+                <span className={styles.noticeTag}>Get Verified</span>
+                <span>Play 3 more clean matches to enter cups.</span>
+                <span className={styles.progress} aria-label="2 of 5">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <span key={i} data-on={i < 2 || undefined} />
+                  ))}
+                </span>
+              </p>
+            )}
 
             {tab === "cups" ? (
-              <ul className={styles.tiles}>
-                {CUPS.map((c) => (
-                  <li key={c.name}>
-                    <div className={styles.tile}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={c.art} alt="" className={styles.art} />
-                      <span className={styles.shade} />
-                      <span className={styles.tileTop}>
-                        <span className={styles.chip}>{c.when}</span>
-                      </span>
-                      <span className={styles.tileBottom}>
-                        <span className={styles.tileName}>{c.name}</span>
-                        <span className={cx(styles.tileMeta, "mono")}>{c.entries} signed up</span>
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <CupsTab verified={false} />
+            ) : tab === "leaderboard" ? (
+              <LeaderboardTab />
             ) : (
               /* 2. Big picture tiles. 7. Queue counts on the art */
               <ul className={styles.tiles}>
@@ -216,39 +355,41 @@ export function PlayMockup() {
             )}
 
             {/* 6. Stats become a slim strip */}
-            <dl className={cx("glass", styles.stats)}>
-              <div>
-                <dt>Win rate</dt>
-                <dd className="mono">58%</dd>
-              </div>
-              <div>
-                <dt>Headshot</dt>
-                <dd className="mono">41%</dd>
-              </div>
-              <div>
-                <dt>K/D</dt>
-                <dd className="mono">1.18</dd>
-              </div>
-              <div>
-                <dt>Matches</dt>
-                <dd className="mono">86</dd>
-              </div>
-              <div>
-                <dt>Last 5</dt>
-                <dd>
-                  <FormDots
-                    label="Last 5"
-                    results={[
-                      { id: "1", result: "win" },
-                      { id: "2", result: "win" },
-                      { id: "3", result: "loss" },
-                      { id: "4", result: "win" },
-                      { id: "5", result: "loss" },
-                    ]}
-                  />
-                </dd>
-              </div>
-            </dl>
+            {(tab === "ranked" || tab === "test") && (
+              <dl className={cx("glass", styles.stats)}>
+                <div>
+                  <dt>Win rate</dt>
+                  <dd className="mono">58%</dd>
+                </div>
+                <div>
+                  <dt>Headshot</dt>
+                  <dd className="mono">41%</dd>
+                </div>
+                <div>
+                  <dt>K/D</dt>
+                  <dd className="mono">1.18</dd>
+                </div>
+                <div>
+                  <dt>Matches</dt>
+                  <dd className="mono">86</dd>
+                </div>
+                <div>
+                  <dt>Last 5</dt>
+                  <dd>
+                    <FormDots
+                      label="Last 5"
+                      results={[
+                        { id: "1", result: "win" },
+                        { id: "2", result: "win" },
+                        { id: "3", result: "loss" },
+                        { id: "4", result: "win" },
+                        { id: "5", result: "loss" },
+                      ]}
+                    />
+                  </dd>
+                </div>
+              </dl>
+            )}
           </div>
 
           {/* 4. Friends and chat share one right rail */}
@@ -270,7 +411,7 @@ export function PlayMockup() {
                       <span>{f.name}</span>
                       <span className={styles.friendStatus}>{f.status}</span>
                     </span>
-                    <button type="button" className={styles.smallBtnGhost} aria-label={`Invite ${f.name}`}>
+                    <button type="button" className={styles.smallBtnGhost} aria-label={`Invite ${f.name}`} onClick={() => invite(f.name)}>
                       Invite
                     </button>
                   </li>
@@ -285,13 +426,40 @@ export function PlayMockup() {
               </ul>
             ) : (
               <div className={styles.chat}>
-                <p>
-                  <strong>Kestrel</strong> anyone for rush?
-                </p>
-                <p>
-                  <strong>Juno</strong> in 5
-                </p>
-                <p className="muted">The chat sidebar would move in here.</p>
+                <div className={styles.channels} role="tablist" aria-label="Chat channel">
+                  {(["party", "global"] as const).map((c) => (
+                    <button key={c} type="button" role="tab" aria-selected={channel === c} onClick={() => setChannel(c)}>
+                      {c === "party" ? "Party" : "Global"}
+                    </button>
+                  ))}
+                </div>
+                <ol className={styles.messages}>
+                  {CHAT[channel].map((m, i) =>
+                    m.system ? (
+                      <li key={i} className={styles.system}>
+                        {m.text}
+                      </li>
+                    ) : (
+                      <li key={i} className={styles.message}>
+                        <span className={cx(styles.time, "mono")}>{m.time}</span>
+                        <span>
+                          <span className={styles.author} data-party={m.party || undefined}>
+                            {m.name}
+                          </span>{" "}
+                          {m.text}
+                        </span>
+                      </li>
+                    ),
+                  )}
+                </ol>
+                <form className={styles.compose} onSubmit={(e) => e.preventDefault()}>
+                  <input className={styles.input} placeholder={channel === "party" ? "Message your party" : "Message everyone"} aria-label="Message" />
+                  <button type="submit" className={styles.send} aria-label="Send">
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                      <path d="M2 8h10M8 3.5 12.5 8 8 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </form>
               </div>
             )}
           </aside>
@@ -306,7 +474,16 @@ export function PlayMockup() {
               <span className={styles.dockLabel}>{queued ? "Searching" : "Selected"}</span>
               <span className={styles.dockValue}>{names.length ? names.join(" + ") : "Pick a mode"}</span>
             </span>
-            <SegmentedControl label="Opponents" value={trust} onChange={setTrust} disabled={queued} options={TRUST.map((o) => ({ ...o, disabled: o.value === "trusted" }))} />
+            <SegmentedControl
+              label="Opponents"
+              value={trust}
+              onChange={setTrust}
+              disabled={queued}
+              options={TRUST.map((o) => ({
+                ...o,
+                disabled: o.value === "trusted",
+              }))}
+            />
           </div>
           {queued ? (
             <div className={styles.searching}>
