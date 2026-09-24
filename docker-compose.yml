@@ -31,6 +31,12 @@ x-api-env: &api-env
   S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   RUSH1V1_TEST_QUEUE: ${RUSH1V1_TEST_QUEUE:-false}
+  # DatHost surge, off while DATHOST_EMAIL is empty
+  DATHOST_EMAIL: ${DATHOST_EMAIL:-}
+  DATHOST_PASSWORD: ${DATHOST_PASSWORD:-}
+  DATHOST_TEMPLATE_SERVER_ID: ${DATHOST_TEMPLATE_SERVER_ID:-}
+  DATHOST_LOCATION: ${DATHOST_LOCATION:-dusseldorf}
+  SURGE_WAIT_SEC: ${SURGE_WAIT_SEC:-20}
 
 services:
   postgres:
@@ -133,6 +139,8 @@ services:
         # Baked into the client bundle at build time.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-support@duelrush.site}
     image: rushsite/web:${IMAGE_TAG:-dev}
     restart: unless-stopped
     environment:
