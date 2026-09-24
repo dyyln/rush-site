@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TEAM_NAME_MAX, TeamNameSchema, trustAtLeast } from "@rushsite/shared";
+import { DockButton, DockLink } from "@/components/layout/Dock";
+import { useDockAction, type DockAction } from "@/components/layout/dockStore";
+import { BadgeEmblem } from "@/components/profile/BadgeEmblem";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
+import { bracketPath } from "@/components/tournaments/bracketPath";
 import { EntrantList } from "@/components/tournaments/EntrantList";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import { LocalTime } from "@/components/tournaments/LocalTime";
@@ -12,17 +17,16 @@ import { WithdrawDialog } from "@/components/tournaments/WithdrawDialog";
 import { registeredToast } from "@/components/tournaments/toasts";
 import { useLiveScores } from "@/components/tournaments/useLiveScores";
 import { Badge } from "@/components/ui/Badge";
-import { BracketView, entryName } from "@/components/ui/BracketView";
-import { Button } from "@/components/ui/Button";
+import { BracketView, entryName, roundName } from "@/components/ui/BracketView";
 import { Input } from "@/components/ui/Input";
-import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { CountdownRing } from "@/components/ui/CountdownRing";
 import { cx } from "@/components/ui/cx";
+import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
 import { describeError } from "@/lib/errors";
-import { MODE_COPY } from "@/lib/modes";
+import { MODE_ART, MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { TRUST_NAMES, trustProgressLine } from "@/lib/trust";
 import { STATUS_LABEL, formatLabel } from "@/lib/tournaments";
@@ -140,26 +144,29 @@ function useLiveBracket(id: string, detail: TournamentDetail | undefined, reload
     hasLive.current = !!current?.matches.some((m) => m.status === "live");
   }, [current]);
 
-  const refresh = useCallback(async (full = false) => {
-    if (inFlight.current) {
-      again.current = true;
-      return;
-    }
-    inFlight.current = true;
-    try {
-      do {
-        again.current = false;
-        const next = await api.tournaments.bracket(id, full ? undefined : version.current).catch(() => null);
-        const newer = version.current === undefined || (next && (next.version > version.current || (full && next.version === version.current)));
-        if (next && next.tournamentId === id && newer) {
-          version.current = next.version;
-          setLive(next);
-        }
-      } while (again.current);
-    } finally {
-      inFlight.current = false;
-    }
-  }, [id]);
+  const refresh = useCallback(
+    async (full = false) => {
+      if (inFlight.current) {
+        again.current = true;
+        return;
+      }
+      inFlight.current = true;
+      try {
+        do {
+          again.current = false;
+          const next = await api.tournaments.bracket(id, full ? undefined : version.current).catch(() => null);
+          const newer = version.current === undefined || (next && (next.version > version.current || (full && next.version === version.current)));
+          if (next && next.tournamentId === id && newer) {
+            version.current = next.version;
+            setLive(next);
+          }
+        } while (again.current);
+      } finally {
+        inFlight.current = false;
+      }
+    },
+    [id],
+  );
 
   useVisibleInterval(() => void refresh(hasLive.current), BRACKET_POLL_MS, !loading && !signedIn);
 
@@ -223,6 +230,10 @@ export function TournamentDetailView({ id }: { id: string }) {
   return <Detail t={t} reload={reload} />;
 }
 
+type CupTab = "bracket" | "entrants" | "info";
+
+const startFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
 function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const { user } = useSession();
   const toast = useToast();
@@ -236,9 +247,19 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const [teamName, setTeamName] = useState("");
   const [teamNameError, setTeamNameError] = useState<string>();
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
-  const bracket = useLiveScores(t.bracket, !!user);
-  // Entry hovered in the entrant list, whose route the bracket traces
-  const [traced, setTraced] = useState<string | null>(null);
+  const bracket = useLiveScores(t.bracket, !!user) ?? t.bracket;
+
+  const params = useSearchParams();
+  const tabs: PageTab[] = [
+    ...(bracket ? [{ key: "bracket", label: "Bracket", href: "?tab=bracket" }] : []),
+    { key: "entrants", label: bracket ? "Standings" : "Entrants", href: "?tab=entrants", count: t.entrantCount },
+    { key: "info", label: "Info", href: "?tab=info" },
+  ];
+  const raw = params.get("tab");
+  const tab = (tabs.some((x) => x.key === raw) ? raw : bracket ? "bracket" : "entrants") as CupTab;
+  // An entrant picked on the Standings tab, whose route the bracket traces
+  const traced = params.get("trace");
+  const tracedEntry = traced ? t.entries.find((e) => e.id === traced) : undefined;
 
   async function toggleEntry() {
     let name: string | undefined;
@@ -267,106 +288,110 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
     }
   }
 
+  // Signed out viewers get the dock's own Sign in
+  useDockAction(
+    user
+      ? cupDock({
+          t,
+          bracket,
+          entered,
+          eligible,
+          full,
+          busy,
+          trustLine: user.trust ? trustProgressLine(user.trust) : null,
+          onEnter: toggleEntry,
+          onWithdraw: () => setConfirmWithdraw(true),
+        })
+      : null,
+  );
+
   return (
-    <div className="container page">
-      <nav aria-label="Breadcrumb">
-        <Link href="/tournaments" className={styles.back}>
-          Cups
-        </Link>
-      </nav>
-      <header className="page-header">
-        <div>
-          <div className="row">
-            {t.status === "running" ? <LiveBadge /> : <Badge tone={status.tone}>{status.label}</Badge>}
-            <Badge>{t.cadence}</Badge>
-            <Badge tone="info">{t.minTrust} required</Badge>
-          </div>
-          <h1 className={styles.title}>{t.name}</h1>
-          <p>
-            {MODE_COPY[t.mode].label}. {formatLabel(t)}.
-          </p>
-          <div className={styles.metaRow}>
-            <dl className={styles.facts}>
-              <div>
-                <dt>{t.status === "open" ? "Starts" : "Started"}</dt>
-                <dd>
-                  <LocalTime iso={t.startsAt} />
-                </dd>
-              </div>
-              <div>
-                <dt>Entrants</dt>
-                <dd>
-                  {t.entrantCount}/{t.maxEntrants}
-                </dd>
-              </div>
-              <div>
-                <dt>Prize</dt>
-                <dd>Profile badges</dd>
-              </div>
-              {winner && (
+    <div className={cx("container", styles.page)}>
+      <Link href="/tournaments" className={styles.back}>
+        Cups
+      </Link>
+      <header className={styles.hero}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className={styles.heroArt} src={MODE_ART[t.mode]} alt="" />
+        <div className={styles.heroShade} />
+        <div className={styles.heroMain}>
+          <div className={styles.heroText}>
+            <div className={styles.chips}>
+              {t.status === "running" ? <LiveBadge /> : <Badge tone={status.tone}>{status.label}</Badge>}
+              <Badge tone="info">{t.minTrust} required</Badge>
+            </div>
+            <p className={styles.kicker}>
+              {t.cadence} cup · {MODE_COPY[t.mode].label}
+            </p>
+            <h1 className={styles.name}>{t.name}</h1>
+            <div className={styles.metaRow}>
+              <dl className={styles.facts}>
                 <div>
-                  <dt>Champion</dt>
-                  <dd>{entryName(winner)}</dd>
+                  <dt>{t.status === "open" ? "Starts" : "Started"}</dt>
+                  <dd>
+                    <LocalTime iso={t.startsAt} />
+                  </dd>
                 </div>
+                <div>
+                  <dt>Entrants</dt>
+                  <dd>
+                    {t.entrantCount}/{t.maxEntrants}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Format</dt>
+                  <dd>{formatLabel(t)}</dd>
+                </div>
+              </dl>
+              {t.entries.length > 0 && (
+                <Link href="?tab=entrants" scroll={false} replace className={styles.stackLink}>
+                  <AvatarStack
+                    people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: captainAvatar(e) }))}
+                    total={t.entrantCount}
+                    size="md"
+                  />
+                  <span>See all entrants</span>
+                </Link>
               )}
-            </dl>
-            {t.entries.length > 0 && (
-              <a href="#entrants-heading" className={styles.stackLink}>
-                <AvatarStack
-                  people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: captainAvatar(e) }))}
-                  total={t.entrantCount}
-                  size="md"
+            </div>
+          </div>
+          <div className={styles.heroSide}>
+            {t.status === "open" && <StartCountdown startsAt={t.startsAt} onStart={reload} />}
+            {winner && (
+              <div className={styles.champion}>
+                <BadgeEmblem kind="cup_champion" cadence={t.cadence} size={64} />
+                <div>
+                  <p className={styles.championLabel}>Champion</p>
+                  <p className={styles.championName}>{entryName(winner)}</p>
+                </div>
+              </div>
+            )}
+            {t.status === "open" && user && !eligible && (
+              <p className={styles.note}>
+                You need a {TRUST_NAMES[t.minTrust]} account to enter. {user.trust ? `You are ${trustProgressLine(user.trust)}. ` : null}
+                <Link href="/play">Play ladder matches to get there</Link>
+              </p>
+            )}
+            {t.status === "open" && !user && <VerifiedNote minTrust={t.minTrust} />}
+            {t.status === "open" && user && teamMode && eligible && !entered && !full && (
+              <div className={styles.teamName}>
+                <Input
+                  label="Team name (optional)"
+                  value={teamName}
+                  maxLength={TEAM_NAME_MAX}
+                  placeholder="3 to 24 characters"
+                  error={teamNameError}
+                  onChange={(e) => {
+                    setTeamName(e.target.value);
+                    setTeamNameError(undefined);
+                  }}
                 />
-                <span>See all entrants</span>
-              </a>
+                <p className={styles.note}>The leader enters for the party, with Enter cup in the bar below.</p>
+              </div>
             )}
           </div>
         </div>
-        {t.status === "open" && (
-          <div className={styles.aside}>
-            <StartCountdown startsAt={t.startsAt} onStart={reload} />
-            {user ? (
-              <div className={styles.cta}>
-                {teamMode && eligible && !entered && !full && (
-                  <Input
-                    label="Team name (optional)"
-                    value={teamName}
-                    maxLength={TEAM_NAME_MAX}
-                    placeholder="3 to 24 characters"
-                    error={teamNameError}
-                    onChange={(e) => {
-                      setTeamName(e.target.value);
-                      setTeamNameError(undefined);
-                    }}
-                  />
-                )}
-                <Button
-                  size="lg"
-                  variant={entered ? "danger" : "primary"}
-                  onClick={entered ? () => setConfirmWithdraw(true) : toggleEntry}
-                  loading={busy && !confirmWithdraw}
-                  disabled={!eligible || (!entered && full)}
-                  aria-describedby={!eligible ? "enter-why" : undefined}
-                >
-                  {entered ? "Withdraw" : !eligible ? `Needs ${TRUST_NAMES[t.minTrust]}` : full ? "Full" : "Enter cup"}
-                </Button>
-                {!eligible && (
-                  <p className={styles.note} id="enter-why">
-                    You need a {TRUST_NAMES[t.minTrust]} account to enter.{" "}
-                    {user.trust ? `You are ${trustProgressLine(user.trust)}. ` : null}
-                    <Link href="/play">Play ladder matches to get there</Link>
-                  </p>
-                )}
-                {eligible && t.mode !== "aim1v1" && !entered && <p className={styles.note}>Leader enters the party.</p>}
-              </div>
-            ) : (
-              <div className={styles.cta}>
-                <SignInLink size="lg">Sign in to enter</SignInLink>
-                <VerifiedNote minTrust={t.minTrust} />
-              </div>
-            )}
-          </div>
-        )}
+        <PageTabs label="Cup" items={tabs} current={tab} className={styles.heroTabs} />
       </header>
       <WithdrawDialog
         open={confirmWithdraw}
@@ -379,28 +404,167 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
         onClose={() => setConfirmWithdraw(false)}
       />
 
-      {t.bracket && (
+      {t.status === "cancelled" && (
+        <Card>
+          <p className="muted">This cup was cancelled.</p>
+        </Card>
+      )}
+
+      {tab === "bracket" && bracket && (
         <section aria-labelledby="bracket-heading" className="stack">
-          <h2 id="bracket-heading">Bracket</h2>
-          <BracketView bracket={bracket ?? t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} mode={t.mode} cadence={t.cadence} traceEntryId={traced} />
+          <div className={styles.sectionHead}>
+            {/* The tab above already names the section */}
+            <h2 id="bracket-heading" className="visually-hidden">
+              Bracket
+            </h2>
+            {tracedEntry && (
+              <p className={cx("glass", styles.tracing)}>
+                <span>
+                  Route of <strong>{entryName(tracedEntry)}</strong>
+                </span>
+                <Link href="?tab=bracket" scroll={false} replace className={styles.clear}>
+                  Clear
+                </Link>
+              </p>
+            )}
+          </div>
+          <BracketView bracket={bracket} entries={t.entries} highlightEntryId={t.myEntryId} mode={t.mode} cadence={t.cadence} traceEntryId={tracedEntry?.id} />
         </section>
       )}
-      <section aria-labelledby="entrants-heading" className="stack">
-        <h2 id="entrants-heading">Entrants</h2>
-        {t.status === "cancelled" && <p className="muted">This cup was cancelled.</p>}
-        {t.entries.length === 0 ? (
-          <p className="muted">No sign ups yet.</p>
-        ) : (
-          <EntrantList
-            entries={t.entries}
-            bracket={bracket ?? t.bracket}
-            maxEntrants={t.maxEntrants}
-            signups={t.status === "open"}
-            myEntryId={t.myEntryId}
-            onTrace={setTraced}
-          />
-        )}
-      </section>
+
+      {tab === "entrants" && (
+        <section aria-labelledby="entrants-heading" className="stack">
+          <h2 id="entrants-heading" className="visually-hidden">
+            {bracket ? "Standings" : "Entrants"}
+          </h2>
+          {t.entries.length === 0 && t.status !== "open" ? (
+            <Card>
+              <p className="muted">No sign ups.</p>
+            </Card>
+          ) : (
+            <EntrantList
+              entries={t.entries}
+              bracket={bracket}
+              maxEntrants={t.maxEntrants}
+              signups={t.status === "open"}
+              myEntryId={t.myEntryId}
+              routeHref={bracket ? (id) => `?tab=bracket&trace=${encodeURIComponent(id)}` : undefined}
+            />
+          )}
+        </section>
+      )}
+
+      {tab === "info" && <CupInfo t={t} />}
     </div>
   );
+}
+
+const PRIZES = [
+  ["cup_champion", "Champion"],
+  ["cup_runner_up", "Runner-up"],
+  ["cup_semifinalist", "Semifinalists"],
+] as const;
+
+// Format, rules and prizes
+function CupInfo({ t }: { t: TournamentDetail }) {
+  const { default: d, semis, final } = t.format.bestOf;
+  return (
+    <div className={styles.info}>
+      <Card title="Format">
+        <ul className={styles.points}>
+          <li>Single elimination, up to {t.maxEntrants} entrants</li>
+          <li>{d === semis ? `Bo${d} until the final, Bo${final} final` : `Bo${d} until the semifinals, Bo${semis} semifinals, Bo${final} final`}</li>
+          <li>{MODE_COPY[t.mode].label}. Ladder rating in the mode seeds the bracket</li>
+        </ul>
+      </Card>
+      <Card title="Rules">
+        <ul className={styles.points}>
+          <li>A {TRUST_NAMES[t.minTrust]} account is needed to enter</li>
+          <li>No check-in. The bracket is built from the sign ups at the start time</li>
+          <li>Entrants who do not show up forfeit their first match</li>
+          <li>Every match records a demo for review</li>
+        </ul>
+      </Card>
+      <Card title="Prizes">
+        <ul className={styles.prizes}>
+          {PRIZES.map(([kind, label]) => (
+            <li key={kind}>
+              <BadgeEmblem kind={kind} cadence={t.cadence} size={48} />
+              <span>
+                <strong>{label}</strong>
+                <span className="muted"> · trophy badge on the profile</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+type DockInput = {
+  t: TournamentDetail;
+  bracket: TournamentDetail["bracket"];
+  entered: boolean;
+  eligible: boolean;
+  full: boolean;
+  busy: boolean;
+  trustLine: string | null;
+  onEnter: () => void;
+  onWithdraw: () => void;
+};
+
+// The cup's one action in the dock: enter or withdraw during sign ups, the viewer's match once it runs
+function cupDock({ t, bracket, entered, eligible, full, busy, trustLine, onEnter, onWithdraw }: DockInput): DockAction | null {
+  const starts = Date.parse(t.startsAt);
+  const when = Number.isNaN(starts) ? "" : `Starts ${startFmt.format(starts)}`;
+  if (t.status === "open") {
+    if (entered) {
+      return {
+        label: "You're in",
+        value: when,
+        action: (
+          <DockButton tone="quiet" onClick={onWithdraw} disabled={busy}>
+            Withdraw
+          </DockButton>
+        ),
+      };
+    }
+    if (!eligible) {
+      return {
+        label: `${TRUST_NAMES[t.minTrust]} required`,
+        value: trustLine ? `You are ${trustLine}` : "Play ladder matches to get there",
+        action: <DockButton disabled>Enter cup</DockButton>,
+      };
+    }
+    return {
+      label: full ? "Cup full" : "Sign ups open",
+      value: `${t.entrantCount} of ${t.maxEntrants} in${when ? ` · ${when}` : ""}`,
+      action: (
+        <DockButton onClick={onEnter} disabled={busy || full}>
+          {busy ? "Entering" : full ? "Full" : "Enter cup"}
+        </DockButton>
+      ),
+    };
+  }
+  if (t.status === "running" && bracket && t.myEntryId) {
+    const path = bracketPath(bracket, t.myEntryId);
+    const next = path?.nextId ? bracket.matches.find((m) => m.id === path.nextId) : undefined;
+    if (!next) return null;
+    const round = roundName(next.round, bracket.rounds);
+    const room = next.room ?? next.liveMatchId;
+    if (room) {
+      return {
+        label: next.status === "live" ? `${round} · live` : `${round} · ready`,
+        value: "Your match",
+        action: (
+          <DockLink href={`/matches/${encodeURIComponent(room)}`} tone="win">
+            {next.status === "live" ? "Open match" : "Join match"}
+          </DockLink>
+        ),
+      };
+    }
+    return { label: `Next: ${round.toLowerCase()}`, value: "Waiting for your opponent", action: null };
+  }
+  return null;
 }

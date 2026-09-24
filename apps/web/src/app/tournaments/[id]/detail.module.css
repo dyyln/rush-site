@@ -1,30 +1,113 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-block: var(--space-2) var(--space-7);
+}
 .back {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   min-height: var(--target-min);
+  margin-bottom: calc(var(--space-3) * -1);
+  font-family: var(--font-display);
   font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text);
 }
-.title {
-  font-size: var(--text-3xl);
-  margin-top: var(--space-3);
+
+/* Hero: the cup over its mode's art, sub-tabs on its bottom edge. Same build as the profile hero */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-5) 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: var(--radius-sm);
+  isolation: isolate;
 }
-.cta {
+.heroArt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  filter: saturate(0.85) brightness(0.8);
+}
+/* Text sits on the art only over this scrim */
+.heroShade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgb(8 7 12 / 0.9) 0%, rgb(8 7 12 / 0.66) 55%, rgb(8 7 12 / 0.8) 100%);
+}
+.heroMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+.heroText {
+  flex: 1 1 420px;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-width: 280px;
+  min-width: 0;
 }
-.note {
+.chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.kicker {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent-hover);
 }
-/* Start, entrants and prize on one line under the subtitle, with the entrant stack beside them */
+.name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.7);
+}
+.heroSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  max-width: 320px;
+}
+.heroTabs {
+  margin-inline: calc(var(--space-5) * -1);
+  padding-inline: var(--space-5);
+  border-top: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(8 7 12 / 0.45);
+}
+
+/* Start, entrants and format on one line under the name, with the entrant stack beside them */
 .metaRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-6);
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
 }
 .facts {
   display: flex;
@@ -52,14 +135,46 @@
   min-height: var(--target-min);
   font-size: var(--text-sm);
 }
-
-/* Countdown ring and entry controls share the right side of the header, wrapping under the title on narrow screens */
-.aside {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-4) var(--space-5);
+.note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: right;
 }
+.teamName {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 280px;
+  max-width: 100%;
+}
+.teamName .note {
+  text-align: left;
+}
+
+/* Finished cups: the champion with the trophy they won */
+.champion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.championLabel {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--place-champion);
+}
+.championName {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+/* Countdown ring on the hero's right while sign ups are open */
 .countdown {
   --cup-ring-size: 148px;
 }
@@ -79,7 +194,94 @@
 .ringTimeLong {
   font-size: calc(var(--cup-ring-size) * 0.14);
 }
-@media (max-width: 480px) {
+
+/* Section headings sit on the scene, so they are full strength */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tracing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0 0 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  font-size: var(--text-sm);
+}
+.clear {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  padding-inline: var(--space-3);
+  border-left: 1px solid var(--color-border);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Info tab */
+.info {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  align-items: start;
+}
+.points {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.prizes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.prizes li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Phones: the hero stacks, the side column goes full width under the name */
+@media (max-width: 640px) {
+  .hero {
+    padding: var(--space-5) var(--space-4) 0;
+  }
+  .heroTabs {
+    margin-inline: calc(var(--space-4) * -1);
+    padding-inline: var(--space-4);
+  }
+  .heroSide {
+    align-items: flex-start;
+    max-width: none;
+    width: 100%;
+  }
+  .note {
+    text-align: left;
+  }
   .countdown {
     --cup-ring-size: 124px;
   }

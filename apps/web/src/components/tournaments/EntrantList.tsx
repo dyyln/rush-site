@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
 import { bracketPath } from "@/components/tournaments/bracketPath";
 import { Avatar } from "@/components/ui/Avatar";
@@ -47,11 +48,11 @@ type Props = {
   // Sign ups still open: sign up order, join times and the open slots
   signups: boolean;
   myEntryId?: string | null;
-  // Hovered or focused entry, whose route the bracket traces
-  onTrace?: (entryId: string | null) => void;
+  // Where a row leads: the bracket with that entry's route traced. Rows are not links without it
+  routeHref?: (entryId: string) => string;
 };
 
-export function EntrantList({ entries, bracket, maxEntrants, signups, myEntryId, onTrace }: Props) {
+export function EntrantList({ entries, bracket, maxEntrants, signups, myEntryId, routeHref }: Props) {
   const rows: Row[] = bracket
     ? standings(bracket, entries)
     : [...entries]
@@ -66,17 +67,9 @@ export function EntrantList({ entries, bracket, maxEntrants, signups, myEntryId,
         const players = entryPlayers(e);
         const name = entryName(e);
         const joined = Date.parse(e.registeredAt);
-        const trace = bracket && onTrace ? () => onTrace(e.id) : undefined;
+        const href = routeHref?.(e.id);
         return (
-          <li
-            key={e.id}
-            className={cx("glass", styles.row, e.id === myEntryId && styles.me)}
-            data-standing={standing}
-            onMouseEnter={trace}
-            onMouseLeave={trace && (() => onTrace!(null))}
-            onFocus={trace}
-            onBlur={trace && (() => onTrace!(null))}
-          >
+          <li key={e.id} className={cx("glass", styles.row, href && styles.linked, e.id === myEntryId && styles.me)} data-standing={standing}>
             <span className={cx("mono", styles.num)}>
               {signups || !bracket ? i + 1 : (e.seed ?? "")}
               <span className="visually-hidden">{signups || !bracket ? ". " : e.seed ? `, seed ${e.seed}. ` : ""}</span>
@@ -102,6 +95,12 @@ export function EntrantList({ entries, bracket, maxEntrants, signups, myEntryId,
                 label
               )}
             </span>
+            {/* The whole row opens the bracket on this entry's route. The name stays above it for the team card */}
+            {href && (
+              <Link href={href} scroll={false} replace className={styles.rowLink}>
+                <span className="visually-hidden">Show the route of {name} in the bracket</span>
+              </Link>
+            )}
           </li>
         );
       })}

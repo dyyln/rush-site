@@ -21,9 +21,31 @@
   background: var(--color-surface-1);
   transition: border-color var(--duration-fast) var(--ease);
 }
-.row:hover,
-.row:focus-within {
+/* Linked rows open the bracket on the entry's route. Content sits above the link, the name keeps its team card */
+.linked {
+  position: relative;
+}
+.linked:hover,
+.linked:focus-within {
   border-color: var(--color-border-strong);
+}
+.rowLink {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+}
+.rowLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.linked > :not(.rowLink) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.linked > .trigger {
+  pointer-events: auto;
 }
 .num {
   grid-area: num;
