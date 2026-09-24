@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace RushsiteMatch.Core.Config;
@@ -26,6 +27,10 @@ public sealed class MatchConfig
     // Optional. Word id of the match, such as brave-amber-falcon. The match link uses it over matchId.
     public string? Slug { get; init; }
 
+    // Optional. Rush rooms for slots 1 to 5 from the website veto. A map entry's own rushRooms wins.
+    // Kept as raw JSON so a bad value falls back to Valve's random draw instead of failing the match.
+    public JsonElement? RushRooms { get; init; }
+
     [JsonIgnore]
     public WinCondition ParsedWinCondition { get; internal set; } = null!;
 
@@ -42,6 +47,9 @@ public sealed class MatchConfig
         if (Series is not null && mapNumber >= 1 && mapNumber <= Series.Maps.Count) return Series.Maps[mapNumber - 1];
         return Map;
     }
+
+    // Rush rooms for a 1-based map number, as written in match.json. Null when none were picked.
+    public JsonElement? RushRoomsFor(int mapNumber) => MapAt(mapNumber)?.RushRooms ?? RushRooms;
 
     // Demo upload target for a 1-based map number.
     // The top level demoUpload describes the map the server was launched on.
@@ -111,6 +119,8 @@ public sealed class MapConfig
     public string? MapName { get; init; }
     // Optional. Overrides the plugin's default aim loadout for this map.
     public LoadoutConfig? Loadout { get; init; }
+    // Optional. Rush rooms for slots 1 to 5 on this map. See MatchConfig.RushRooms.
+    public JsonElement? RushRooms { get; init; }
 
     // Console command that loads this map on a running server.
     public string? LoadCommand() =>

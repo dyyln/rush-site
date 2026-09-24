@@ -21,6 +21,18 @@ public sealed record MatchStarted() : MatchEvent("match_started")
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? MapNumber { get; init; }
+
+    // Rush only. The 7 room ids the plugin asked the script for, castles included. Null when the draw is Valve's.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<int>? RushRooms { get; init; }
+}
+
+// Rush only. A round was played in another room than the veto picked, so the modified script did not take.
+// Sent once per map, for the first round that differs.
+public sealed record RushRoomsMismatch(int Round, string Expected, string Detected, IReadOnlyList<int> RushRooms) : MatchEvent("rush_rooms_mismatch")
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MapNumber { get; init; }
 }
 
 public sealed record RoundEnd(int Round, string WinnerTeam, IReadOnlyDictionary<string, int> Score) : MatchEvent("round_end")

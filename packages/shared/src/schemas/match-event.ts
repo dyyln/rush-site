@@ -27,7 +27,22 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("server_ready") }),
   z.object({ type: z.literal("player_connected"), steamId: SteamId64Schema }),
   z.object({ type: z.literal("player_disconnected"), steamId: SteamId64Schema }),
-  z.object({ type: z.literal("match_started"), mapNumber: MapNumberSchema.optional() }),
+  z.object({
+    type: z.literal("match_started"),
+    mapNumber: MapNumberSchema.optional(),
+    // Rush only. The 7 room ids the plugin sent to the modified rush_001 script, castles included
+    rushRooms: z.array(z.number().int()).length(7).optional(),
+  }),
+  // Rush only. A round was played in another room than the veto picked, so the modified script did not take.
+  // Sent once per map. The admin event log shows it
+  z.object({
+    type: z.literal("rush_rooms_mismatch"),
+    round: z.number().int().positive(),
+    expected: z.string(),
+    detected: z.string(),
+    rushRooms: z.array(z.number().int()),
+    mapNumber: MapNumberSchema.optional(),
+  }),
   z.object({
     type: z.literal("round_end"),
     round: z.number().int().nonnegative(),
