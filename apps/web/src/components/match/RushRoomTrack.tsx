@@ -137,7 +137,6 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
   const tTeam = playOf(teams, 0) === "t" ? teams[0] : teams[1];
   const ctTeam = tTeam === teams[0] ? teams[1] : teams[0];
   const defender = (i: number) => (i === 0 ? tTeam : i === LAST_SLOT ? ctTeam : null);
-  // While live, every room between play and a castle is held by that castle's team. The room in play is contested
   // Every room between play and a castle is held by that castle's team. The room in play, and once
   // over the room play ended in, is split between the two. A finished Convoy takes its winner's colour
   const ended = !building && !playing && track.over ? endedIn(track) : null;
@@ -215,7 +214,9 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                 {/* The kind shows in the border (castle colour, dashed start room), so it is only spoken */}
                 <span className="visually-hidden">
                   {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}, slot {slot.index}
-                  {held ? `, held by ${held.label}` : ""}:{" "}
+                  {held ? `, held by ${held.label}` : ""}
+                  {def ? `, defended by ${def.label}` : ""}
+                  {pickText(picks?.find((p) => p.slot === slot.index), teams)}:{" "}
                 </span>
                 <span className={styles.frame}>
                   {slot.room ? <RoomImage room={String(slot.room.id)} /> : <span className={styles.blank} aria-hidden="true" />}
@@ -231,13 +232,6 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                   )}
                 </span>
                 <span className={styles.meta}>
-                  <PickLine pick={picks?.find((p) => p.slot === slot.index)} teams={teams} />
-                  {def && (
-                    <span className={styles.defender} data-side={def.side}>
-                      <TeamMarker side={def.side} />
-                      <span>Defended by {def.label}</span>
-                    </span>
-                  )}
                   {isCurrent && (
                     <span key={`now-${rounds.length}`} className={styles.now}>
                       <span className={styles.pulse} aria-hidden="true" />
@@ -266,10 +260,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                 <span className="visually-hidden">Decider at 7-7: </span>
                 <span className={styles.frame}>
                   <RoomImage room={String(RUSH_ROOMS.decider.id)} />
-                  <span className={styles.name}>
-                    {RUSH_ROOMS.decider.displayName}
-                    <span className={styles.nameNote}>Decider at 7-7</span>
-                  </span>
+                  <span className={styles.name}>{RUSH_ROOMS.decider.displayName}</span>
                 </span>
                 <span className={styles.meta}>
                   {current === "decider" && (
@@ -295,20 +286,13 @@ function pickedFromIds(ids: readonly number[]): RoomSlot[] {
   }));
 }
 
-// How a room got into the match: a team's pick, or the room left over after the bans
-function PickLine({ pick, teams }: { pick: RoomSlot | undefined; teams: readonly [RushTrackTeam, RushTrackTeam] }) {
-  if (!pick) return null;
-  if (pick.source === "leftover") return <span className={styles.pick}>Last room left</span>;
-  if (pick.source !== "pick") return null;
+// How a room got into the match, for screen readers: a team's pick, or the room left over after the bans
+function pickText(pick: RoomSlot | undefined, teams: readonly [RushTrackTeam, RushTrackTeam]): string {
+  if (!pick) return "";
+  if (pick.source === "leftover") return ", last room left";
+  if (pick.source !== "pick") return "";
   // Stored room ids say a room was picked, only the live veto state says by whom
-  if (pick.team === undefined) return <span className={styles.pick}>Picked</span>;
-  const team = teams[pick.team];
-  return (
-    <span className={styles.pick} data-side={team.side}>
-      <TeamMarker side={team.side} />
-      <span>Picked by {team.label}</span>
-    </span>
-  );
+  return pick.team === undefined ? ", picked" : `, picked by ${teams[pick.team].label}`;
 }
 
 // Match page wrapper. mapNumber picks one map of a series, where each map is its own Rush match
