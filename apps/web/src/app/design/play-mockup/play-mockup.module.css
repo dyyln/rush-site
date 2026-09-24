@@ -1,0 +1,659 @@
+/* Mockup of a CS2 style Play screen */
+.page {
+  position: relative;
+}
+/* Room at the end of the page for the fixed dock, so the footer stays clear of it */
+:global(body):has(.dock) {
+  padding-bottom: 84px;
+}
+.wrap {
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-6);
+}
+.mockNote {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  opacity: 0.7;
+}
+
+/* Tabs and party */
+.topRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.tabs {
+  display: flex;
+  gap: var(--space-5);
+}
+.tab {
+  min-height: 44px;
+  padding: 0 0 var(--space-2);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--color-text);
+  opacity: 0.6;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.6);
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+}
+.tab:hover {
+  opacity: 0.9;
+}
+.tab[aria-current="page"] {
+  opacity: 1;
+  border-bottom-color: var(--color-accent);
+}
+
+.party {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: var(--radius-sm);
+}
+/* The avatar fills its slot, so each slot has one border and a clear gap to the next */
+.slot > span:first-child {
+  width: 100%;
+  height: 100%;
+  font-size: var(--text-md);
+}
+.slotEmpty {
+  border: 1px dashed rgb(255 255 255 / 0.35);
+  background: var(--color-surface-1);
+  backdrop-filter: var(--glass-blur);
+  color: var(--color-text);
+  font-size: var(--text-2xl);
+  font-weight: 300;
+  cursor: pointer;
+}
+.slotEmpty:hover,
+.slotEmpty[aria-expanded="true"] {
+  border-color: var(--color-accent-hover);
+  color: var(--color-accent-hover);
+}
+.crown {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 14px;
+  height: 8px;
+  transform: translateX(-50%);
+  background: var(--credits, #e0c36a);
+  clip-path: polygon(0 100%, 0 20%, 25% 60%, 50% 0, 75% 60%, 100% 20%, 100% 100%);
+}
+.inviteWrap {
+  position: relative;
+}
+.popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 280px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--glass-strong);
+  backdrop-filter: var(--glass-blur);
+  font-size: var(--text-sm);
+}
+.popTitle {
+  font-family: var(--font-display);
+}
+.link {
+  padding: var(--space-2);
+  background: var(--color-surface-3);
+  font-size: var(--text-xs);
+}
+.popRow {
+  display: flex;
+  gap: var(--space-2);
+}
+.smallBtn,
+.smallBtnGhost {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.smallBtn {
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.smallBtnGhost {
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text);
+}
+.smallBtnGhost:hover {
+  border-color: var(--color-accent);
+}
+
+/* Layout */
+.main {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (min-width: 1000px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: start;
+  }
+}
+.center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--card-border);
+  border-left: 3px solid var(--color-info, #7fd1e0);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.noticeTag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  color: var(--color-info, #7fd1e0);
+}
+.progress {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
+.progress > span {
+  width: 18px;
+  height: 4px;
+  background: rgb(255 255 255 / 0.18);
+}
+.progress > span[data-on] {
+  background: var(--color-info, #7fd1e0);
+}
+
+/* Picture tiles */
+.tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+@media (min-width: 700px) {
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.tiles > li {
+  display: flex;
+}
+.tile {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: var(--radius-sm);
+  background: #000;
+  cursor: pointer;
+  isolation: isolate;
+  transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-normal) var(--ease);
+}
+.art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.75) brightness(0.8);
+  transform: scale(1.02);
+  transition: transform 600ms var(--ease), filter var(--duration-normal) var(--ease);
+}
+.shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(8 7 12 / 0.55) 0%, rgb(8 7 12 / 0) 28%, rgb(8 7 12 / 0.2) 50%, rgb(8 7 12 / 0.92) 100%);
+}
+.tile:hover .art {
+  transform: scale(1.07);
+  filter: saturate(1) brightness(0.95);
+}
+.tile:hover {
+  border-color: rgb(255 255 255 / 0.4);
+}
+.tile:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.on,
+.on:hover {
+  border-color: var(--color-accent-hover);
+  box-shadow: inset 0 0 0 2px var(--color-accent), 0 0 32px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+.on .art {
+  filter: saturate(1) brightness(0.95);
+}
+.locked {
+  cursor: default;
+}
+.locked:not(.on) {
+  opacity: 0.45;
+}
+.locked.off {
+  opacity: 0.8;
+}
+.off .art {
+  filter: grayscale(1) brightness(0.6);
+}
+/* A light red wash over the grey art so an unavailable tile reads differently from an unpicked one */
+.off .shade {
+  background:
+    linear-gradient(180deg, rgb(8 7 12 / 0.55) 0%, rgb(8 7 12 / 0) 28%, rgb(8 7 12 / 0.2) 50%, rgb(8 7 12 / 0.92) 100%),
+    color-mix(in srgb, var(--color-loss, #ff7a7a) 22%, transparent);
+}
+.off,
+.off:hover {
+  border-color: color-mix(in srgb, var(--color-loss, #ff7a7a) 45%, transparent);
+}
+/* The lock replaces the tick box */
+.off .tick {
+  border-color: color-mix(in srgb, var(--color-loss, #ff7a7a) 50%, transparent);
+  color: var(--color-loss, #ff7a7a);
+}
+/* Why the tile can't be picked, above the name */
+.reason {
+  align-self: flex-start;
+  margin-bottom: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-loss, #ff7a7a) 60%, transparent);
+  border-radius: var(--radius-sm);
+  background: rgb(8 7 12 / 0.75);
+  color: var(--color-loss, #ff7a7a);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tileTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-3);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgb(8 7 12 / 0.7);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+/* Party too big: the format turns red */
+.chipOver .format {
+  color: var(--color-loss, #ff7a7a);
+}
+.tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgb(255 255 255 / 0.6);
+  border-radius: var(--radius-sm);
+  background: rgb(8 7 12 / 0.5);
+  color: transparent;
+}
+.on .tick {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tileBottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+}
+.tileName {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.7);
+}
+.tileBlurb {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  opacity: 0.85;
+}
+.tileFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgb(255 255 255 / 0.14);
+}
+.standing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.tileMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-win, #3dd68c);
+  box-shadow: 0 0 8px var(--color-win, #3dd68c);
+}
+
+/* Stats strip */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+}
+.stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stats dt {
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.stats dd {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+/* Right rail */
+.rail {
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+@media (min-width: 1000px) {
+  .rail {
+    position: sticky;
+    top: var(--space-4);
+    min-height: 420px;
+  }
+}
+.railTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--color-border);
+}
+.railTabs > button {
+  min-height: 44px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.railTabs > button[aria-selected="true"] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+}
+.friends {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+}
+.friends > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.friends > li:hover {
+  background: var(--color-surface-3);
+}
+.friendText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+.friendStatus {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.offlineHead {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.offline {
+  opacity: 0.5;
+  font-size: var(--text-sm);
+}
+.chat {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* Docked action bar */
+/* Pinned to the bottom of the window, stopping at the chat panel */
+.dock {
+  position: fixed;
+  left: 0;
+  right: var(--chat-offset, 0px);
+  bottom: 0;
+  z-index: 10;
+  border-top: 1px solid var(--color-border-strong);
+  background: var(--glass-strong);
+  backdrop-filter: var(--glass-blur);
+}
+.dockInner {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 84px;
+}
+.dockLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-3) 0;
+  min-width: 0;
+}
+.dockModes {
+  display: flex;
+  flex-direction: column;
+}
+.dockLabel {
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.dockValue {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.go {
+  flex: none;
+  min-width: 240px;
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease), box-shadow var(--duration-normal) var(--ease);
+}
+.go:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.go:disabled {
+  background: var(--color-disabled-surface);
+  color: var(--color-disabled-text);
+  cursor: not-allowed;
+}
+.searching {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  min-width: 240px;
+}
+.timer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--space-5);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border-left: 3px solid var(--color-accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .timer {
+    animation: pulse 1.6s var(--ease) infinite alternate;
+  }
+}
+@keyframes pulse {
+  to {
+    background: color-mix(in srgb, var(--color-accent) 38%, transparent);
+  }
+}
+.timerValue {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.timerSub {
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  opacity: 0.8;
+}
+.cancel {
+  min-width: 110px;
+  border: 0;
+  border-left: 1px solid var(--color-border-strong);
+  background: rgb(255 255 255 / 0.06);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.cancel:hover {
+  background: color-mix(in srgb, var(--color-loss, #ff7a7a) 25%, transparent);
+}
+
+@media (max-width: 640px) {
+  :global(body):has(.dock) {
+    padding-bottom: 150px;
+  }
+  .dockInner {
+    flex-direction: column;
+    padding-bottom: var(--space-3);
+  }
+  .go,
+  .searching {
+    min-height: 56px;
+  }
+  .tile {
+    min-height: 240px;
+  }
+}
