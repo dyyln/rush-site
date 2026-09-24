@@ -98,6 +98,22 @@ export function MapCard({
             {actionLabel}
           </span>
         )}
+        {/* Votes sit on the art so a vote never changes the card's size. The label carries them in words */}
+        {state === "available" && count > 0 && (
+          <span className={styles.votes} aria-hidden="true">
+            {voters
+              ? voters.map((v) => (
+                  <span
+                    key={v.steamId}
+                    className={cx(styles.dot, voterSide === "own" ? styles.dotOwn : styles.dotEnemy, v.me && styles.dotMe)}
+                    title={v.me ? "Your vote" : v.name}
+                  >
+                    {initial(v.name)}
+                  </span>
+                ))
+              : <span className={cx(styles.count, "mono")}>{count}</span>}
+          </span>
+        )}
       </span>
       <span className={styles.info}>
         <span className={styles.top}>
@@ -114,32 +130,6 @@ export function MapCard({
         )}
         {note && <span className={styles.note}>{note}</span>}
 
-        {state === "available" && (voted || count > 0) && (
-          <span className={styles.voteRow}>
-            {voters && voters.length > 0 && (
-              <span className={styles.dots} aria-hidden="true">
-                {voters.map((v) => (
-                  <span
-                    key={v.steamId}
-                    className={cx(styles.dot, voterSide === "own" ? styles.dotOwn : styles.dotEnemy, v.me && styles.dotMe)}
-                    title={v.me ? "Your vote" : v.name}
-                  >
-                    {initial(v.name)}
-                  </span>
-                ))}
-              </span>
-            )}
-            {!voters && count > 0 && (
-              <span className={cx(styles.count, "mono")} aria-hidden="true">
-                {count}
-              </span>
-            )}
-            <span className={styles.voteText}>
-              {voted && <span className={styles.yourVote}>Your vote</span>}
-              {voteText && <span className={styles.note}>{voteText}</span>}
-            </span>
-          </span>
-        )}
       </span>
     </>
   );

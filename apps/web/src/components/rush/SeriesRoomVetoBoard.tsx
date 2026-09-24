@@ -215,14 +215,13 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
               >
                 <span className={own.sideName}>{PLAY_LABEL[play]}</span>
                 <span className={own.sideNote}>{PLAY_NOTE[play]}</span>
-                {(voters.length > 0 || voted) && (
+                {voters.length > 0 && (
                   <span className={own.voteRow} aria-hidden="true">
                     {voters.map((v) => (
                       <span key={v.steamId} className={cx(own.dot, step?.team === myTeam ? own.dotOwn : own.dotEnemy, v.me && own.dotMe)} title={v.me ? "Your vote" : v.name}>
                         {(v.name.trim()[0] ?? "?").toUpperCase()}
                       </span>
                     ))}
-                    {voted && <span className={own.yourVote}>Your vote</span>}
                   </span>
                 )}
               </button>
