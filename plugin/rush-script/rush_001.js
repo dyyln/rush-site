@@ -160,6 +160,8 @@ var _uiEntity = null;
 // Applying checks the set (slot 3 a start room, the others mid rooms, no repeats), keeps it for the life
 // of the map and calls ResetGameState(), so restarts keep it too. A bad set leaves the rooms alone.
 // The decider still swaps in Convoy at 7-7. See docs/RUSH-ROOM-VETO.md.
+// Every attempt is answered with a server command the match plugin registers, so it knows this script is
+// installed and what it did: rushsite_rooms_applied <7 ids> or rushsite_rooms_rejected <reason> <ids>.
 const RUSHSITE_SLOTS = [1, 2, 3, 4, 5];
 const RUSHSITE_PICKABLE = [...new Set(RUSHSITE_SLOTS.flatMap((slot) => ROOM_IDS[slot]))];
 
@@ -195,17 +197,24 @@ function RushsiteApplyRooms(picks) {
 	const valid = picks.length == RUSHSITE_SLOTS.length
 		&& picks.every((id, i) => ROOM_IDS[RUSHSITE_SLOTS[i]].includes(id));
 	if (!valid || new Set(picks).size != picks.length) {
-		RushsiteLog(`bad room set ${picks.join(",")}, rooms unchanged`);
+		RushsiteReject("bad_set", picks);
 		return;
 	}
 	// Applying resets the match state, so never once rounds have been played.
 	if (!Instance.IsWarmupPeriod() && Instance.GetRoundsPlayed() > 0) {
-		RushsiteLog("rooms can only be set before the first round, rooms unchanged");
+		RushsiteReject("too_late", picks);
 		return;
 	}
 	_rushsiteForcedRooms = [ROOM_IDS[T_FINAL_ROOM][0], ...picks, ROOM_IDS[CT_FINAL_ROOM][0]];
 	ResetGameState();
 	RushsiteLog(`rooms ${_rushsiteForcedRooms.join(",")}`);
+	Instance.ServerCommand(`rushsite_rooms_applied ${_roomIds.join(",")}`);
+}
+
+function RushsiteReject(reason, picks) {
+	const ids = picks.map((id) => (Number.isFinite(id) ? id : "x")).join(",");
+	RushsiteLog(`rejected rooms ${ids} (${reason}), rooms unchanged`);
+	Instance.ServerCommand(`rushsite_rooms_rejected ${reason} ${ids}`);
 }
 
 Instance.OnScriptInput("rushsite_rooms_print", RushsitePrintRooms);
