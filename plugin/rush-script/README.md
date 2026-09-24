@@ -25,15 +25,16 @@ On every CS2 update that touches `rush_001.js`, fetch the new file into `valve/`
 2. Compile it:
    `<CS2>/game/bin/win64/resourcecompiler.exe -nop4 -f -i "<CS2>/content/csgo_addons/rushsite_rooms/maps/scripts/rush_001.js"`
    The output is `<CS2>/game/csgo_addons/rushsite_rooms/maps/scripts/rush_001.vjs_c`.
-3. Pack it:
-   `python pack_vpk.py rushsite_rooms.vpk maps/scripts/rush_001.vjs_c "<CS2>/game/csgo_addons/rushsite_rooms/maps/scripts/rush_001.vjs_c"`
+3. Pack it, recording Valve's script from the same install:
+   `python pack_vpk.py dist/rushsite_rooms.vpk "<CS2>/game/csgo_addons/rushsite_rooms/maps/scripts/rush_001.vjs_c" --valve-pak "<CS2>/game/csgo/pak01_dir.vpk"`
+   This writes `dist/rushsite_rooms.vpk` and `dist/rushsite_rooms.json` (`{ cs2Build, valveScriptCrc }`). `dist/` is git ignored.
 
 To typecheck, run `tsc --noEmit --allowJs --checkJs --target es2022 --module es2022 --moduleResolution bundler rush_001.js <CS2>/content/csgo_addons/cs_script_demo/maps/scripts/point_script.d.ts`. Valve's own code gives 6 errors (Glow, Unglow and two overloads). The block adds none.
 
 ## Install on a server
 
-- Put `rushsite_rooms.vpk` in `game/csgo/`.
-- Add `Game csgo/rushsite_rooms.vpk` to `game/csgo/gameinfo.gi`, directly above `Game csgo`.
+- **Hetzner (agent):** put `rushsite_rooms.vpk` and `rushsite_rooms.json` in `game/csgo/` (bootstrap: `RUSH_ROOMS_VPK=dist/rushsite_rooms.vpk`). The agent checks the JSON against Valve's pak01 and keeps the `gameinfo.gi` line itself, dropping it when Valve changes `rush_001`. See the agent README.
+- **DatHost and anything else without the agent:** put `rushsite_rooms.vpk` in `game/csgo/` and add `Game csgo/rushsite_rooms.vpk` to `game/csgo/gameinfo.gi`, directly above `Game csgo`. Nothing checks it against Valve's updates, so rebuild and re-upload whenever Valve changes `rush_001`.
 - A loose `.vjs_c` in a directory search path does not work, and neither does a `pak01_dir.vpk` there. See docs/RUSH-ROOM-VETO.md.
 - Valve overwrites gameinfo.gi on updates. The host agent must re-apply the line after every SteamCMD update, as it does for Metamod.
 - Check: `say rushsite_rooms print` in the server console returns `rushsite: rooms in play ...`.

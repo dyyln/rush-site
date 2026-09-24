@@ -70,14 +70,6 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("recovered servers from previous run", "adopted", adopted)
 
-	if cfg.PatchGameinfo {
-		if changed, err := update.EnsureMetamod(update.GameinfoPath(cfg.CS2Dir)); err != nil {
-			log.Warn("could not check gameinfo.gi for Metamod", "err", err)
-		} else if changed {
-			log.Info("added Metamod search path to gameinfo.gi")
-		}
-	}
-
 	var checker update.Checker
 	switch cfg.UpdateCheck {
 	case config.CheckSteamAPI:
@@ -95,6 +87,9 @@ func run(log *slog.Logger) error {
 		DrainPoll:     cfg.DrainPoll,
 	}, checker, mgr, runner, log)
 	mgr.OnExit = upd.Kick
+	if err := upd.PatchGameinfo(); err != nil {
+		log.Warn("could not patch gameinfo.gi", "err", err)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
