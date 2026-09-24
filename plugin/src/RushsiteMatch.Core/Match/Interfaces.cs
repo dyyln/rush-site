@@ -79,6 +79,8 @@ public sealed class MatchSettings
 {
     public TimeSpan ConnectGrace { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan DisconnectGrace { get; init; } = TimeSpan.FromMinutes(3);
+    // Center screen countdown, refreshed every second, while a match player is missing.
+    public bool MissingCountdown { get; init; } = true;
     // Every mode. Countdown that starts once every player is in and on their side, then ends warmup.
     public TimeSpan StartCountdown { get; init; } = TimeSpan.FromSeconds(10);
     // Aim. mp_respawn_immunitytime.

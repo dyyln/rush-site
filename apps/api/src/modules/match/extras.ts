@@ -75,6 +75,40 @@ export async function loadKills(
   return visible.map((r) => killView(r, series))
 }
 
+export type LiveLine = { kills: number; deaths: number; headshots: number }
+
+// Stat lines counted from kill events, per map number, for maps the plugin has not sent final stats for.
+// Same rules as the plugin: a team kill gives no kill, headshots only count on enemy kills, every death counts.
+// A running match only counts ended rounds, like the kill feed. Suicides and deaths to the world send no
+// kill event, so they are missing until the plugin's totals replace these lines. Damage is not in kill events
+export async function loadLiveStats(
+  db: Db,
+  matchId: string,
+  status: string,
+  lastEnded: { mapNumber: number; round: number },
+  doneMaps: ReadonlySet<number>,
+  teamOf: ReadonlyMap<string, number>,
+): Promise<Map<number, Map<string, LiveLine>>> {
+  const rows = await db.select().from(matchKills).where(eq(matchKills.matchId, matchId))
+  const ended = (r: KillRow) =>
+    r.mapNumber < lastEnded.mapNumber || (r.mapNumber === lastEnded.mapNumber && r.round <= lastEnded.round)
+  const out = new Map<number, Map<string, LiveLine>>()
+  const line = (map: number, id: string) => {
+    const lines = out.get(map) ?? out.set(map, new Map()).get(map)!
+    return lines.get(id) ?? lines.set(id, { kills: 0, deaths: 0, headshots: 0 }).get(id)!
+  }
+  for (const r of rows) {
+    if (doneMaps.has(r.mapNumber) || (!OVER.has(status) && !ended(r))) continue
+    line(r.mapNumber, r.victimSteamId).deaths++
+    const team = teamOf.get(r.attackerSteamId)
+    if (team === undefined || team === teamOf.get(r.victimSteamId)) continue
+    const a = line(r.mapNumber, r.attackerSteamId)
+    a.kills++
+    if (r.headshot) a.headshots++
+  }
+  return out
+}
+
 type MvpLine = { steamId: string; kills: number; deaths: number; damage: number }
 
 // Highest damage wins. Kills break a damage tie, then fewer deaths, then the lower id so the pick is stable

@@ -82,6 +82,7 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 - Every line starts with the brand prefix in purple. Scores are gold and team names follow the site colours, purple for the first team and amber for the second.
 - Start countdown, every mode: announced when it starts, every 10 seconds above 10, then each of the last 5 seconds. The center of the screen shows every second. When it stops, chat names who left the server or switched side.
 - Disconnect: `<name> disconnected. 3:00 to return or they forfeit.` The time is `rushsite_disconnect_grace`. Aim adds that the match pauses at the next freeze time. The time left is repeated every minute and at 30 and 10 seconds, and `<name> is back.` is printed on return. This runs in warmup, live and between series maps, in every mode.
+- Live countdown: every second while a match player is missing, every screen shows the time left in the center, for example `Bob left. 2:31 to return or forfeit` or `Waiting for a player from Team B to join. 4:12`. Several missing players are listed soonest forfeit first, at most three. A player who has not been on the server yet is named by team, and counts down `rushsite_connect_grace` instead. Players waiting for Steam to confirm them are left out, and nothing shows while a series map loads. It uses the same clocks as the abandon check. Turn it off with `rushsite_missing_countdown 0`.
 - Match end: the final score, the match link when `brand.siteUrl` is set, and the time until the kick. Players are kicked after `rushsite_match_end_kick_delay` with the score in the kick reason. Anyone who reconnects after that is kicked again.
 - Series: each map end prints the map score, the series score and the next map. The series end prints the series score, every map score and the match link.
 
@@ -277,6 +278,7 @@ Launch the server with:
 | `rushsite_match_config` | empty | Path to match.json. Used when `RUSHSITE_MATCH_JSON` is not set |
 | `rushsite_connect_grace` | 300 | Seconds for every player to connect once. Then match_abandoned `no_show` |
 | `rushsite_disconnect_grace` | 180 | Seconds a player may stay away after leaving. Then match_abandoned `disconnected` |
+| `rushsite_missing_countdown` | 1 | Center screen countdown every second while a match player is missing |
 | `rushsite_start_countdown` | 10 | Every mode. Countdown once every player is in and on their side, then warmup ends |
 | `rushsite_aim_loadout` | 1 | Aim only. Hand out the map loadout, stop buying and fill empty weapon slots on spawn |
 | `rushsite_aim_spawn_immunity` | 2 | Aim only. Seconds for `mp_respawn_immunitytime` |

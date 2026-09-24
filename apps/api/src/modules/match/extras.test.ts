@@ -4,7 +4,7 @@ import { createAppHarness, createTestDb, makeUsers, startDuel, withServers } fro
 import { matchKills, matches, reports } from "../../db/schema.js"
 import type { Env } from "../../env.js"
 import { signBody } from "../../lib/hmac.js"
-import { computeMvp, DEMO_URL_TTL_SEC } from "./extras.js"
+import { computeMvp, DEMO_URL_TTL_SEC, loadLiveStats } from "./extras.js"
 import { DisabledDemoStorage, S3DemoStorage, type DemoStorage } from "./storage.js"
 
 describe("computeMvp", () => {
@@ -162,6 +162,53 @@ describe("match extras over HTTP", () => {
       // Kills after the match is over are dropped
       await post(matchId, kill(3, 5000, a, b))
       expect(await h.db.select().from(matchKills).where(and(eq(matchKills.matchId, matchId), eq(matchKills.round, 3)))).toHaveLength(0)
+    })
+
+    it("counts the scoreboard from kills while live, then takes the plugin's totals", async () => {
+      const { matchId, a, b } = await liveDuel()
+      const winner = await teamOf(matchId, a)
+      const loser = winner === "A" ? "B" : "A"
+      const line = (view: { teams: { players: { steamId: string }[] }[] }, id: string) =>
+        view.teams.flatMap((t) => t.players).find((p) => p.steamId === id)
+
+      await post(matchId, kill(1, 100, a, b, { headshot: true }))
+      // The running round stays hidden, like the kill feed
+      expect(line(await page(matchId), a)).toMatchObject({ kills: 0, deaths: 0, headshots: 0 })
+
+      await post(matchId, { type: "round_end", round: 1, winnerTeam: winner, score: { [winner]: 1, [loser]: 0 } })
+      await post(matchId, kill(2, 200, b, a))
+      await post(matchId, { type: "round_end", round: 2, winnerTeam: loser, score: { [winner]: 1, [loser]: 1 } })
+      let view = await page(matchId)
+      expect(line(view, a)).toMatchObject({ kills: 1, deaths: 1, headshots: 1, damage: 0 })
+      expect(line(view, b)).toMatchObject({ kills: 1, deaths: 1, headshots: 0, damage: 0 })
+
+      await post(matchId, {
+        type: "match_end",
+        winnerTeam: winner,
+        score: { [winner]: 2, [loser]: 1 },
+        players: [
+          { steamId: a, kills: 1, deaths: 2, headshots: 1, damage: 250 },
+          { steamId: b, kills: 1, deaths: 1, headshots: 0, damage: 180 },
+        ],
+        demoUploaded: false,
+      })
+      view = await page(matchId)
+      // Final lines replace the counted ones, including deaths with no kill event such as a suicide
+      expect(line(view, a)).toMatchObject({ kills: 1, deaths: 2, headshots: 1, damage: 250 })
+      expect(line(view, b)).toMatchObject({ kills: 1, deaths: 1, damage: 180 })
+    })
+
+    it("gives no kill for a team kill but counts the death", async () => {
+      const { matchId, a, b } = await liveDuel()
+      await post(matchId, kill(1, 100, a, b, { headshot: true }))
+      const sameTeam = new Map([
+        [a, 0],
+        [b, 0],
+      ])
+      const lines = (await loadLiveStats(h.db, matchId, "live", { mapNumber: 1, round: 1 }, new Set(), sameTeam)).get(1)!
+      expect(lines.get(b)).toEqual({ kills: 0, deaths: 1, headshots: 0 })
+      expect(lines.get(a)).toBeUndefined()
+      expect((await loadLiveStats(h.db, matchId, "live", { mapNumber: 1, round: 1 }, new Set([1]), sameTeam)).size).toBe(0)
     })
 
     it("keeps match_update unchanged on round_end", async () => {
