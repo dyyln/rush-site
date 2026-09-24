@@ -160,7 +160,8 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
         <div className={styles.heroTitle}>
           <h1 className={styles.title}>
             {modeLabel(m.mode)}
-            {currentMapId && !series && (
+            {/* Rush has one map, so its name adds nothing */}
+            {currentMapId && !series && !isRushMode(m.mode) && (
               <>
                 {" "}
                 <span className={styles.titleMap}>on {mapName(m.mode, currentMapId)}</span>
