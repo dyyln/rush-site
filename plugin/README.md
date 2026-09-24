@@ -47,7 +47,7 @@ The split is decided once, from `winCondition` in `match.json`. See `MatchContro
 | awp_india | AWP | AWP | kevlar and helmet |
 
 - The plugin sets `mp_ct_default_primary`, `mp_t_default_primary`, `mp_ct_default_secondary`, `mp_t_default_secondary`, empty default grenades, `mp_free_armor`, `mp_buytime 0`, `mp_buy_anywhere 0` and `mp_weapons_allow_map_placed 0`. It sets them in warmup and again after mode.cfg at match start, because mode.cfg turns buying back on.
-- 0.2 s after each spawn, the plugin removes every weapon the loadout does not list, except the knife. That covers what the map hands out. Then it gives any missing weapon and `item_assaultsuit`. Owned weapons are matched by item definition index, because the USP-S reports itself as `weapon_hkp2000`. Turn this off with `rushsite_aim_loadout 0`.
+- 0.2 s after each spawn, the plugin gives the loadout primary only if the player has no primary, the loadout secondary only if they have no secondary, and `item_assaultsuit`. It never removes a weapon: removing and giving in the same tick crashed clients with `CopyExistingEntity: missing client entity`. Turn this off with `rushsite_aim_loadout 0`.
 - `mp_respawn_immunitytime` is set from `rushsite_aim_spawn_immunity`. Whether CS2 honours it at round start in competitive, and not only on respawn, is unverified.
 - The score is kept per config team, so a halftime swap is handled.
 
@@ -276,7 +276,7 @@ Launch the server with:
 | `rushsite_connect_grace` | 300 | Seconds for every player to connect once. Then match_abandoned `no_show` |
 | `rushsite_disconnect_grace` | 180 | Seconds a player may stay away after leaving. Then match_abandoned `disconnected` |
 | `rushsite_start_countdown` | 10 | Every mode. Countdown once every player is in and on their side, then warmup ends |
-| `rushsite_aim_loadout` | 1 | Aim only. Hand out the map loadout, stop buying and strip other weapons on spawn |
+| `rushsite_aim_loadout` | 1 | Aim only. Hand out the map loadout, stop buying and fill empty weapon slots on spawn |
 | `rushsite_aim_spawn_immunity` | 2 | Aim only. Seconds for `mp_respawn_immunitytime` |
 | `rushsite_overtime_maxrounds` | 6 | Aim only. Rounds per overtime period for a tied map. 0 turns overtime off |
 | `rushsite_overtime_startmoney` | 16000 | Aim only. `mp_overtime_startmoney` |

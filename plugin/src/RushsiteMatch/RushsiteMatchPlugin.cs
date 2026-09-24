@@ -27,7 +27,7 @@ public sealed class RushsiteMatchPlugin : BasePlugin
     public FakeConVar<int> DisconnectGrace = new("rushsite_disconnect_grace", "Seconds a player may stay disconnected before the match is abandoned.", 180);
     public FakeConVar<int> StartCountdown = new("rushsite_start_countdown", "Seconds of countdown once every player is in and on their side. Then warmup ends.", 10);
     public FakeConVar<float> AimSpawnImmunity = new("rushsite_aim_spawn_immunity", "Aim modes. Seconds of spawn immunity, sets mp_respawn_immunitytime.", 2f);
-    public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout on spawn and strip everything else.", true);
+    public FakeConVar<bool> AimLoadout = new("rushsite_aim_loadout", "Aim modes. Give the map loadout into empty weapon slots on spawn.", true);
     public FakeConVar<int> OvertimeMaxRounds = new("rushsite_overtime_maxrounds", "Aim modes. Rounds per overtime period for a tied map. 0 turns overtime off.", 6);
     public FakeConVar<int> OvertimeStartMoney = new("rushsite_overtime_startmoney", "Aim modes. mp_overtime_startmoney.", 16000);
     public FakeConVar<int> SeriesMapBreak = new("rushsite_series_map_break", "Series. Minimum seconds between one map ending and the next loading.", 30);

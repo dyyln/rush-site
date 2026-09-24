@@ -175,8 +175,9 @@ public sealed class CssGameServer : IGameServer
         }
     }
 
-    // Removes every weapon the loadout does not list, keeping the knife, then gives what is missing.
-    // Owned weapons are matched by item definition index because some report another designer name.
+    // Gives each loadout weapon only when the player has nothing in that slot. Never removes a weapon:
+    // removing and giving in one tick reuses the entity index and crashes clients with
+    // "CopyExistingEntity: missing client entity".
     public void ApplyLoadout(string steamId, PlayerLoadout loadout)
     {
         var p = FindPlayer(steamId);
@@ -185,26 +186,16 @@ public sealed class CssGameServer : IGameServer
         {
             var pawn = p.PlayerPawn.Value;
             if (pawn is null || !pawn.IsValid) return;
-            var have = new HashSet<string>();
-            var remove = new List<CBasePlayerWeapon>();
+            var filled = new HashSet<gear_slot_t>();
             foreach (var handle in pawn.WeaponServices?.MyWeapons ?? Enumerable.Empty<CHandle<CBasePlayerWeapon>>())
             {
                 var w = handle.Value;
                 if (w is null || !w.IsValid) continue;
-                var name = w.DesignerName;
-                if (WeaponItems.IsKnife(name)) continue;
-                int def = w.AttributeManager.Item.ItemDefinitionIndex;
-                var wanted = loadout.Weapons.FirstOrDefault(x => !have.Contains(x) && WeaponItems.Matches(x, name, def));
-                if (wanted is not null) have.Add(wanted);
-                else remove.Add(w);
+                var slot = w.As<CCSWeaponBase>().VData?.GearSlot;
+                if (slot is not null) filled.Add(slot.Value);
             }
-            if (remove.Count > 0)
-            {
-                // Switch to the knife first so no removed weapon is in hand.
-                p.ExecuteClientCommand("slot3");
-                foreach (var w in remove) w.Remove();
-            }
-            foreach (var w in loadout.Weapons.Where(x => !have.Contains(x))) p.GiveNamedItem(w);
+            if (loadout.Primary is not null && !filled.Contains(gear_slot_t.GEAR_SLOT_RIFLE)) p.GiveNamedItem(loadout.Primary);
+            if (loadout.Secondary is not null && !filled.Contains(gear_slot_t.GEAR_SLOT_PISTOL)) p.GiveNamedItem(loadout.Secondary);
             if (loadout.Armor == ArmorKind.KevlarHelmet) p.GiveNamedItem("item_assaultsuit");
             else if (loadout.Armor == ArmorKind.Kevlar) p.GiveNamedItem("item_kevlar");
         }
