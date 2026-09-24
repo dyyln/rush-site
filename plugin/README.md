@@ -6,7 +6,7 @@ CounterStrikeSharp plugin that runs one rushsite match per CS2 server process. I
 
 The split is decided once, from `winCondition` in `match.json`. See `MatchController` in `src/RushsiteMatch.Core/Match/MatchController.cs`.
 
-| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush1v1 and rush3v3) |
+| | Aim (`first_to_N`, aim1v1 and aim2v2) | Rush (`valve_rush`, rush1v1, rush2v2 and rush3v3) |
 |---|---|---|
 | Whitelist kick, `sv_password` check | yes | yes |
 | `bot_quota 0` and `bot_kick`, re-checked every second | yes | yes |
@@ -144,7 +144,7 @@ Abandon checks never list a match player who is on the server, authorized or not
 
 ## Plugin reload and match state
 
-The plugin writes `match_state.json` next to `match.json` on load, on every phase change and after every round. It holds the match id, phase, round, score per team, the Rush front slot and wins, whether the demo is recording, the last arena and player stats.
+The plugin writes `match_state.json` next to `match.json` on a background task, never on the game thread. It writes on load, on every phase change and after every round. It holds the match id, phase, round, score per team, the Rush front slot and wins, whether the demo is recording, the last arena and player stats.
 
 When CounterStrikeSharp hot-reloads the plugin and `match_state.json` has the same `matchId` as `match.json`, the plugin restores that state instead of starting again:
 
@@ -166,6 +166,17 @@ Restoring is a safety net. The real fix is to never reload the plugin during a m
 ```
 
 Keep the other keys in that file as they are. The plugin logs a warning at load when hot reload is on. With it off, plugin updates take effect when a server restarts, so ship them through the agent drain like CS2 updates.
+
+## Game thread budget
+
+CS2 kicks a client with `NETWORK_DISCONNECT_OVERFLOW` ("excessive CPU usage") when processing its messages takes more than about 200 ms. Game events such as `player_team` and `player_connect_full` fire inside that processing, so plugin work there counts against the player. A live aim1v1 match lost a player this way the first time the start countdown began.
+
+- Event handlers only record what happened. The lineup check, the start countdown and its chat and center text run on the next frame. Several events in one frame share one check.
+- Webhooks are queued and sent by a background worker. Match state is serialized and written by a background task.
+- Warm-up: at load the plugin compiles its own methods. Core methods compile on a background thread. Once `match.json` loads it plays a whole match against a do-nothing game server on a background thread, which runs the countdown, chat, loadout, event JSON and state JSON code once. The console shows `warm-up: ...` lines with the time each took.
+- Every event handler, timer, next frame job and script command is timed. One that takes longer than `rushsite_slow_handler_ms` logs `slow handler <name> took <n> ms on the game thread` once per handler per map. `next_frame lineup_check` is the deferred countdown start.
+
+ReadyToRun is not used. CounterStrikeSharp loads plugins in its own load context on its bundled .NET 10 runtime and it is not known whether a net8 ReadyToRun image would be used there. Tiered compilation settings belong to the host process, not to a plugin.
 
 ## Team assignment and the current CounterStrikeSharp breakage
 
@@ -295,6 +306,7 @@ Launch the server with:
 | `rushsite_team_refusals` | 3 | Rush only. Wrong side joins before the player is kicked |
 | `rushsite_rush_hold_warmup` | 1 | Rush only. Hold Valve's warmup timer until the start countdown ends warmup |
 | `rushsite_webhook_max_attempts` | 10 | Attempts per webhook event before it is dropped |
+| `rushsite_slow_handler_ms` | 20 | Warn once per map when a plugin handler runs longer than this on the game thread. 0 turns it off |
 
 The plugin sets these fake convars when it loads. To change them, use rcon or a cfg that is exec'd after the plugin loads. Durations are read when the match config loads.
 

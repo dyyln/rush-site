@@ -575,8 +575,8 @@ export class MockRealtime extends Emitter implements Realtime {
   }
 }
 
-const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41, rush1v1: 3 };
-const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70, rush1v1: 30 };
+const PLAYERS: Record<Mode, number> = { aim1v1: 23, aim2v2: 14, rush3v3: 41, rush1v1: 3, rush2v2: 4 };
+const ESTIMATE: Record<Mode, number> = { aim1v1: 45, aim2v2: 90, rush3v3: 70, rush1v1: 30, rush2v2: 40 };
 
 // Idle at start. Start queue from the page to see the queued state
 function initialQueue(): { mode: Mode; queuedAt: number }[] {
@@ -604,6 +604,7 @@ const BASE_STATS: Record<Mode, { queue: number; live: number }> = {
   aim2v2: { queue: 14, live: 9 },
   rush3v3: { queue: 41, live: 12 },
   rush1v1: { queue: 3, live: 1 },
+  rush2v2: { queue: 4, live: 1 },
 };
 
 // Counts drift a little every tick so the cards look live

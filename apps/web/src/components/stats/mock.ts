@@ -9,8 +9,9 @@ const COUNTS: Record<Mode, number[]> = {
   aim2v2: [288, 904, 1502, 1011, 402, 77],
   rush3v3: [520, 1720, 2640, 1702, 655, 121],
   rush1v1: [0, 0, 0, 0, 0, 0],
+  rush2v2: [0, 0, 0, 0, 0, 0],
 };
-const MY_RATING: Record<Mode, number> = { aim1v1: 1742, aim2v2: 1486, rush3v3: 1918, rush1v1: 1500 };
+const MY_RATING: Record<Mode, number> = { aim1v1: 1742, aim2v2: 1486, rush3v3: 1918, rush1v1: 1500, rush2v2: 1500 };
 
 export function mockDistribution(mode: Mode): TierDistribution {
   const counts = COUNTS[mode];
@@ -64,6 +65,7 @@ export function mockStatus(): ServiceStatus {
       // Available so the Rush room veto can be clicked through in mock mode
       { mode: "rush3v3", available: true },
       { mode: "rush1v1", available: true },
+      { mode: "rush2v2", available: true },
     ],
     updatedAt: new Date(MOCK_NOW).toISOString(),
   };

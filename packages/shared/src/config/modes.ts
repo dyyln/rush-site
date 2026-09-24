@@ -116,6 +116,16 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     cs2: { gameType: 0, gameMode: 6, execCfg: "rushsite_rush1v1.cfg" },
     test: true,
   },
+  // Test queue for Rush with four players. Same map and rules as rush3v3
+  rush2v2: {
+    mode: "rush2v2",
+    teamSize: 2,
+    maps: [RUSH_MAP],
+    vetoFormat: "none",
+    winCondition: "valve_rush",
+    cs2: { gameType: 0, gameMode: 6, execCfg: "rushsite_rush2v2.cfg" },
+    test: true,
+  },
 }
 
 for (const cfg of Object.values(MODE_CONFIGS)) ModeConfigSchema.parse(cfg)

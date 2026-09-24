@@ -32,6 +32,17 @@ public class ConfigTests
     }
 
     [Fact]
+    public void ParsesRushTestModeWithTwoPlayersASide()
+    {
+        var cfg = TestData.Rush2v2();
+        Assert.Equal("rush2v2", cfg.Mode);
+        Assert.Equal(4, cfg.AllowedSteamIds.Count);
+        Assert.Equal(WinConditionKind.ValveRush, cfg.ParsedWinCondition.Kind);
+        Assert.False(cfg.ParsedWinCondition.PluginManagesMatch);
+        Assert.Throws<MatchConfigException>(() => MatchConfigLoader.Parse(Json("rush2v2", "first_to_13", 2)));
+    }
+
+    [Fact]
     public void ParsesFirstTo13()
     {
         var cfg = TestData.Aim1v1();

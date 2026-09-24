@@ -4,6 +4,7 @@
     "rushsite_aim1v1.cfg",
     "rushsite_aim2v2.cfg",
     "rushsite_rush1v1.cfg",
+    "rushsite_rush2v2.cfg",
     "rushsite_rush3v3.cfg"
   ],
   "modes": {
@@ -220,6 +221,25 @@
             "gameType": 0,
             "gameMode": 6,
             "execCfg": "rushsite_rush1v1.cfg",
+            "mapName": "rush_001"
+          }
+        }
+      ]
+    },
+    "rush2v2": {
+      "teamSize": 2,
+      "winCondition": "valve_rush",
+      "launches": [
+        {
+          "map": {
+            "id": "rush_001",
+            "displayName": "Complex",
+            "mapName": "rush_001"
+          },
+          "cs2": {
+            "gameType": 0,
+            "gameMode": 6,
+            "execCfg": "rushsite_rush2v2.cfg",
             "mapName": "rush_001"
           }
         }

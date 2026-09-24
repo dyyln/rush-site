@@ -8,8 +8,10 @@ const (
 	Aim1v1  Mode = "aim1v1"
 	Aim2v2  Mode = "aim2v2"
 	Rush3v3 Mode = "rush3v3"
-	// Rush1v1 is the unrated Rush test queue.
+	// Rush1v1 is the unrated 1v1 Rush test queue.
 	Rush1v1 Mode = "rush1v1"
+	// Rush2v2 is the unrated 2v2 Rush test queue.
+	Rush2v2 Mode = "rush2v2"
 )
 
 // MapEntry mirrors the shared MapEntry type.

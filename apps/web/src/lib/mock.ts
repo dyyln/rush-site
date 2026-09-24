@@ -151,7 +151,7 @@ export function mockUserBySteamId(steamId: string): User {
 
 // Leaderboard
 
-const BASE_RATING: Record<Mode, number> = { aim1v1: 2480, aim2v2: 2390, rush3v3: 2310, rush1v1: 1500 };
+const BASE_RATING: Record<Mode, number> = { aim1v1: 2480, aim2v2: 2390, rush3v3: 2310, rush1v1: 1500, rush2v2: 1500 };
 
 export function mockLeaderboard(mode: Mode, offset = 0, limit = 50): Leaderboard {
   const total = 240;

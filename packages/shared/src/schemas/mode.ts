@@ -1,7 +1,7 @@
 import { z } from "zod"
 
-// rush1v1 is a test queue. It is unrated and off unless the API enables it
-export const ModeSchema = z.enum(["aim1v1", "aim2v2", "rush3v3", "rush1v1"])
+// rush1v1 and rush2v2 are test queues. They are unrated and off unless the API enables them
+export const ModeSchema = z.enum(["aim1v1", "aim2v2", "rush3v3", "rush1v1", "rush2v2"])
 export type Mode = z.infer<typeof ModeSchema>
 export const MODES = ModeSchema.options
 

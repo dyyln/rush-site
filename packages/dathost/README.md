@@ -127,7 +127,7 @@ so the api must call `fetchDemo` before `stop`.
 4. Upload our plugin build from `plugin/` to `addons/counterstrikesharp/plugins/RushsiteMatch/`.
 5. Upload `cfg/rushsite_base.cfg` (kept in this package under `cfg/`) with the settings every match shares (hostname prefix, `sv_hibernate_when_empty 0`,
    `tv_enable 1`, `tv_delay`, `sv_lan 0`, logging). The generated `server.cfg` execs it first. Also upload every mode cfg
-   from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`, `rushsite_rush1v1.cfg`) to `cfg/`.
+   from `agent/internal/match/cfgs/` (`rushsite_aim1v1.cfg`, `rushsite_aim2v2.cfg`, `rushsite_rush3v3.cfg`, `rushsite_rush1v1.cfg`, `rushsite_rush2v2.cfg`) to `cfg/`.
    `gamemode_rush.cfg` is Valve's and the game runs it by itself. Also create `cfg/rushsite/matches/` (upload a `.keep`
    file into it), because the per match `mode.cfg` upload needs the parent to exist.
 6. Start the template, join it, check the plugin loads (`css_plugins list` in the console), and do the Rush check at the top of this README.

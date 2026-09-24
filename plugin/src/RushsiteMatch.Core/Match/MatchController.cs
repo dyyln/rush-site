@@ -80,6 +80,10 @@ public sealed class MatchController
     private bool _warmupHeld;
     private int _lastCountdownSaid;
     private bool _waitingForRoomsSaid;
+    // A lineup check asked for by a player event and not run yet. See QueueLineupCheck.
+    private bool _lineupCheckQueued;
+    private string? _queuedChangedBy;
+    private bool _queuedLeft;
     // Series. When the next map may load, and when its load was asked for.
     private DateTimeOffset? _nextMapAt;
     private DateTimeOffset? _mapLoadingSince;
@@ -516,12 +520,12 @@ public sealed class MatchController
             var required = _sides.RequiredSide(steamId);
             if (required is not null && _settings.TryChangeTeam) _game.TryMovePlayer(steamId, required.Value);
             _game.PrintToPlayer(steamId, _msg.Line($"Join your team's side. The match starts once everyone is in and on their side."));
-            UpdateCountdown(_clock.UtcNow);
+            QueueLineupCheck();
         }
         if (IsRush && Phase == MatchPhase.Warmup)
         {
             _game.PrintToPlayer(steamId, _msg.Line($"Your team plays {SideName(RequiredRushSide(steamId))}."));
-            UpdateCountdown(_clock.UtcNow);
+            QueueLineupCheck();
         }
     }
 
@@ -551,7 +555,7 @@ public sealed class MatchController
             _game.PrintToAll(_msg.Disconnected(who, grace, pausing));
             _game.PrintCenterToAll(MatchMessages.DisconnectedCenter(who, grace));
         }
-        UpdateCountdown(_clock.UtcNow, steamId, left: true);
+        QueueLineupCheck(steamId, left: true);
     }
 
     private void RememberName(string steamId, string? name = null)
@@ -603,7 +607,7 @@ public sealed class MatchController
     {
         if (!_cfg.IsAllowed(steamId)) return;
         _sides.SetPlayerSide(steamId, side);
-        UpdateCountdown(_clock.UtcNow, steamId);
+        QueueLineupCheck(steamId);
         // The game can place a player without a jointeam, for example auto assign. Send them to their side.
         if (IsRush && EnforcesRushTeams && side.IsPlaying() && !_sides.IsOnRequiredSide(steamId))
             RedirectToRequiredSide(steamId, "placed on the wrong side");
@@ -719,6 +723,36 @@ public sealed class MatchController
     // Applying rooms resets the script's game state and it refuses rooms after the first round.
     // A failed set is already reported, so the match goes ahead on Valve's draw.
     private bool RushRoomsSettled => _roomPlan is null || _roomsConfirmed || _roomsFailedSent;
+
+    // Player events run inside the client's message processing. The lineup check, the countdown
+    // start and its chat lines run on the next frame so the handler returns fast.
+    // Several events in one frame share one check. When they name different players the
+    // cancel message falls back to scanning the lineup.
+    private void QueueLineupCheck(string? changedBy = null, bool left = false)
+    {
+        if (_lineupCheckQueued)
+        {
+            if (_queuedChangedBy != changedBy || _queuedLeft != left)
+            {
+                _queuedChangedBy = null;
+                _queuedLeft = false;
+            }
+            return;
+        }
+        _lineupCheckQueued = true;
+        _queuedChangedBy = changedBy;
+        _queuedLeft = left;
+        _game.NextFrame("lineup_check", RunQueuedLineupCheck);
+    }
+
+    private void RunQueuedLineupCheck()
+    {
+        if (!_lineupCheckQueued) return;
+        _lineupCheckQueued = false;
+        UpdateCountdown(_clock.UtcNow, _queuedChangedBy, _queuedLeft);
+    }
+
+    public bool LineupCheckQueued => _lineupCheckQueued;
 
     // Runs the start countdown from the current lineup.
     // changedBy is the player whose leave or side change caused this update, when known.
@@ -1272,6 +1306,7 @@ public sealed class MatchController
         _lastCountdownSaid = 0;
         _lastCenterSaid = 0;
         _waitingForRoomsSaid = false;
+        _lineupCheckQueued = false;
         _away.Clear();
         _lastLineupReminder = DateTimeOffset.MinValue;
         foreach (var t in _teamScore.Keys.ToList()) _teamScore[t] = 0;
