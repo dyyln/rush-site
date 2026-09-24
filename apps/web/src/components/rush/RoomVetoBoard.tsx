@@ -4,10 +4,10 @@ import { RUSH_ROOM_VETO, VETO_STEP_SEC, currentRoomPhase, nextPickSlot, roomSlot
 import type { TeamSide } from "@/components/ui/TeamMarker";
 import { Timer } from "@/components/ui/Timer";
 import { cx } from "@/components/ui/cx";
+import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
-import { rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
+import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
 import { ComplexLayout } from "./ComplexLayout";
-import { RoomImage } from "./RoomImage";
 import styles from "./Rush.module.css";
 
 type Props = {
@@ -38,7 +38,8 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
   const nextSlot = nextPickSlot(state, format);
   const counts = new Map<string, number>();
   Object.values(state.votes).forEach((r) => counts.set(r, (counts.get(r) ?? 0) + 1));
-  const pending = step ? state.teams[step.team].steamIds.filter((id) => !(id in state.votes)) : [];
+  const actingTeam = step ? state.teams[step.team] : null;
+  const pending = actingTeam ? actingTeam.steamIds.filter((id) => !(id in state.votes)) : [];
   const lastAuto = state.history.at(-1)?.noVotes ? state.history.at(-1) : undefined;
   const running = currentRoomPhase(state, format);
   const phaseIdx = running?.index ?? null;
@@ -46,6 +47,14 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
   const phaseSteps = state.steps.map((s, i) => ({ s, i })).filter(({ s }) => (s.phase ?? 0) === phaseIdx);
   const phasePool = running ? state.pool.filter((r) => running.phase.pool.includes(r)) : [];
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote);
+
+  // Acting team members who voted for this room, in team order
+  function votersFor(room: string): MapCardVoter[] {
+    if (!actingTeam) return [];
+    return actingTeam.steamIds
+      .filter((id) => state.votes[id] === room)
+      .map((id) => ({ steamId: id, name: id === mySteamId ? "You" : (names[id] ?? "Player"), me: id === mySteamId }));
+  }
 
   function info(room: string): CardInfo {
     const h = state.history.find((e) => e.mapId === room);
@@ -128,53 +137,32 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         {phasePool.map((room) => {
           const c = info(room);
           const selectable = myTurn && c.state === "available" && !!onVote;
-          const votes = c.state === "available" ? counts.get(room) : undefined;
-          const voted = myVote === room;
+          const by = c.team !== undefined ? { label: teamName(c.team).toLowerCase(), side: sideOf(c.team) } : undefined;
           const note =
-            c.state === "banned"
-              ? `Banned by ${teamName(c.team!).toLowerCase()}${c.auto ? ", timer" : ""}`
-              : c.state === "picked"
-                ? `Picked by ${teamName(c.team!).toLowerCase()}${c.slot !== undefined ? ` for ${rushSlotLabel(c.slot)}` : ""}`
-                : c.state === "start"
-                  ? "Last room left, plays as the start room"
-                  : voted
-                    ? "Your vote"
-                    : "";
-          const body = (
-            <>
-              <RoomImage room={room} dim={c.state === "banned"} />
-              <span className={styles.cardTop}>
-                <span className={cx(styles.cardName, "mono")}>{rushRoomName(room)}</span>
-                {votes !== undefined && votes > 0 && (
-                  <span className={cx(styles.votes, "mono")}>
-                    {votes}
-                    <span className="visually-hidden"> {votes === 1 ? "vote" : "votes"}</span>
-                  </span>
-                )}
-              </span>
-              {note && <span className={styles.cardNote}>{note}</span>}
-            </>
-          );
-          const cls = cx(styles.card, voted && styles.voted, selectable && styles.interactive);
-          const side = c.team !== undefined ? sideOf(c.team) : undefined;
+            c.state === "picked" && c.slot !== undefined
+              ? `For ${rushSlotLabel(c.slot)}`
+              : c.state === "start"
+                ? "Last room left, plays as the start room"
+                : undefined;
           return (
             <li key={room}>
-              {selectable ? (
-                <button
-                  type="button"
-                  className={cls}
-                  data-state={c.state}
-                  onClick={() => onVote?.(room)}
-                  aria-pressed={voted}
-                  aria-label={`${step!.action === "pick" ? "Pick" : "Ban"} ${rushRoomName(room)}${voted ? ", your vote" : ""}${votes ? `, ${votes} votes` : ""}`}
-                >
-                  {body}
-                </button>
-              ) : (
-                <div className={cls} data-state={c.state} data-side={side}>
-                  {body}
-                </div>
-              )}
+              <MapCard
+                mapId={room}
+                name={rushRoomName(room)}
+                imageSrc={rushRoomImage(room)}
+                state={c.state === "start" ? "decider" : c.state}
+                stampLabel={c.state === "start" ? "Start room" : undefined}
+                by={by}
+                note={note}
+                tag={c.auto ? "auto" : undefined}
+                voted={myVote === room}
+                votes={c.state === "available" ? counts.get(room) : undefined}
+                voters={c.state === "available" && actingTeam ? votersFor(room) : undefined}
+                voterTotal={actingTeam?.steamIds.length}
+                voterSide={step && step.team === myTeam ? "own" : "enemy"}
+                onSelect={selectable ? () => onVote?.(room) : undefined}
+                actionLabel={step?.action === "pick" ? "Pick" : "Ban"}
+              />
             </li>
           );
         })}

@@ -18,10 +18,10 @@ function sources(mapId: string, previewUrl: string | null | undefined): string[]
   return out;
 }
 
-// Decorative map tile. The name is shown next to it, so it is hidden from screen readers
-export function MapThumb({ mapId, dim, className }: { mapId: string; dim?: boolean; className?: string }) {
+// Decorative map tile. The name is shown next to it, so it is hidden from screen readers. src replaces the lookup, as for Rush rooms
+export function MapThumb({ mapId, src: override, dim, className }: { mapId: string; src?: string | null; dim?: boolean; className?: string }) {
   const pool = useMapPool();
-  const list = sources(mapId, pool.get(mapId)?.previewUrl);
+  const list = override ? [override] : sources(mapId, pool.get(mapId)?.previewUrl);
   const [failed, setFailed] = useState(0);
   const src = list[failed];
   if (!src) return <span aria-hidden="true" className={`${styles.thumb} ${styles.blank} ${className ?? ""}`} />;
