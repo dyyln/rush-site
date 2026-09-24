@@ -26,17 +26,37 @@ export interface StartMatchParams {
     { name: string; steamIds: string[]; displayName?: string },
   ]
   // Tournament games skip the queue and the accept step.
+  // A best-of series runs on one server. gameNumber is the first map it plays,
+  // above 1 only when the series resumes after a crash with the maps in priorMaps already decided.
   source: {
     kind: "tournament"
     tournamentId: string
     bracketMatchId: string
     gameNumber: number
     bestOf: number
+    priorMaps?: SeriesMap[]
   }
 }
 
+// One decided map of a series and the match it was played on
+export interface SeriesMap {
+  mapNumber: number
+  winnerTeam: string
+  matchId: string
+}
+
+// A map of a running series is decided. The series result follows as a MatchResult
+export interface MapResult {
+  matchId: string
+  mapNumber: number
+  winnerTeam: string
+}
+
+export type MapResultHandler = (result: MapResult) => Promise<void>
+
 export type MatchResult =
-  | { matchId: string; outcome: "completed"; winnerTeam: string; score: Record<string, number> }
+  // maps is set for a series. score is then maps won
+  | { matchId: string; outcome: "completed"; winnerTeam: string; score: Record<string, number>; maps?: SeriesMap[] }
   | { matchId: string; outcome: "abandoned"; reason: string; missingSteamIds: string[] }
   // The match never ran, for example allocation failed. The module provisions it again.
   | { matchId: string; outcome: "cancelled"; reason: string }
@@ -68,6 +88,8 @@ export interface TournamentsPluginOptions {
   db: Db
   startMatch(params: StartMatchParams): Promise<{ matchId: string }>
   onMatchResult(handler: MatchResultHandler): void
+  // Per map results of a series, for the live bracket. Optional in tests
+  onMapResult?(handler: MapResultHandler): void
   emit(message: WsMessage<TournamentUpdatePayload>, audience?: EmitAudience): void
   // Returns the signed in user's SteamID64 or null.
   authenticate(request: FastifyRequest): Promise<string | null>

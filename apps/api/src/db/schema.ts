@@ -16,12 +16,13 @@ import {
 import { sql } from "drizzle-orm"
 
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
-export { adminAudit, metricSamples } from "../modules/admin/schema.js"
+export { adminAudit, admins, metricSamples } from "../modules/admin/schema.js"
 export { announcements, featureFlags } from "../modules/flags/schema.js"
 export { badges, bracketMatches, brackets, cupSchedules, tournamentEntries, tournaments } from "../modules/tournaments/schema.js"
 export { challenges } from "../modules/challenges/schema.js"
 export { userSettings } from "../modules/queue/schema.js"
 export { friendRequests, friendships, partyInvites } from "../modules/friends/schema.js"
+export { chatMessages, chatMutes } from "../modules/chat/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()
@@ -176,6 +177,8 @@ export const matches = pgTable(
   "matches",
   {
     id: id(),
+    // Human room id such as brave-amber-falcon. Null on matches from before room ids
+    slug: text("slug"),
     mode: modeEnum("mode").notNull(),
     region: text("region").notNull().default("eu"),
     source: matchSourceEnum("source").notNull().default("queue"),
@@ -215,6 +218,7 @@ export const matches = pgTable(
   },
   (t) => [
     index("matches_status_idx").on(t.status),
+    uniqueIndex("matches_slug_idx").on(t.slug),
     index("matches_created_idx").on(t.createdAt),
     index("matches_unreleased_ended_idx").on(t.endedAt).where(sql`${t.serverReleasedAt} is null`),
   ],
@@ -252,6 +256,8 @@ export const matchRounds = pgTable(
     matchId: uuid("match_id")
       .notNull()
       .references(() => matches.id, { onDelete: "cascade" }),
+    // Map inside a series. Rounds restart at 1 on every map
+    mapNumber: integer("map_number").notNull().default(1),
     round: integer("round").notNull(),
     winnerTeam: text("winner_team").notNull(),
     score: jsonb("score").$type<Record<string, number>>().notNull(),
@@ -260,7 +266,32 @@ export const matchRounds = pgTable(
     endedAt: ts("ended_at").notNull().defaultNow(),
     createdAt: createdAt(),
   },
-  (t) => [primaryKey({ columns: [t.matchId, t.round] })],
+  (t) => [primaryKey({ columns: [t.matchId, t.mapNumber, t.round] })],
+)
+
+export type SeriesStatsJson = { steamId: string; kills: number; deaths: number; headshots: number; damage: number }[]
+
+// One row per map of a best-of series. Single map matches have none
+export const matchMaps = pgTable(
+  "match_maps",
+  {
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    mapNumber: integer("map_number").notNull(),
+    mapId: text("map_id").notNull(),
+    // live or done
+    status: text("status").notNull(),
+    winnerTeam: text("winner_team"),
+    score: jsonb("score").$type<Record<string, number>>().notNull().default({}),
+    players: jsonb("players").$type<SeriesStatsJson>(),
+    // Set when the map was played on an earlier match of the same series, before a server crash
+    playedIn: uuid("played_in"),
+    startedAt: ts("started_at"),
+    endedAt: ts("ended_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.matchId, t.mapNumber] })],
 )
 
 // Kills from the plugin kill event. One row per victim per tick so webhook replays are ignored
@@ -270,6 +301,7 @@ export const matchKills = pgTable(
     matchId: uuid("match_id")
       .notNull()
       .references(() => matches.id, { onDelete: "cascade" }),
+    mapNumber: integer("map_number").notNull().default(1),
     round: integer("round").notNull(),
     tick: integer("tick").notNull(),
     attackerSteamId: steamId("attacker_steam_id").notNull(),
@@ -281,7 +313,7 @@ export const matchKills = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    primaryKey({ columns: [t.matchId, t.round, t.tick, t.victimSteamId] }),
+    primaryKey({ columns: [t.matchId, t.mapNumber, t.round, t.tick, t.victimSteamId] }),
     index("match_kills_attacker_idx").on(t.attackerSteamId),
   ],
 )
@@ -399,21 +431,26 @@ export const gsltTokens = pgTable("gslt_tokens", {
   createdAt: createdAt(),
 })
 
-export const demos = pgTable("demos", {
-  id: id(),
-  matchId: uuid("match_id")
-    .notNull()
-    .unique()
-    .references(() => matches.id, { onDelete: "cascade" }),
-  bucket: text("bucket").notNull(),
-  key: text("key").notNull(),
-  uploaded: boolean("uploaded").notNull().default(false),
-  // Flagged demos are kept until review is done
-  keep: boolean("keep").notNull().default(false),
-  deleteAfter: ts("delete_after"),
-  deletedAt: ts("deleted_at"),
-  createdAt: createdAt(),
-})
+export const demos = pgTable(
+  "demos",
+  {
+    id: id(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    // One demo per map of a series
+    mapNumber: integer("map_number").notNull().default(1),
+    bucket: text("bucket").notNull(),
+    key: text("key").notNull(),
+    uploaded: boolean("uploaded").notNull().default(false),
+    // Flagged demos are kept until review is done
+    keep: boolean("keep").notNull().default(false),
+    deleteAfter: ts("delete_after"),
+    deletedAt: ts("deleted_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("demos_match_map_idx").on(t.matchId, t.mapNumber)],
+)
 
 export const flags = pgTable(
   "flags",

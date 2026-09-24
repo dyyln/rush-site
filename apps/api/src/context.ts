@@ -4,10 +4,12 @@ import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
 import type { Env } from "./env.js"
+import { AdminRegistry } from "./lib/admins.js"
 import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
 import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
+import { ChatService } from "./modules/chat/service.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
 import { AnnouncementService, FlagService } from "./modules/flags/service.js"
@@ -42,6 +44,7 @@ export type AppContext = {
   // Closes the user's open sockets on every instance
   disconnectUser: (steamId: string, reason: string) => void
   isAdmin: (steamId: string) => boolean
+  admins: AdminRegistry
   steam: SteamWebApi
   users: UsersService
   trust: TrustService
@@ -58,6 +61,7 @@ export type AppContext = {
   snapshots: SnapshotStore
   flags: FlagService
   announcements: AnnouncementService
+  chat: ChatService
 }
 
 export type ContextDeps = {
@@ -82,7 +86,8 @@ export function buildContext(deps: ContextDeps): AppContext {
   const notifier = withSnapshots(deps.notifier, snapshots, (err) => log.warn({ err }, "snapshot write failed"))
   const fetchFn = deps.fetch ?? fetch
   const sessions = new SessionStore(redis, env.SESSION_TTL_DAYS * 86400)
-  const admins = new Set(env.ADMIN_STEAM_IDS)
+  const admins = new AdminRegistry(db, env.ADMIN_STEAM_IDS, log)
+  void admins.refresh().catch(() => undefined)
   const steam = new SteamWebApi(env.STEAM_API_KEY, fetchFn)
   const users = new UsersService(db)
   let faceit: FaceitLookup | undefined
@@ -183,7 +188,8 @@ export function buildContext(deps: ContextDeps): AppContext {
     auth: makeAuthenticator(sessions, (id) => banGate.cached(id)),
     banGate,
     disconnectUser,
-    isAdmin: (id) => admins.has(id),
+    isAdmin: (id) => admins.isAdmin(id),
+    admins,
     steam,
     users,
     trust,
@@ -200,5 +206,6 @@ export function buildContext(deps: ContextDeps): AppContext {
     snapshots,
     flags,
     announcements: new AnnouncementService(db, now),
+    chat: new ChatService({ db, redis, notifier, isAdmin: (id) => admins.isAdmin(id), now }),
   }
 }

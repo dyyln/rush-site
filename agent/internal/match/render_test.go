@@ -119,7 +119,7 @@ func TestPluginJSONMatchesContract(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"matchId", "mode", "allowedSteamIds", "teams", "password", "webhookUrl", "webhookSecret", "demoUpload", "winCondition"}
+	want := []string{"matchId", "mode", "map", "allowedSteamIds", "teams", "password", "webhookUrl", "webhookSecret", "demoUpload", "winCondition"}
 	if len(m) != len(want) {
 		t.Errorf("match.json has %d keys, want %d: %v", len(m), len(want), m)
 	}
@@ -280,5 +280,63 @@ func containsLine(lines []string, want string) bool {
 func TestConnect(t *testing.T) {
 	if got := Connect("1.2.3.4", 27015, "pw"); got != "connect 1.2.3.4:27015; password pw" {
 		t.Fatal(got)
+	}
+}
+
+func sampleSeries(r *StartRequest) {
+	up := func(n string) DemoUpload {
+		return DemoUpload{Bucket: "demos", Key: "k_m" + n + ".dem", PresignedPutURL: "https://s3.example.test/put" + n}
+	}
+	r.Series = &Series{
+		BestOf:         3,
+		Maps:           []MapEntry{r.Map, {ID: "aim_redline", WorkshopID: "123"}, {ID: "awp_india", MapName: "awp_india"}},
+		StartMapNumber: 1,
+		Wins:           map[string]int{"A": 0, "B": 0},
+		DemoUploads:    []DemoUpload{up("1"), up("2"), up("3")},
+	}
+}
+
+func TestSeriesReachesMatchJSON(t *testing.T) {
+	r := sampleReq()
+	sampleSeries(&r)
+	spec, err := Validate(&r, DefaultModes(), "")
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	b, err := PluginJSON(Params{Req: r, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pc PluginConfig
+	if err := json.Unmarshal(b, &pc); err != nil {
+		t.Fatal(err)
+	}
+	if pc.Series == nil || len(pc.Series.Maps) != 3 || pc.Series.Maps[2].MapName != "awp_india" || pc.Series.DemoUploads[1].Key != "k_m2.dem" {
+		t.Errorf("series=%+v", pc.Series)
+	}
+}
+
+func TestValidateRejectsBadSeries(t *testing.T) {
+	cases := map[string]func(s *Series){
+		"bestOf one":     func(s *Series) { s.BestOf = 1 },
+		"short maps":     func(s *Series) { s.Maps = s.Maps[:2] },
+		"short uploads":  func(s *Series) { s.DemoUploads = s.DemoUploads[:2] },
+		"start past end": func(s *Series) { s.StartMapNumber = 4 },
+		"start zero":     func(s *Series) { s.StartMapNumber = 0 },
+		"bad map name":   func(s *Series) { s.Maps[2] = MapEntry{ID: "x", MapName: "a;quit"} },
+		"bad workshop":   func(s *Series) { s.Maps[1].WorkshopID = "1a" },
+		"start not map":  func(s *Series) { s.StartMapNumber = 2 },
+		"map without id": func(s *Series) { s.Maps[1].ID = "" },
+		"bad loadout": func(s *Series) {
+			s.Maps[1].Loadout = &Loadout{Primary: &WeaponPair{CT: "weapon_ak47; quit"}}
+		},
+	}
+	for name, mutate := range cases {
+		r := sampleReq()
+		sampleSeries(&r)
+		mutate(r.Series)
+		if _, err := Validate(&r, DefaultModes(), ""); !IsValidation(err) {
+			t.Errorf("%s: want validation error, got %v", name, err)
+		}
 	}
 }

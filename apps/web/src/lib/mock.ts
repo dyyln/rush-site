@@ -556,7 +556,42 @@ function build(id: string, mode: Mode, mapId: string, seed: number, roundsPlayed
   return { ...base, ...mockMatchExtras(base, seed, { demo }) };
 }
 
+// The match the mock socket runs. The room starts at the accept step and the socket moves it on
+export const MOCK_ROOM_MATCH_ID = "9d4f1c2a-7b3e-4a5d-8c6f-1e2d3c4b5a69";
+export const MOCK_ROOM_SLUG = "brave-amber-falcon";
+let mockRoomMode: Mode = "aim1v1";
+export function setMockRoomMode(mode: Mode) {
+  mockRoomMode = mode;
+}
+
+function mockRoomDetail(): MatchDetail {
+  const size = teamSize(mockRoomMode);
+  const us = [MOCK_ME.steamId, ...Array.from({ length: size - 1 }, (_, i) => mockSteamId(i + 4))];
+  const them = Array.from({ length: size }, (_, i) => mockSteamId(i + 20));
+  const player = (steamId: string): MatchPlayer => {
+    const u = mockUserBySteamId(steamId);
+    return { steamId, displayName: u.displayName, avatarUrl: u.avatarUrl, tier: tierForRating(1500).id, rating: 1500, kills: 0, deaths: 0, headshots: 0, damage: 0 };
+  };
+  const base: MatchDetail = {
+    id: MOCK_ROOM_MATCH_ID,
+    slug: MOCK_ROOM_SLUG,
+    mode: mockRoomMode,
+    mapId: null,
+    status: "accepting",
+    driver: null,
+    startedAt: null,
+    endedAt: null,
+    teams: [
+      { name: "team_a", score: 0, players: us.map(player) },
+      { name: "team_b", score: 0, players: them.map(player) },
+    ],
+    rounds: [],
+  };
+  return { ...base, ...mockMatchExtras(base, 1, { demo: false }) };
+}
+
 export function mockMatchDetail(id: string, now = Date.now()): MatchDetail {
+  if (id === MOCK_ROOM_MATCH_ID || id === MOCK_ROOM_SLUG) return mockRoomDetail();
   if (id === MOCK_LIVE_MATCH_ID) {
     // Loops so the demo stays live. Holds the final score for a few rounds before restarting
     const total = playOut("aim1v1", 42).winners.length;

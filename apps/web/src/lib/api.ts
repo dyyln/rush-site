@@ -1,4 +1,4 @@
-import type { Mode, ModeStatsPayload, PartyUpdatePayload, QueueStatusPayload } from "@rushsite/shared";
+import { isMatchSlug, type Mode, type ModeStatsPayload, type PartyUpdatePayload, type QueueStatusPayload } from "@rushsite/shared";
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
 import { mockCall, mockDelay, mockMatchDetail, mockSignedIn, setMockSignedIn } from "./mock";
@@ -182,7 +182,7 @@ export const api = {
   },
 
   async match(id: string): Promise<MatchDetail> {
-    if (isMock) return mocked(/^[0-9a-f-]{36}$/i.test(id) ? mockMatchDetail(id) : null, "Match not found");
+    if (isMock) return mocked(/^[0-9a-f-]{36}$/i.test(id) || isMatchSlug(id) ? mockMatchDetail(id) : null, "Match not found");
     return (await request<{ match: MatchDetail }>("GET", `/matches/${id}`)).match;
   },
 

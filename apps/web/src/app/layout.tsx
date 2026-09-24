@@ -5,6 +5,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { ChallengeInbox } from "@/components/challenges/ChallengeInbox";
+import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { InviteInbox } from "@/components/friends/InviteInbox";
 import { NotifyListener } from "@/components/notify/NotifyListener";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <NotifyListener />
             <main id="main">{children}</main>
             <SiteFooter />
+            <ChatSidebar />
           </ToastProvider>
         </SessionProvider>
       </body>

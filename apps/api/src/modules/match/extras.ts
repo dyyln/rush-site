@@ -24,6 +24,7 @@ export async function storeKill(db: Db, matchId: string, event: KillEvent): Prom
     .insert(matchKills)
     .values({
       matchId,
+      mapNumber: event.mapNumber ?? 1,
       round: event.round,
       tick: event.tick,
       attackerSteamId: event.attacker,
@@ -40,8 +41,9 @@ export async function storeKill(db: Db, matchId: string, event: KillEvent): Prom
 
 type KillRow = typeof matchKills.$inferSelect
 
-export function killView(r: KillRow): Kill {
+export function killView(r: KillRow, series = false): Kill {
   return {
+    ...(series ? { mapNumber: r.mapNumber } : {}),
     round: r.round,
     tick: r.tick,
     attacker: r.attackerSteamId,
@@ -53,15 +55,24 @@ export function killView(r: KillRow): Kill {
   }
 }
 
-// A running match shows kills only for rounds that have ended, so the current round stays hidden
-export async function loadKills(db: Db, matchId: string, status: string, lastEndedRound: number): Promise<Kill[]> {
+// A running match shows kills only for rounds that have ended, so the current round stays hidden.
+// In a series lastEnded is the last ended map and round, earlier maps show in full
+export async function loadKills(
+  db: Db,
+  matchId: string,
+  status: string,
+  lastEnded: { mapNumber: number; round: number },
+  series = false,
+): Promise<Kill[]> {
   const rows = await db
     .select()
     .from(matchKills)
     .where(eq(matchKills.matchId, matchId))
-    .orderBy(asc(matchKills.round), asc(matchKills.tick), asc(matchKills.victimSteamId))
-  const visible = OVER.has(status) ? rows : rows.filter((r) => r.round <= lastEndedRound)
-  return visible.map(killView)
+    .orderBy(asc(matchKills.mapNumber), asc(matchKills.round), asc(matchKills.tick), asc(matchKills.victimSteamId))
+  const ended = (r: KillRow) =>
+    r.mapNumber < lastEnded.mapNumber || (r.mapNumber === lastEnded.mapNumber && r.round <= lastEnded.round)
+  const visible = OVER.has(status) ? rows : rows.filter(ended)
+  return visible.map((r) => killView(r, series))
 }
 
 type MvpLine = { steamId: string; kills: number; deaths: number; damage: number }
@@ -85,6 +96,8 @@ export async function demoView(db: Db, storage: DemoStorage, matchId: string, no
     .select()
     .from(demos)
     .where(and(eq(demos.matchId, matchId), eq(demos.uploaded, true), isNull(demos.deletedAt)))
+    .orderBy(asc(demos.mapNumber))
+    .limit(1)
   if (!row || !storage.enabled || !storage.presignDownload) return { available: false }
   const url = await storage.presignDownload(row.key, DEMO_URL_TTL_SEC)
   return { available: true, url, expiresAt: new Date(now + DEMO_URL_TTL_SEC * 1000).toISOString() }
@@ -118,10 +131,12 @@ export async function buildMatchExtras(
   page: MatchPage,
   viewer: string | null = null,
 ): Promise<MatchExtras> {
-  const lastEndedRound = page.rounds.reduce((n, r) => Math.max(n, r.round), 0)
+  // Rounds come ordered by map then round, so the last one is the latest ended
+  const last = page.rounds.at(-1)
+  const lastEnded = { mapNumber: last?.mapNumber ?? 1, round: last?.round ?? 0 }
   const players = page.teams.flatMap((t) => t.players)
   const [kills, demo, ratingDeltas, viewerReported] = await Promise.all([
-    loadKills(deps.db, page.id, page.status, lastEndedRound),
+    loadKills(deps.db, page.id, page.status, lastEnded, (page.bestOf ?? 1) > 1),
     demoView(deps.db, deps.storage, page.id, deps.now()),
     loadRatingDeltas(deps.db, page.id, page.status),
     loadViewerReported(deps.db, page.id, viewer),

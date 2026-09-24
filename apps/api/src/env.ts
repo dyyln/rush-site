@@ -87,7 +87,7 @@ export const EnvSchema = z.object({
   // Backstop for players who never connect when the plugin does not report it
   CONNECT_TIMEOUT_SEC: z.coerce.number().int().positive().default(600),
   // Watchdog caps per mode in minutes. A match past its cap ends with no rating change
-  MATCH_MAX_MIN_AIM: z.coerce.number().int().positive().default(45),
+  MATCH_MAX_MIN_AIM: z.coerce.number().int().positive().default(60),
   MATCH_MAX_MIN_RUSH: z.coerce.number().int().positive().default(40),
   // A live match with no webhook this long and no answer from its server driver counts as lost
   MATCH_SILENCE_SEC: z.coerce.number().int().positive().default(900),

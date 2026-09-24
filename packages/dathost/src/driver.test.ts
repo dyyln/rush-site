@@ -315,6 +315,21 @@ describe("fetchDemo", () => {
     expect(calls.at(-1)!.path).toBe(`/game-servers/${CLONE}/files/auto_20260923.dem`)
   })
 
+  it("picks one map of a series by name and never falls back", async () => {
+    const m2 = `rushsite_${MATCH_ID}_m2.dem`
+    const { fetch, calls } = fakeFetch({
+      [`GET /game-servers/${CLONE}/files`]: () => ({
+        json: [{ path: `rushsite_${MATCH_ID}_m1.dem` }, { path: m2 }, { path: "zzz.dem" }],
+      }),
+      [`GET /game-servers/${CLONE}/files/${m2}`]: () => ({ text: "MAP2" }),
+    })
+    const { d, store } = driver(fetch)
+    await store.set(MATCH_ID, CLONE)
+    expect((await d.fetchDemo!(MATCH_ID, 2))?.toString()).toBe("MAP2")
+    expect(calls.at(-1)!.path).toBe(`/game-servers/${CLONE}/files/${m2}`)
+    expect(await d.fetchDemo!(MATCH_ID, 3)).toBeNull()
+  })
+
   it("returns null when there is no demo or no server", async () => {
     const { fetch } = fakeFetch({ [`GET /game-servers/${CLONE}/files`]: () => ({ json: [{ path: "server.cfg" }] }) })
     const { d, store } = driver(fetch)

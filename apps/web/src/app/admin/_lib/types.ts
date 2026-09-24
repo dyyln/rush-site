@@ -96,7 +96,10 @@ export type AuditAction =
   | "flag.delete"
   | "announcement.create"
   | "announcement.update"
-  | "announcement.delete";
+  | "announcement.delete"
+  | "chat.delete"
+  | "chat.mute"
+  | "chat.unmute";
 
 export type AuditEntry = {
   id: string;

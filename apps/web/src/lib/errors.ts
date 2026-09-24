@@ -9,6 +9,8 @@ const GENERIC: ErrorCopy = { title: "Something went wrong", body: "Try again in 
 const CANCEL_COPY: Record<string, ErrorCopy> = {
   declined: { title: "Match cancelled", body: "Someone declined. If you accepted, you are back in the queue." },
   timeout: { title: "Match cancelled", body: "Someone did not accept in time. If you accepted, you are back in the queue." },
+  accept_declined: { title: "Match cancelled", body: "Someone declined. If you accepted, you are back in the queue. Declining starts a short queue cooldown." },
+  accept_timeout: { title: "Match cancelled", body: "Someone did not accept in time. If you accepted, you are back in the queue." },
   no_server: { title: "No server free", body: "Every server is busy. You are back in the queue and will get the next free one." },
   server_start_failed: { title: "Server did not start", body: "We could not start your server. You are back in the queue." },
   unknown_map: { title: "Match cancelled", body: "The map could not be loaded. You are back in the queue." },

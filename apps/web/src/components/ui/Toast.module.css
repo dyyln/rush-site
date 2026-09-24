@@ -1,7 +1,7 @@
 .region {
   position: fixed;
   z-index: var(--z-toast);
-  right: var(--gutter);
+  right: calc(var(--gutter) + var(--chat-offset, 0px));
   left: var(--gutter);
   bottom: var(--gutter);
   pointer-events: none;

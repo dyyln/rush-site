@@ -4,6 +4,9 @@ import type { Db } from "../../db/client.js"
 import { matchPlayers, matchRounds, matches, tournaments } from "../../db/schema.js"
 import type { UsersService } from "../auth/users.js"
 import type { RatingService } from "../rating/service.js"
+import { buildRoomView } from "./room-view.js"
+import { isSeries, seriesDetail } from "./series.js"
+import type { DemoStorage } from "./storage.js"
 
 export type { MatchRound as MatchRoundView, MatchUpdatePayload } from "@rushsite/shared"
 
@@ -14,13 +17,15 @@ export type MatchPage = MatchDetail & {
 
 type RoundRow = typeof matchRounds.$inferSelect
 
-export function roundView(r: RoundRow): MatchRound {
+// series adds the map number. Single map matches leave it out
+export function roundView(r: RoundRow, series = false): MatchRound {
   return {
     round: r.round,
     winnerTeam: r.winnerTeam,
     score: r.score,
     ...(r.arena ? { arena: r.arena } : {}),
     endedAt: r.endedAt.toISOString(),
+    ...(series ? { mapNumber: r.mapNumber } : {}),
   }
 }
 
@@ -31,7 +36,7 @@ export function teamScores(teams: { name: string }[], score: Record<string, numb
 const SERVER_STATUSES = new Set(["starting", "ready", "live"])
 
 export async function buildMatchPage(
-  deps: { db: Db; users: UsersService; ratings: RatingService },
+  deps: { db: Db; users: UsersService; ratings: RatingService; storage?: DemoStorage; now?: () => number },
   matchId: string,
   viewer: string | null,
 ): Promise<MatchPage | null> {
@@ -42,11 +47,17 @@ export async function buildMatchPage(
   const ids = players.map((p) => p.steamId)
   const cards = await deps.users.cards(ids)
   const ratings = await deps.ratings.get(ids, m.mode)
-  const rounds = await db.select().from(matchRounds).where(eq(matchRounds.matchId, matchId)).orderBy(asc(matchRounds.round))
+  const rounds = await db
+    .select()
+    .from(matchRounds)
+    .where(eq(matchRounds.matchId, matchId))
+    .orderBy(asc(matchRounds.mapNumber), asc(matchRounds.round))
+  const series = isSeries(m)
   const scores = teamScores(m.teams, m.score)
 
   const page: MatchPage = {
     id: m.id,
+    ...(m.slug ? { slug: m.slug } : {}),
     mode: m.mode,
     mapId: m.mapId,
     status: m.status as MatchStatus,
@@ -74,8 +85,14 @@ export async function buildMatchPage(
           }
         }),
     })),
-    rounds: rounds.map(roundView),
+    rounds: rounds.map((r) => roundView(r, series)),
     ...(m.source === "challenge" ? { unrated: true } : {}),
+  }
+
+  if (series) {
+    const lines = new Map(page.teams.flatMap((t) => t.players).map((p) => [p.steamId, p]))
+    page.bestOf = m.bestOf ?? 1
+    page.maps = await seriesDetail(db, m, lines, deps.storage, deps.now?.() ?? Date.now())
   }
 
   if (m.tournamentId) {
@@ -90,6 +107,7 @@ export async function buildMatchPage(
   }
 
   const participant = !!viewer && ids.includes(viewer)
+  if (participant) Object.assign(page, await buildRoomView(db, m, players, viewer))
   if (participant && SERVER_STATUSES.has(m.status) && m.serverIp && m.serverPort && m.connect) {
     page.connect = { ip: m.serverIp, port: m.serverPort, password: m.password ?? "", connect: m.connect }
   }

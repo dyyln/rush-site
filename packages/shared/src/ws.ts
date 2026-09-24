@@ -3,11 +3,12 @@ import { PlayerCardSchema, SteamId64Schema, UuidSchema } from "./schemas/common.
 import { ModeSchema } from "./schemas/mode.js"
 import { TrustLevelSchema } from "./schemas/trust.js"
 import { VetoStateSchema } from "./schemas/veto.js"
-import { MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
+import { MatchMapSchema, MatchRoundSchema, MatchStatusSchema } from "./schemas/match.js"
 import { TierIdSchema } from "./config/tiers.js"
 import { ChallengeUpdatePayloadSchema } from "./schemas/challenges.js"
 import { FriendUpdatePayloadSchema, PartyInvitePayloadSchema } from "./schemas/friends.js"
 import { CupEntrantPreviewSchema, CupWinnerSchema } from "./schemas/cups-ux.js"
+import { ChatDeletedPayloadSchema, ChatMessageSchema } from "./schemas/chat.js"
 
 // Every message on /ws is { type, payload, ts } with ts in epoch milliseconds
 export const WsEnvelopeSchema = z.object({
@@ -52,8 +53,12 @@ export const QueueStatusPayloadSchema = z.object({
 })
 export type QueueStatusPayload = z.infer<typeof QueueStatusPayloadSchema>
 
+// Match room id. Older matches have none, so rooms fall back to matchId
+const SlugSchema = z.string().min(1).max(64)
+
 export const MatchFoundPayloadSchema = z.object({
   matchId: UuidSchema,
+  slug: SlugSchema.optional(),
   mode: ModeSchema,
   // Epoch ms when the accept window closes
   acceptDeadline: z.number(),
@@ -65,6 +70,7 @@ export type MatchFoundPayload = z.infer<typeof MatchFoundPayloadSchema>
 
 export const VetoStatePayloadSchema = z.object({
   matchId: UuidSchema,
+  slug: SlugSchema.optional(),
   mode: ModeSchema,
   state: VetoStateSchema,
   // Epoch ms when the current step resolves. null once the veto is done
@@ -74,6 +80,7 @@ export type VetoStatePayload = z.infer<typeof VetoStatePayloadSchema>
 
 export const ServerReadyPayloadSchema = z.object({
   matchId: UuidSchema,
+  slug: SlugSchema.optional(),
   ip: z.string(),
   port: z.number().int().min(1).max(65535),
   password: z.string(),
@@ -295,6 +302,9 @@ export const MatchUpdatePayloadSchema = z.object({
   // Warm-up progress, sent to participants on player_connected and player_disconnected
   connected: z.number().int().nonnegative().optional(),
   expected: z.number().int().nonnegative().optional(),
+  // Series only. The live map, and every map without per map players
+  mapNumber: z.number().int().positive().optional(),
+  maps: z.array(MatchMapSchema.omit({ players: true })).optional(),
 })
 export type MatchUpdatePayload = z.infer<typeof MatchUpdatePayloadSchema>
 
@@ -314,6 +324,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   msg("challenge_update", ChallengeUpdatePayloadSchema),
   msg("friend_update", FriendUpdatePayloadSchema),
   msg("party_invite", PartyInvitePayloadSchema),
+  msg("chat_message", ChatMessageSchema),
+  msg("chat_deleted", ChatDeletedPayloadSchema),
 ])
 export type ServerMessage = z.infer<typeof ServerMessageSchema>
 export type ServerMessageType = ServerMessage["type"]
@@ -357,6 +369,10 @@ export const SubscribeTournamentPayloadSchema = z.object({ tournamentId: UuidSch
 export type SubscribeTournamentPayload = z.infer<typeof SubscribeTournamentPayloadSchema>
 
 export const UnsubscribeTournamentPayloadSchema = z.object({ tournamentId: UuidSchema })
+
+// Asks the server to replay party, queue and match state on a socket that is already open
+export const ResyncPayloadSchema = z.object({})
+export type ResyncPayload = z.infer<typeof ResyncPayloadSchema>
 export type UnsubscribeTournamentPayload = z.infer<typeof UnsubscribeTournamentPayloadSchema>
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
@@ -368,6 +384,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   msg("unsubscribe_match", UnsubscribeMatchPayloadSchema),
   msg("subscribe_tournament", SubscribeTournamentPayloadSchema),
   msg("unsubscribe_tournament", UnsubscribeTournamentPayloadSchema),
+  msg("resync", ResyncPayloadSchema),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 export type ClientMessageType = ClientMessage["type"]

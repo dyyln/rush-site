@@ -40,6 +40,7 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
     case "unsubscribe_match":
     case "subscribe_tournament":
     case "unsubscribe_tournament":
+    case "resync":
       return
   }
 }
@@ -114,6 +115,11 @@ export function attachSocket(
             for: parsed.type,
           })
         }
+        return
+      }
+      // A page that mounts on an open socket missed the connect replay, so it asks for it again
+      if (parsed.type === "resync") {
+        void sendSnapshot(ctx, steamId, send).catch((err) => log.warn({ err, steamId }, "ws resync failed"))
         return
       }
       if (parsed.type === "subscribe_tournament" || parsed.type === "unsubscribe_tournament") {

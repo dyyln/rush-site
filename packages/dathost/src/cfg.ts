@@ -56,6 +56,7 @@ export function buildMatchJson(req: StartServerRequest): PluginMatchConfig {
   return {
     matchId: req.matchId,
     mode: req.mode,
+    map: req.map,
     allowedSteamIds: req.allowedSteamIds,
     teams: req.teams,
     password: req.password,
@@ -63,6 +64,7 @@ export function buildMatchJson(req: StartServerRequest): PluginMatchConfig {
     webhookSecret: req.webhookSecret,
     demoUpload: req.demoUpload,
     winCondition: MODE_CONFIGS[req.mode].winCondition,
+    ...(req.series ? { series: req.series } : {}),
   }
 }
 

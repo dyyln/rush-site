@@ -4,11 +4,23 @@ export const ModeSchema = z.enum(["aim1v1", "aim2v2", "rush3v3"])
 export type Mode = z.infer<typeof ModeSchema>
 export const MODES = ModeSchema.options
 
+const WeaponSchema = z.string().regex(/^weapon_[a-z0-9_]{1,40}$/)
+const WeaponPairSchema = z.object({ ct: WeaponSchema.optional(), t: WeaponSchema.optional() })
+
+// Aim map loadout. The plugin has a default per map, this overrides it
+export const MapLoadoutSchema = z.object({
+  primary: WeaponPairSchema.optional(),
+  secondary: WeaponPairSchema.optional(),
+  armor: z.enum(["none", "kevlar", "kevlar_helmet"]).optional(),
+})
+export type MapLoadout = z.infer<typeof MapLoadoutSchema>
+
 export const MapEntrySchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   workshopId: z.string().optional(),
   mapName: z.string().optional(),
+  loadout: MapLoadoutSchema.optional(),
 })
 export type MapEntry = z.infer<typeof MapEntrySchema>
 

@@ -24,7 +24,8 @@ export function demoFileName(url: string | undefined, matchId: string): string {
 
 const EXPIRY_MARGIN_MS = 15_000;
 
-export function DemoActions({ matchId, demo }: { matchId: string; demo?: MatchDemo }) {
+// mapNumber picks one map of a series. Its link is refreshed from maps[] instead of the top level demo
+export function DemoActions({ matchId, demo, mapNumber, label }: { matchId: string; demo?: MatchDemo; mapNumber?: number; label?: string }) {
   const toast = useToast();
   const [fetching, setFetching] = useState(false);
   const hintId = useId();
@@ -41,8 +42,9 @@ export function DemoActions({ matchId, demo }: { matchId: string; demo?: MatchDe
     e.preventDefault();
     setFetching(true);
     try {
-      const fresh = await api.match(matchId);
-      if (fresh.demo?.available && fresh.demo.url) window.location.assign(fresh.demo.url);
+      const got = await api.match(matchId);
+      const fresh = mapNumber === undefined ? got.demo : got.maps?.find((m) => m.mapNumber === mapNumber)?.demo;
+      if (fresh?.available && fresh.url) window.location.assign(fresh.url);
       else toast.push({ title: "Demo is no longer available", tone: "error" });
     } catch {
       toast.push({ title: "Could not refresh the demo link", tone: "error" });
@@ -63,11 +65,11 @@ export function DemoActions({ matchId, demo }: { matchId: string; demo?: MatchDe
           className={cx(buttonStyles.button, buttonStyles.secondary)}
         >
           <DownloadIcon />
-          <span>{fetching ? "Preparing" : "Download demo"}</span>
+          <span>{fetching ? "Preparing" : (label ?? "Download demo")}</span>
         </a>
       ) : (
         <Button variant="secondary" icon={<DownloadIcon />} disabled aria-describedby={hintId}>
-          Download demo
+          {label ?? "Download demo"}
         </Button>
       )}
       <WatchPopover file={file} disabled={!available} hintId={available ? undefined : hintId} />

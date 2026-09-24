@@ -42,7 +42,7 @@ const BanBody = z.object({
 })
 const TrustBody = z.object({ level: TrustLevelSchema })
 
-type Hooks = Omit<AdminPluginOptions, "db" | "redis" | "isAdmin" | "authenticate" | "now">
+type Hooks = Omit<AdminPluginOptions, "db" | "redis" | "isAdmin" | "admins" | "authenticate" | "now">
 
 export interface RouteDeps {
   store: AdminStore
@@ -350,7 +350,7 @@ export function registerRoutes(
 export async function requireAdmin(
   req: FastifyRequest,
   reply: FastifyReply,
-  opts: Pick<AdminPluginOptions, "authenticate" | "isAdmin">,
+  opts: Pick<AdminPluginOptions, "authenticate" | "isAdmin" | "admins">,
 ): Promise<string | null> {
   let steamId: string | null = null
   try {
@@ -358,6 +358,7 @@ export async function requireAdmin(
   } catch {
     steamId = null
   }
+  if (steamId && opts.admins) await opts.admins.ensureFresh()
   if (!steamId || !opts.isAdmin(steamId)) {
     reply.callNotFound()
     return null

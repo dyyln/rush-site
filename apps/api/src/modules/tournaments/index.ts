@@ -36,6 +36,14 @@ const tournamentsPlugin: FastifyPluginAsync<
     modeGate: opts.modeGate,
   })
 
+  opts.onMapResult?.(async (result) => {
+    try {
+      await service.handleMapResult(result)
+    } catch (err) {
+      app.log.error({ err, matchId: result.matchId }, "tournament map result handling failed")
+    }
+  })
+
   opts.onMatchResult(async (result) => {
     try {
       await service.handleResult(result)

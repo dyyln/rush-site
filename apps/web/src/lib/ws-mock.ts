@@ -14,12 +14,12 @@ import {
   type VetoState,
 } from "@rushsite/shared";
 import { hasLadderVeto } from "./modes";
-import { MOCK_ME, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockMatchDetail, mockSteamId, mockTournamentDetail } from "./mock";
+import { MOCK_ME, MOCK_ROOM_MATCH_ID, MOCK_ROOM_SLUG, MOCK_TOURNAMENTS, bumpMockBracketVersion, mockMatchDetail, mockSteamId, mockTournamentDetail, setMockRoomMode } from "./mock";
 import { Emitter, type ClientPayload, type ConnectionState, type Realtime } from "./ws-core";
 
 type PayloadOf<U extends { type: string; payload: unknown }, T extends U["type"]> = Extract<U, { type: T }>["payload"];
 
-const MATCH_ID = "9d4f1c2a-7b3e-4a5d-8c6f-1e2d3c4b5a69";
+const MATCH_ID = MOCK_ROOM_MATCH_ID;
 const ACCEPT_SEC = 20;
 const STEP_SEC = 20;
 
@@ -144,6 +144,7 @@ export class MockRealtime extends Emitter implements Realtime {
   startChallengeMatch(mode: Mode): string {
     this.clear();
     this.mode = mode;
+    setMockRoomMode(mode);
     this.queued = [];
     this.emit("queue_status", this.snapshot());
     this.later(1200, () => this.afterAccept(mode));
@@ -196,12 +197,14 @@ export class MockRealtime extends Emitter implements Realtime {
 
   private found(mode: Mode) {
     this.mode = mode;
+    setMockRoomMode(mode);
     this.accepted = 0;
     this.required = MODE_CONFIGS[mode].teamSize * 2;
     this.queued = [];
     this.emit("queue_status", this.snapshot());
     this.emit("match_found", {
       matchId: MATCH_ID,
+      slug: MOCK_ROOM_SLUG,
       mode,
       acceptDeadline: Date.now() + ACCEPT_SEC * 1000,
       acceptWindowSec: ACCEPT_SEC,
@@ -231,6 +234,7 @@ export class MockRealtime extends Emitter implements Realtime {
     this.accepted++;
     this.emit("match_found", {
       matchId: MATCH_ID,
+      slug: MOCK_ROOM_SLUG,
       mode,
       acceptDeadline: Date.now() + (ACCEPT_SEC - 1) * 1000,
       acceptWindowSec: ACCEPT_SEC,
@@ -287,6 +291,7 @@ export class MockRealtime extends Emitter implements Realtime {
     if (!v || !this.mode) return;
     this.emit("veto_state", {
       matchId: MATCH_ID,
+      slug: MOCK_ROOM_SLUG,
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: v.done ? null : Date.now() + STEP_SEC * 1000,
@@ -328,6 +333,7 @@ export class MockRealtime extends Emitter implements Realtime {
     if (!v || !this.mode) return;
     this.emit("veto_state", {
       matchId: MATCH_ID,
+      slug: MOCK_ROOM_SLUG,
       mode: this.mode,
       state: structuredClone(v),
       stepDeadline: Date.now() + STEP_SEC * 1000,
@@ -363,6 +369,7 @@ export class MockRealtime extends Emitter implements Realtime {
   private ready(mode: Mode, mapId: string) {
     this.emit("server_ready", {
       matchId: MATCH_ID,
+      slug: MOCK_ROOM_SLUG,
       ip: "203.0.113.24",
       port: 27017,
       password: "mock-7f3a",
@@ -376,6 +383,16 @@ export class MockRealtime extends Emitter implements Realtime {
         this.emit("match_update", { matchId: MATCH_ID, status: "ready", teams: [], connected: n, expected }),
       );
     }
+    this.later(2500 * expected + 1500, () =>
+      this.emit("match_update", {
+        matchId: MATCH_ID,
+        status: "live",
+        teams: [
+          { name: "team_a", score: 0 },
+          { name: "team_b", score: 0 },
+        ],
+      }),
+    );
     this.later(30000, () => {
       this.emit("match_result", {
         matchId: MATCH_ID,

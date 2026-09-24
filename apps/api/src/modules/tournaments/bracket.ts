@@ -15,6 +15,8 @@ export type Resolution =
 export interface GameRecord {
   matchId: string
   winner: Side
+  // Map number inside a series played on one server. Older records have none
+  map?: number
 }
 
 export interface BracketMatch {
@@ -265,6 +267,60 @@ export function recordGame(
   else if (score.b >= need) finish(b, m, m.b, "played")
   else m.status = "ready"
   return settle(b)
+}
+
+// A map of a live series is decided. The series stays live until its result arrives.
+export function recordMap(
+  input: Bracket,
+  bracketMatchId: string,
+  gameMatchId: string,
+  map: number,
+  winner: Side,
+): Bracket {
+  const current = find(input, bracketMatchId)
+  if (current.status !== "live" || current.liveMatchId !== gameMatchId) return input
+  if (current.games.some((g) => g.map === map)) return input
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  m.games.push({ matchId: gameMatchId, winner, map })
+  m.games.sort((x, y) => (x.map ?? 0) - (y.map ?? 0))
+  return b
+}
+
+// Result of a series played on one server. maps fills in any map result that was missed.
+// The series winner decides the match even when the map list is short.
+export function recordSeries(
+  input: Bracket,
+  bracketMatchId: string,
+  gameMatchId: string,
+  maps: { map: number; winner: Side; matchId: string }[],
+  winner: Side,
+): Bracket {
+  const current = find(input, bracketMatchId)
+  if (current.status !== "live" || current.liveMatchId !== gameMatchId) {
+    throw new BracketError(`${current.id} is not live with game ${gameMatchId}`)
+  }
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  for (const x of maps) {
+    if (m.games.some((g) => g.map === x.map)) continue
+    m.games.push({ matchId: x.matchId, winner: x.winner, map: x.map })
+  }
+  m.games.sort((x, y) => (x.map ?? 0) - (y.map ?? 0))
+  finish(b, m, winner === "a" ? m.a : m.b, "played")
+  return settle(b)
+}
+
+// A series that ended level is played again from its first map, like a drawn single game.
+export function replaySeries(input: Bracket, bracketMatchId: string, gameMatchId: string): Bracket {
+  const current = find(input, bracketMatchId)
+  if (current.status !== "live" || current.liveMatchId !== gameMatchId) return input
+  const b = clone(input)
+  const m = find(b, bracketMatchId)
+  m.status = "ready"
+  m.liveMatchId = null
+  m.games = []
+  return b
 }
 
 // Forfeits the whole series. Both sides forfeiting eliminates both.

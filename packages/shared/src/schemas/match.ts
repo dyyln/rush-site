@@ -3,6 +3,7 @@ import { SteamId64Schema, UuidSchema } from "./common.js"
 import { ModeSchema } from "./mode.js"
 import { TierIdSchema } from "../config/tiers.js"
 import { ServerDriverNameSchema } from "../drivers.js"
+import { VetoStateSchema } from "./veto.js"
 
 export const MatchStatusSchema = z.enum([
   "accepting",
@@ -30,6 +31,8 @@ export const MatchRoundSchema = z.object({
   score: z.record(z.string(), z.number().int().nonnegative()),
   arena: z.string().optional(),
   endedAt: IsoDateSchema,
+  // Map number inside a series. Left out on single map matches
+  mapNumber: z.number().int().positive().optional(),
 })
 export type MatchRound = z.infer<typeof MatchRoundSchema>
 
@@ -56,8 +59,51 @@ export const MatchDetailTeamSchema = z.object({
 })
 export type MatchDetailTeam = z.infer<typeof MatchDetailTeamSchema>
 
+export const MatchMapStatusSchema = z.enum(["upcoming", "live", "done"])
+export type MatchMapStatus = z.infer<typeof MatchMapStatusSchema>
+
+// One map of a match. A Bo1 has one entry, a series has bestOf entries
+export const MatchMapSchema = z.object({
+  mapNumber: z.number().int().positive(),
+  mapId: z.string(),
+  status: MatchMapStatusSchema,
+  // Team name once the map is done
+  winnerTeam: z.string().nullable(),
+  // Rounds won per team name. Zero for upcoming maps
+  score: z.record(z.string(), z.number().int().nonnegative()),
+  // Same shape as the top level demo. url is a presigned GET that expires at expiresAt
+  demo: z.object({ available: z.boolean(), url: z.string().optional(), expiresAt: z.string().optional() }).optional(),
+  // Set when a series resumed after a server crash and this map was played on that earlier match
+  playedIn: z.string().optional(),
+  // Stat lines for this map only
+  players: z.array(MatchDetailPlayerSchema).optional(),
+})
+export type MatchMap = z.infer<typeof MatchMapSchema>
+
+// Accept step as seen by a participant
+export const MatchAcceptViewSchema = z.object({
+  // Epoch ms
+  deadline: z.number(),
+  windowSec: z.number().int().positive(),
+  accepted: z.number().int().nonnegative(),
+  required: z.number().int().positive(),
+  // True once the viewer accepted or declined
+  responded: z.boolean(),
+})
+export type MatchAcceptView = z.infer<typeof MatchAcceptViewSchema>
+
+// Veto as seen by one team. Votes are hidden while the other team acts
+export const MatchVetoViewSchema = z.object({
+  state: VetoStateSchema,
+  // Epoch ms. null once the veto is done
+  stepDeadline: z.number().nullable(),
+})
+export type MatchVetoView = z.infer<typeof MatchVetoViewSchema>
+
 export const MatchDetailSchema = z.object({
   id: UuidSchema,
+  // Human room id such as brave-amber-falcon. Older matches have none
+  slug: z.string().optional(),
   mode: ModeSchema,
   mapId: z.string().nullable(),
   status: MatchStatusSchema,
@@ -79,6 +125,14 @@ export const MatchDetailSchema = z.object({
       gameNumber: z.number().int().positive(),
     })
     .optional(),
+  // Best of for the whole match. Left out or 1 for a single map
+  bestOf: z.number().int().positive().optional(),
+  // One entry per map. In a series teams[].score is maps won and player stats are totals
+  maps: z.array(MatchMapSchema).optional(),
+  // Participants only, while the match is in that step
+  accept: MatchAcceptViewSchema.optional(),
+  veto: MatchVetoViewSchema.optional(),
+  warmup: z.object({ connected: z.number().int().nonnegative(), expected: z.number().int().nonnegative() }).optional(),
   // Only included for participants
   connect: z
     .object({

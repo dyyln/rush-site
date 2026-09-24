@@ -3,6 +3,8 @@ import type { PgDatabase } from "drizzle-orm/pg-core"
 import type {
   AdminEventKind,
   Announcement,
+  ChatMuteStatus,
+  ChatMuteView,
   FeatureFlag,
   MetricsRange,
   MetricsView,
@@ -10,7 +12,7 @@ import type {
   TrustLevel,
 } from "@rushsite/shared"
 
-export type { AdminEventKind, Announcement, FeatureFlag, MetricsRange, MetricsView, Mode, TrustLevel }
+export type { AdminEventKind, Announcement, ChatMuteStatus, ChatMuteView, FeatureFlag, MetricsRange, MetricsView, Mode, TrustLevel }
 
 // Any drizzle postgres database, node-postgres, postgres-js or PGlite.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,11 +98,24 @@ export interface AnnouncementsLike {
   remove(id: string): Promise<Announcement | null>
 }
 
+// Chat moderation. ChatService in modules/chat satisfies it.
+export interface ChatModerationLike {
+  // Null when the message is missing or already removed
+  remove(id: string, by: string): Promise<{ id: string; channel: string; steamId: string; body: string } | null>
+  // Null until is permanent
+  mute(steamId: string, until: Date | null, reason: string, by: string): Promise<ChatMuteStatus>
+  // False when there was no active mute
+  unmute(steamId: string): Promise<boolean>
+  mutes(): Promise<ChatMuteView[]>
+}
+
 export interface AdminPluginOptions {
   db: Db
   redis: RedisLike
-  // True when the SteamID64 is listed in ADMIN_STEAM_IDS.
+  // True for ADMIN_STEAM_IDS and for rows in the admins table. Answers from a cache.
   isAdmin(steamId: string): boolean
+  // Editable admin list. The /admin/admins routes answer 404 without it
+  admins?: AdminDirectory
   // Returns the signed in user's SteamID64 or null.
   authenticate(request: FastifyRequest): Promise<string | null>
   // Every waiting ticket across all modes.
@@ -123,6 +138,7 @@ export interface AdminPluginOptions {
   // Admin ops. Routes that need a missing one answer 404.
   flags?: FlagsLike
   announcements?: AnnouncementsLike
+  chat?: ChatModerationLike
   // Defaults to reading metric_samples from db
   metrics?(range: MetricsRange, now: Date): Promise<MetricsView>
   // Pulls every waiting ticket out of a mode that was just closed. Returns how many tickets it touched
@@ -130,6 +146,26 @@ export interface AdminPluginOptions {
   // Turns a /id/<vanity> profile URL into a SteamID64. Null when unknown or Steam is not configured
   resolveVanity?(vanity: string): Promise<string | null>
   now?: () => Date
+}
+
+export interface AdminRow {
+  steamId: string
+  addedBy: string
+  note: string | null
+  createdAt: Date
+}
+
+// AdminRegistry in src/lib/admins.ts satisfies it.
+export interface AdminDirectory {
+  // ADMIN_STEAM_IDS. These cannot be removed through the api
+  rootIds(): string[]
+  // Reloads the cache when it is stale so isAdmin sees admins added on other instances
+  ensureFresh(): Promise<void>
+  list(): Promise<AdminRow[]>
+  // Null when the id already has a row
+  grant(steamId: string, addedBy: string, note: string | null): Promise<AdminRow | null>
+  // Null when there was no row
+  revoke(steamId: string): Promise<AdminRow | null>
 }
 
 // Response shapes. apps/web/src/app/admin/_lib/types.ts mirrors these.
@@ -248,6 +284,22 @@ export type AuditAction =
   | "announcement.create"
   | "announcement.update"
   | "announcement.delete"
+  | "admin.grant"
+  | "admin.revoke"
+  | "chat.delete"
+  | "chat.mute"
+  | "chat.unmute"
+
+export interface AdminView {
+  steamId: string
+  displayName?: string
+  avatarUrl?: string
+  // config admins come from ADMIN_STEAM_IDS and cannot be removed
+  source: "config" | "db"
+  addedBy?: string
+  note?: string
+  createdAt?: string
+}
 
 export interface BanView {
   id: string

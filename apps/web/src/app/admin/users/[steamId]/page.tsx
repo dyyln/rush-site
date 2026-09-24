@@ -373,7 +373,13 @@ function AuditLine({ entry: a, now }: { entry: AuditEntry; now: number }) {
         ? "Unbanned"
         : a.action === "user.trust"
           ? `Trust set to ${TRUST_LABEL[String(p.level)] ?? p.level}${p.before ? ` from ${TRUST_LABEL[String(p.before)] ?? p.before}` : ""}`
-          : a.action;
+          : a.action === "chat.mute"
+            ? `Muted in chat${p.until ? ` until ${stamp(String(p.until))}` : " until lifted"}: ${p.reason}`
+            : a.action === "chat.unmute"
+              ? "Chat mute lifted"
+              : a.action === "chat.delete"
+                ? `Chat message deleted: ${p.body}`
+                : a.action;
   return (
     <span className="stack" style={{ gap: 0 }}>
       <span>{what}</span>

@@ -12,11 +12,22 @@ export type PlayerStats = z.infer<typeof PlayerStatsSchema>
 
 const ScoreSchema = z.record(z.string(), z.number().int().nonnegative())
 
+// Map number inside a series, counting from 1. Single map matches leave it out
+const MapNumberSchema = z.number().int().positive().max(7)
+
+export const SeriesMapResultSchema = z.object({
+  mapNumber: MapNumberSchema,
+  mapId: z.string().min(1),
+  winnerTeam: z.string(),
+  score: ScoreSchema,
+})
+export type SeriesMapResult = z.infer<typeof SeriesMapResultSchema>
+
 export const MatchEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("server_ready") }),
   z.object({ type: z.literal("player_connected"), steamId: SteamId64Schema }),
   z.object({ type: z.literal("player_disconnected"), steamId: SteamId64Schema }),
-  z.object({ type: z.literal("match_started") }),
+  z.object({ type: z.literal("match_started"), mapNumber: MapNumberSchema.optional() }),
   z.object({
     type: z.literal("round_end"),
     round: z.number().int().nonnegative(),
@@ -25,6 +36,18 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     score: ScoreSchema,
     // Rush room id or name when known
     arena: z.string().optional(),
+    mapNumber: MapNumberSchema.optional(),
+  }),
+  // One per map of a series, the last map included. match_end follows once the series is decided
+  z.object({
+    type: z.literal("map_end"),
+    mapNumber: MapNumberSchema,
+    mapId: z.string().min(1),
+    // Team name. A series map has no draw
+    winnerTeam: z.string(),
+    score: ScoreSchema,
+    players: z.array(PlayerStatsSchema),
+    demoUploaded: z.boolean(),
   }),
   z.object({
     type: z.literal("match_end"),
@@ -33,6 +56,8 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     score: ScoreSchema,
     players: z.array(PlayerStatsSchema),
     demoUploaded: z.boolean(),
+    // Series only. score is then maps won per team and players are totals over the maps
+    maps: z.array(SeriesMapResultSchema).optional(),
   }),
   z.object({
     type: z.literal("match_abandoned"),
@@ -50,12 +75,14 @@ export const MatchEventSchema = z.discriminatedUnion("type", [
     headshot: z.boolean(),
     wallbang: z.boolean(),
     assister: SteamId64Schema.optional(),
+    mapNumber: MapNumberSchema.optional(),
   }),
   z.object({
     type: z.literal("demo_uploaded"),
     ok: z.boolean(),
     bytes: z.number().int().nonnegative().optional(),
     error: z.string().optional(),
+    mapNumber: MapNumberSchema.optional(),
   }),
 ])
 export type MatchEvent = z.infer<typeof MatchEventSchema>

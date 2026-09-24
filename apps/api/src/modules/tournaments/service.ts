@@ -12,6 +12,9 @@ import {
   placements,
   playableMatches,
   recordGame,
+  recordMap,
+  recordSeries,
+  replaySeries,
   releaseGame,
   seedEntries,
   startGame,
@@ -40,6 +43,7 @@ import {
   type BadgeKind,
   type EmitAudience,
   type EntryView,
+  type MapResult,
   type MatchResult,
   type Mode,
   type PartyInfo,
@@ -513,6 +517,8 @@ export class TournamentService {
               bracketMatchId: m.id,
               gameNumber: m.games.length + 1,
               bestOf: m.bestOf,
+              // A series resumed after a crash starts after the maps already decided
+              ...(m.bestOf > 1 && m.games.length > 0 ? { priorMaps: priorMaps(m) } : {}),
             },
           },
         })
@@ -590,6 +596,26 @@ export class TournamentService {
     else await this.provision(tournamentId)
   }
 
+  // Live bracket view of a running series. The series itself resolves on the match result
+  async handleMapResult(result: MapResult): Promise<void> {
+    const tournamentId = await this.d.store.findTournamentByLiveMatch(result.matchId)
+    if (!tournamentId) return
+    const side = sideOfTeam(result.winnerTeam)
+    if (!side) return
+    const changed = await this.d.store.locked(tournamentId, async (s) => {
+      const stored = await s.loadBracket(tournamentId)
+      const t = await s.getTournament(tournamentId)
+      if (!stored || !t || t.status !== "running") return null
+      const m = stored.bracket.matches.find((x) => x.liveMatchId === result.matchId)
+      if (!m) return null
+      const bracket = recordMap(stored.bracket, m.id, result.matchId, result.mapNumber, side)
+      if (bracket === stored.bracket) return null
+      await s.saveBracket(tournamentId, { ...stored, bracket })
+      return m.id
+    })
+    if (changed) await this.announce(tournamentId, "match_updated", changed)
+  }
+
   private async applyResult(
     s: TournamentStore,
     tournamentId: string,
@@ -598,12 +624,21 @@ export class TournamentService {
     result: MatchResult,
   ): Promise<Bracket> {
     if (result.outcome === "completed") {
-      const side = (Object.keys(TEAM_NAMES) as Side[]).find(
-        (k) => TEAM_NAMES[k] === result.winnerTeam,
-      )
+      const side = sideOfTeam(result.winnerTeam)
+      if (!side && result.maps) {
+        this.d.log.warn({ tournamentId, result }, "series ended level, replaying it")
+        return replaySeries(bracket, m.id, result.matchId)
+      }
       if (!side) {
         this.d.log.error({ tournamentId, result }, "unknown winner team, replaying game")
         return cancelGame(bracket, m.id, result.matchId)
+      }
+      if (result.maps) {
+        const maps = result.maps.flatMap((x) => {
+          const winner = sideOfTeam(x.winnerTeam)
+          return winner ? [{ map: x.mapNumber, winner, matchId: x.matchId }] : []
+        })
+        return recordSeries(bracket, m.id, result.matchId, maps, side)
       }
       return recordGame(bracket, m.id, result.matchId, side)
     }
@@ -1007,6 +1042,15 @@ function sweepDisqualified(input: Bracket, entries: Map<string, EntryRecord>): B
         ? forfeit(bracket, m.id, ["a", "b"])
         : disqualify(bracket, m.id, out(m.a) ? "a" : "b")
   }
+}
+
+function sideOfTeam(team: string): Side | null {
+  return (Object.keys(TEAM_NAMES) as Side[]).find((k) => TEAM_NAMES[k] === team) ?? null
+}
+
+// Maps decided on earlier servers of a series. Older records count in order from map 1
+function priorMaps(m: BracketMatch): { mapNumber: number; winnerTeam: string; matchId: string }[] {
+  return m.games.map((g, i) => ({ mapNumber: g.map ?? i + 1, winnerTeam: TEAM_NAMES[g.winner], matchId: g.matchId }))
 }
 
 function mean(xs: number[]): number {

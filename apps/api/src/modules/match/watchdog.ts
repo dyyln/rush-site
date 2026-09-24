@@ -16,8 +16,11 @@ export const SERVER_LOST = "server_lost"
 export const MATCH_TIMEOUT = "timeout"
 export type WatchdogReason = typeof SERVER_LOST | typeof MATCH_TIMEOUT
 
-// Generous caps. Aim is first to 13 and Rush has at most 15 rounds
-export const DEFAULT_MAX_DURATION_MIN: Record<Mode, number> = { aim1v1: 45, aim2v2: 45, rush3v3: 40 }
+// Generous caps per map. Aim is first to 13 with overtime on a tie and Rush has at most 15 rounds
+export const DEFAULT_MAX_DURATION_MIN: Record<Mode, number> = { aim1v1: 60, aim2v2: 60, rush3v3: 40 }
+
+// Pause between series maps. About 30 s on aim and 110 s on Rush, where tv_delay holds the level change
+export const SERIES_MAP_GAP_MIN = 5
 
 export type WatchdogOptions = {
   // Minutes from match start, or from server ready or allocation when it never started
@@ -70,9 +73,13 @@ export class MatchWatchdog {
     return Number.isFinite(fromRedis) ? Math.max(fromRedis, fallback) : fallback
   }
 
+  // A series gets the cap once per map it can still play on the server, plus the level change between maps
   deadline(m: MatchRow): number {
     const from = m.startedAt ?? m.readyAt ?? m.allocationStartedAt ?? m.createdAt
-    return from.getTime() + this.options.maxDurationMin[m.mode] * 60_000
+    const bestOf = m.bestOf ?? 1
+    const maps = bestOf > 1 ? bestOf - (m.gameNumber ?? 1) + 1 : 1
+    const minutes = this.options.maxDurationMin[m.mode] * maps + SERIES_MAP_GAP_MIN * (maps - 1)
+    return from.getTime() + minutes * 60_000
   }
 
   async inspect(): Promise<WatchdogVerdict[]> {

@@ -9,6 +9,8 @@ export const KillSchema = z.object({
   attacker: SteamId64Schema,
   victim: SteamId64Schema,
   assister: SteamId64Schema.optional(),
+  // Map number inside a series. Left out on single map matches
+  mapNumber: z.number().int().positive().optional(),
   weapon: z.string(),
   headshot: z.boolean(),
   wallbang: z.boolean(),

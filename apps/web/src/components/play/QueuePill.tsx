@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { roomPath } from "@rushsite/shared";
 import { mmss } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { queuedSince, startPlayStore, useGlobalPlay } from "./playStore";
@@ -29,10 +30,13 @@ export function QueuePill() {
   const match = play.match;
   const matchLive = match && (match.phase !== "found" || (now !== null && match.deadline > now));
   if (matchLive) {
+    const room = roomPath(match);
+    // The room already shows everything the pill would link to
+    if (pathname === room || pathname === `/matches/${match.matchId}`) return null;
     return (
-      <Link href="/play" className={`${styles.pill} ${styles.ready}`}>
+      <Link href={room} className={`${styles.pill} ${styles.ready}`}>
         <span className={styles.dot} aria-hidden="true" />
-        Match ready
+        {match.phase === "found" ? "Match found" : "Match ready"}
       </Link>
     );
   }

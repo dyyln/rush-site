@@ -62,6 +62,9 @@ export const RATE_RULES: Record<string, Rule> = {
   "GET /leaderboard/:mode/distribution": { max: 60, timeWindow: MINUTE },
   "GET /users/:steamId/profile": { max: 60, timeWindow: MINUTE },
   "GET /users/:steamId/matches": { max: 60, timeWindow: MINUTE },
+  // Guests poll history. The chat service also limits posts per user
+  "GET /chat/messages": { max: 60, timeWindow: MINUTE },
+  "POST /chat/messages": { max: 30, timeWindow: MINUTE },
   // Signed traffic from game servers that share one IP. Limited per match instead
   "POST /webhooks/match/:matchId": { max: 1200, timeWindow: MINUTE, key: "match" },
 }

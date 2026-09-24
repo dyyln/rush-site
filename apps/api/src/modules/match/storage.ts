@@ -7,18 +7,19 @@ export type DemoBody = ReadableStream | Buffer
 
 export interface DemoStorage {
   readonly enabled: boolean
-  presignUpload(matchId: string): Promise<DemoUpload>
+  // mapNumber is set for the maps of a series
+  presignUpload(matchId: string, mapNumber?: number): Promise<DemoUpload>
   upload(key: string, body: DemoBody): Promise<void>
   // Presigned GET for players downloading the demo
   presignDownload?(key: string, expiresInSec: number): Promise<string>
 }
 
-// Upload URL lives long enough for a full match plus upload time
+// Upload URL lives long enough for a full match plus upload time. The last map of a Bo5 series fits too
 const PUT_EXPIRY_SEC = 6 * 60 * 60
 
-export function demoKey(matchId: string, now = new Date()): string {
+export function demoKey(matchId: string, now = new Date(), mapNumber?: number): string {
   const d = now.toISOString().slice(0, 10)
-  return `demos/${d}/${matchId}.dem`
+  return mapNumber ? `demos/${d}/${matchId}_m${mapNumber}.dem` : `demos/${d}/${matchId}.dem`
 }
 
 export class S3DemoStorage implements DemoStorage {
@@ -35,8 +36,8 @@ export class S3DemoStorage implements DemoStorage {
     })
   }
 
-  async presignUpload(matchId: string): Promise<DemoUpload> {
-    const key = demoKey(matchId)
+  async presignUpload(matchId: string, mapNumber?: number): Promise<DemoUpload> {
+    const key = demoKey(matchId, new Date(), mapNumber)
     // No Content-Type in the signature so the plugin can upload with any header
     const cmd = new PutObjectCommand({ Bucket: this.env.S3_BUCKET, Key: key })
     const presignedPutUrl = await getSignedUrl(this.client, cmd, { expiresIn: PUT_EXPIRY_SEC })
@@ -66,8 +67,8 @@ export class DisabledDemoStorage implements DemoStorage {
   readonly enabled = false
   constructor(private readonly bucket = "disabled") {}
 
-  async presignUpload(matchId: string): Promise<DemoUpload> {
-    return { bucket: this.bucket, key: demoKey(matchId), presignedPutUrl: "http://127.0.0.1:9/demo-upload-disabled" }
+  async presignUpload(matchId: string, mapNumber?: number): Promise<DemoUpload> {
+    return { bucket: this.bucket, key: demoKey(matchId, new Date(), mapNumber), presignedPutUrl: "http://127.0.0.1:9/demo-upload-disabled" }
   }
 
   async upload(): Promise<void> {

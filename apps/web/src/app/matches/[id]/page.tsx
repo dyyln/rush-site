@@ -1,3 +1,4 @@
+import { isMatchSlug } from "@rushsite/shared";
 import type { Metadata } from "next";
 import { MatchView } from "./MatchView";
 
@@ -5,7 +6,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const card = `/matches/${id}/card`;
   return {
-    title: "Match",
+    title: isMatchSlug(id) ? `Match ${id}` : "Match",
     openGraph: { images: [{ url: card, width: 1200, height: 630 }] },
     twitter: { card: "summary_large_image", images: [card] },
   };

@@ -155,6 +155,7 @@ func PluginJSON(p Params) ([]byte, error) {
 	pc := PluginConfig{
 		MatchID:         p.Req.MatchID,
 		Mode:            p.Req.Mode,
+		Map:             p.Req.Map,
 		AllowedSteamIDs: p.Req.AllowedSteamIDs,
 		Teams:           p.Req.Teams,
 		Password:        p.Req.Password,
@@ -162,6 +163,7 @@ func PluginJSON(p Params) ([]byte, error) {
 		WebhookSecret:   p.Req.WebhookSecret,
 		DemoUpload:      p.Req.DemoUpload,
 		WinCondition:    p.Spec.WinCondition,
+		Series:          p.Req.Series,
 	}
 	return json.MarshalIndent(pc, "", "  ")
 }

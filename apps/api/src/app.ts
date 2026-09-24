@@ -10,6 +10,7 @@ import { withLock } from "./lib/redis.js"
 import { registerSecurity } from "./lib/security.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
 import challengesPlugin from "./modules/challenges/index.js"
+import { registerChatRoutes } from "./modules/chat/routes.js"
 import { registerFlagRoutes } from "./modules/flags/routes.js"
 import friendsPlugin from "./modules/friends/index.js"
 import { createSurgeDriver } from "./modules/match/dathost.js"
@@ -103,6 +104,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   registerStatsFeatures(app, ctx)
   registerWsRoutes(app, ctx, hub)
   registerFlagRoutes(app, ctx)
+  registerChatRoutes(app, ctx)
   await app.register(challengesPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
   await app.register(friendsPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
   await app.register(reviewPlugin, { ctx })
@@ -114,6 +116,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
         db: ctx.db,
         startMatch: (params: Parameters<AppContext["flow"]["createTournamentMatch"]>[0]) => ctx.flow.createTournamentMatch(params),
         onMatchResult: (handler: Parameters<AppContext["flow"]["onResult"]>[0]) => ctx.flow.onResult(handler),
+        onMapResult: (handler: Parameters<AppContext["flow"]["onMapResult"]>[0]) => ctx.flow.onMapResult(handler),
         emit: (message: { type: string; payload: unknown; ts: number }, audience?: Audience) =>
           ctx.notifier.send(audience ?? { kind: "broadcast" }, message),
         authenticate: ctx.auth,
@@ -154,6 +157,7 @@ export function adminOptions(ctx: AppContext) {
     db: ctx.db,
     redis: ctx.redis,
     isAdmin: ctx.isAdmin,
+    admins: ctx.admins,
     authenticate: ctx.auth,
     getQueueSnapshot: () => queueSnapshot(ctx),
     getHosts: async () => {
@@ -186,6 +190,7 @@ export function adminOptions(ctx: AppContext) {
     emitAdmin: (kind: AdminEventKind, payload: unknown) => ctx.events.emit(kind, payload),
     flags: ctx.flags,
     announcements: ctx.announcements,
+    chat: ctx.chat,
     onModeClosed: (mode: Mode) => drainMode(ctx, mode),
     resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
     now: () => new Date(ctx.now()),

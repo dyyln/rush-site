@@ -6,7 +6,11 @@ import { api } from "@/lib/api";
 import { getRealtime, type Realtime } from "@/lib/ws";
 
 // Match flow as seen from any page. Found holds the accept deadline
-export type GlobalMatch = { phase: "found"; matchId: string; deadline: number } | { phase: "veto" | "ready"; matchId: string } | null;
+// slug is the match room id when the message carried one
+export type GlobalMatch =
+  | { phase: "found"; matchId: string; slug?: string; deadline: number }
+  | { phase: "veto" | "ready"; matchId: string; slug?: string }
+  | null;
 
 export type GlobalPlay = { queue: QueueStatusPayload | null; match: GlobalMatch };
 
@@ -34,9 +38,9 @@ export function startPlayStore() {
       // A new queue or a cooldown means the last match flow is over
       set(queue.state === "idle" ? { queue } : { queue, match: null });
     }),
-    rt.on("match_found", (p) => set({ match: { phase: "found", matchId: p.matchId, deadline: p.acceptDeadline } })),
-    rt.on("veto_state", (p) => set({ match: { phase: "veto", matchId: p.matchId } })),
-    rt.on("server_ready", (p) => set({ match: { phase: "ready", matchId: p.matchId } })),
+    rt.on("match_found", (p) => set({ match: { phase: "found", matchId: p.matchId, slug: p.slug, deadline: p.acceptDeadline } })),
+    rt.on("veto_state", (p) => set({ match: { phase: "veto", matchId: p.matchId, slug: p.slug } })),
+    rt.on("server_ready", (p) => set({ match: { phase: "ready", matchId: p.matchId, slug: p.slug } })),
     rt.on("match_result", () => set({ match: null })),
     rt.on("match_cancelled", () => set({ match: null })),
     rt.on("match_update", (p) => {

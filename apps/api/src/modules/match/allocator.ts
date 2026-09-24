@@ -24,13 +24,24 @@ export function parseAgentEntry(entry: string): { url: string; region: string } 
 
 export type Reservation = { hostId: string; agentUrl: string; slotId: string; gsltId: string; gslt: string }
 
+export type SeriesParams = {
+  bestOf: number
+  // Full ordered map list, one per map number
+  maps: MapEntry[]
+  startMapNumber: number
+  wins: Record<string, number>
+}
+
 export type StartParams = {
   matchId: string
   mode: Mode
+  // The first map to load. For a series this is maps[startMapNumber - 1]
   map: MapEntry
   teams: TeamRosterJson[]
   password: string
   webhookSecret: string
+  // A best-of series played on this one server
+  series?: SeriesParams
 }
 
 export type AllocationResult =
@@ -42,6 +53,8 @@ export type AllocationResult =
       hostId: string | null
       response: StartServerResponse
       demo: DemoUpload
+      // Series only. One upload per map, index is mapNumber - 1
+      demos?: DemoUpload[]
     }
   // Nothing free yet. The caller retries on the next tick
   | { kind: "wait" }
@@ -217,7 +230,15 @@ export class Allocator {
     return { hostId: slot.hostId, agentUrl: slot.agentUrl, slotId: slot.slotId, gsltId: token.id, gslt: token.token }
   }
 
-  buildRequest(p: StartParams, gslt: string, demoUpload: DemoUpload): StartServerRequest {
+  // One presigned upload per map for a series, otherwise a single upload
+  private async presign(p: StartParams): Promise<{ demo: DemoUpload; demos?: DemoUpload[] }> {
+    if (!p.series) return { demo: await this.storage.presignUpload(p.matchId) }
+    const demos: DemoUpload[] = []
+    for (let n = 1; n <= p.series.bestOf; n++) demos.push(await this.storage.presignUpload(p.matchId, n))
+    return { demo: demos[p.series.startMapNumber - 1]!, demos }
+  }
+
+  buildRequest(p: StartParams, gslt: string, demoUpload: DemoUpload, demoUploads?: DemoUpload[]): StartServerRequest {
     return {
       matchId: p.matchId,
       mode: p.mode,
@@ -230,6 +251,17 @@ export class Allocator {
       webhookSecret: p.webhookSecret,
       demoUpload,
       cs2: resolveLaunch(p.mode, p.map),
+      ...(p.series && demoUploads
+        ? {
+            series: {
+              bestOf: p.series.bestOf,
+              maps: p.series.maps,
+              startMapNumber: p.series.startMapNumber,
+              wins: { ...p.series.wins },
+              demoUploads,
+            },
+          }
+        : {}),
     }
   }
 
@@ -238,14 +270,14 @@ export class Allocator {
     for (let attempt = 0; attempt < MAX_HOST_TRIES; attempt++) {
       const res = (await this.reservationFor(p.matchId)) ?? (await this.reserve(p.matchId))
       if (!res) break
-      const demo = await this.storage.presignUpload(p.matchId)
+      const { demo, demos } = await this.presign(p)
       try {
-        const response = await this.hetzner.start(this.buildRequest(p, res.gslt, demo))
+        const response = await this.hetzner.start(this.buildRequest(p, res.gslt, demo, demos))
         await this.db
           .update(serverSlots)
           .set({ status: "running", port: response.port, updatedAt: new Date() })
           .where(eq(serverSlots.id, res.slotId))
-        return { kind: "started", driver: "hetzner", driverRef: res.hostId, hostId: res.hostId, response, demo }
+        return { kind: "started", driver: "hetzner", driverRef: res.hostId, hostId: res.hostId, response, demo, ...(demos ? { demos } : {}) }
       } catch (err) {
         // A busy or updating host is taken out until the next health sync and the next host is tried
         const busy = err instanceof AgentError && err.status === 503
@@ -259,11 +291,11 @@ export class Allocator {
       // DatHost servers run without a token, so a dry pool does not block surge capacity
       const token = await this.db.transaction((tx) => this.reserveGslt(tx as unknown as Db, p.matchId))
       if (!token) this.log.warn({ matchId: p.matchId }, "no free GSLT, starting surge server without a token")
-      const demo = await this.storage.presignUpload(p.matchId)
+      const { demo, demos } = await this.presign(p)
       try {
-        const response = await this.surge.start(this.buildRequest(p, token?.token ?? "", demo))
+        const response = await this.surge.start(this.buildRequest(p, token?.token ?? "", demo, demos))
         this.log.info({ matchId: p.matchId, driver: this.surge.name }, "match allocated on surge capacity")
-        return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, demo }
+        return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, demo, ...(demos ? { demos } : {}) }
       } catch (err) {
         await this.release(p.matchId, this.surge.name, false)
         throw err
@@ -294,10 +326,10 @@ export class Allocator {
   }
 
   // DatHost keeps the demo on its server. Pull it before the server is deleted and store it like a plugin upload
-  async collectDemo(matchId: string, driverName: string | null, key: string): Promise<boolean> {
+  async collectDemo(matchId: string, driverName: string | null, key: string, mapNumber?: number): Promise<boolean> {
     const driver = this.driver(driverName)
     if (!driver?.fetchDemo || !this.storage.enabled) return false
-    const body = await driver.fetchDemo(matchId)
+    const body = await driver.fetchDemo(matchId, mapNumber)
     if (!body) return false
     await this.storage.upload(key, body)
     return true

@@ -36,7 +36,9 @@ type ModeConfig = {
   cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[] }
   // execCfg is our cfg, shipped by the agent in agent/internal/match/cfgs. Never a Valve gamemode cfg, the game runs those itself
 }
-type MapEntry = { id: string; displayName: string; workshopId?: string; mapName?: string }
+type MapEntry = { id: string; displayName: string; workshopId?: string; mapName?: string; loadout?: MapLoadout }
+type MapLoadout = { primary?: { ct?: string; t?: string }; secondary?: { ct?: string; t?: string }; armor?: "none" | "kevlar" | "kevlar_helmet" }
+// loadout overrides the plugin's default aim loadout for that map. Weapons are weapon_<name>, the agent refuses anything else. Shared config sets none today
 ```
 
 Tier bands live in `packages/shared/src/config/tiers.ts`. Brand name lives in `packages/shared/src/config/brand.ts`.
@@ -63,6 +65,14 @@ type StartServerRequest = {
   cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[]; workshopId?: string; mapName?: string }
   // Required. Built by resolveLaunch(mode, map) from MODE_CONFIGS, with exactly one of workshopId or mapName matching map.
   // This is the only launch table. The agent refuses (400) an execCfg it does not ship, and DatHost maps from the same block
+  series?: SeriesConfig        // best-of series on this one server. map, cs2 and demoUpload then describe map startMapNumber
+}
+type SeriesConfig = {
+  bestOf: number               // 2 to 7, 3 for cup finals
+  maps: MapEntry[]             // full ordered list, length bestOf, each with workshopId or mapName
+  startMapNumber: number       // counting from 1. Above 1 only when a series resumes after a crash
+  wins: Record<string, number> // maps each team name already won before startMapNumber, normally zeros
+  demoUploads: DemoUpload[]    // one per map, index mapNumber - 1
 }
 type StartServerResponse = { matchId: string; ip: string; port: number; connect: string }
 ```
@@ -86,16 +96,19 @@ type MatchEvent =
   | { type: "server_ready" }
   | { type: "player_connected"; steamId: string }
   | { type: "player_disconnected"; steamId: string }
-  | { type: "match_started" }
-  | { type: "round_end"; round: number; winnerTeam: string; score: Record<string, number>; arena?: string }   // winnerTeam may be "draw". arena only in rush
-  | { type: "match_end"; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean }   // sent immediately at match end, demoUploaded is false when the upload is still running
-  | { type: "demo_uploaded"; ok: boolean; bytes?: number; error?: string }   // after match_end or match_abandoned once the upload finishes
-  | { type: "match_abandoned"; reason: string; missingSteamIds: string[] }
+  | { type: "match_started"; mapNumber?: number }   // a series sends it when each map goes live
+  | { type: "round_end"; round: number; winnerTeam: string; score: Record<string, number>; arena?: string; mapNumber?: number }   // winnerTeam may be "draw". arena only in rush
+  | { type: "map_end"; mapNumber: number; mapId: string; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean }   // series only, every map including the last. winnerTeam is a team name, or "draw" if a Rush map ever ends level
+  | { type: "match_end"; winnerTeam: string; score: Record<string, number>; players: PlayerStats[]; demoUploaded: boolean; maps?: SeriesMapResult[] }   // sent immediately at match end, demoUploaded is false when the upload is still running. In a series: once at series end, score is maps won, players are totals, maps lists every map played
+  | { type: "demo_uploaded"; ok: boolean; bytes?: number; error?: string; mapNumber?: number }   // after match_end or match_abandoned once the upload finishes. A series reports each map
+  | { type: "match_abandoned"; reason: string; missingSteamIds: string[] }   // reason "server_crashed" (agent) or "map_load_failed" (the next series map did not load within 5 minutes) cancels with no penalty
 type PlayerStats = { steamId: string; kills: number; deaths: number; headshots: number; damage: number }
+type SeriesMapResult = { mapNumber: number; mapId: string; winnerTeam: string; score: Record<string, number> }
 ```
+`mapNumber` counts from 1 and is left out on single map matches. `kill` also takes an optional `mapNumber`. Scores have no upper bound. A tied aim map, and every series map, goes to overtime so a map can end 16-14. Rush follows Valve's rules.
 
 The plugin reads its match config from `match.json` written by the agent next to the server cfg:
-`{ matchId, mode, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition }`.
+`{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition, series? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series` is the StartServerRequest block, copied as is. Both the Go agent and the DatHost driver write these.
 In Rush the plugin holds warmup until every player is on their team's side, redirects wrong joins, and kicks after 3 refusals. It writes `match_state.json` beside match.json so a hot reload with the same matchId resumes without a second `server_ready`.
 
 ## API -> Web (WebSocket at `/ws`, JSON messages, auth via session cookie)
@@ -111,6 +124,21 @@ Message shape: `{ type: string; payload: unknown; ts: number }`. Schemas in `pac
 ## Veto
 
 Ladder matches are one map. The API randomises firstTeam and builds the veto with `createVeto({ format: getModeConfig(mode).vetoFormat, ... })`. `vetoResult(state).deciders` is the map to play (bo1) or the 7 arenas in play order (rush).
+
+## Best-of series (one server per series)
+
+A match with `bestOf > 1` is a series. Today that is a cup bracket match whose bestOf is above 1 (the final, Bo3 by default). The whole series is one `matches` row, one veto, one allocation and one webhook URL.
+
+- Veto: `bo3-pickban` runs once. `matches.maps` holds one map per map number. A short list repeats its last map, so a Bo5 plays the decider again.
+- Allocation: one Hetzner slot and GSLT, or one DatHost clone, reserved for the whole series. StartServerRequest carries `series` with every map and one presigned demo upload per map (keys `demos/<date>/<matchId>_m<N>.dem`). The plugin plays the maps in order on that server with the same whitelist, password and teams, loading each map with `host_workshop_map <workshopId>` or `changelevel <mapName>`, and kicks only after `match_end`. Demo files on the server are `rushsite_<matchId>_m<N>.dem`.
+- Per map: `match_started { mapNumber }` opens the map, `round_end` carries `mapNumber` and rounds restart at 1, `map_end` closes it. Rows live in `match_maps` (match_id, map_number, map_id, status live|done, winner_team, score, players, played_in). `match_rounds`, `match_kills` and `demos` are keyed by map number too. `demo_uploaded { mapNumber }` marks that map's demo.
+- Series end: the API ends the series itself on the `map_end` that gives a team `floor(bestOf / 2) + 1` map wins. The plugin's `match_end` then arrives as a replay and is ignored. If map_end webhooks were lost, `match_end.maps` fills them in, and the plugin's winnerTeam counts only when the map rows cannot decide. `matches.score` is maps won. `match_players` stats are totals over the maps. Ratings change once, on the series result.
+- Release: the server is stopped and the slot and GSLT freed only when the series ends. After a finish, teardown waits for `demo_uploaded` of the last played map, or `DEMO_WAIT_SEC`. DatHost demos are pulled per map before the clone is deleted. Demo rows for maps the series never reached are dropped. Cancel, forfeit (`match_abandoned`), watchdog and admin paths end the whole series and release as for a single map. `match_abandoned` with `map_load_failed` ends it like `server_crashed`: cancelled, no rating, no cooldown, server released at once, and the bracket resumes it at the next map on a new server.
+- Between maps: the plugin pauses about 30 s on aim and about 110 s on Rush (tv_delay), sends `player_disconnected` for everyone and `player_connected` as they load in. The match stays `live` and nothing in the API penalises that. The API connect timeout only covers the first map (`ready` status), the plugin runs the connect grace for every later map. The watchdog cap is the mode cap per remaining map plus 5 minutes per level change, and the Hetzner process and DatHost clone keep running through the change so liveness stays alive.
+- Draws: a drawn map (`winnerTeam: "draw"`) is stored with no winner and counts for nobody, the series goes on. A series `match_end` with `"draw"` (maps ran out level) ends the match finished, unrated, winner null, like a Bo1 draw. The result listeners get `completed` with winnerTeam `draw` and the maps. The bracket replays that series from map 1 on a new server, as it replays a drawn single game.
+- Results: `MatchResultEvent` completed gains `maps: [{ mapNumber, winnerTeam, matchId }]`. `flow.onMapResult` reports each decided map `{ matchId, mapNumber, winnerTeam }`. The tournaments module records maps as bracket games (`GameRecord.map`) while the series is live and resolves the bracket match from the series result.
+- Crash resume: when the series server dies (`server_crashed` cancels the match) the bracket match goes back to ready with its decided maps kept. The next match gets `gameNumber` = next map and `priorMaps`, plays the same maps from there, and its `series.wins` counts the earlier maps. Those maps appear in `match_maps` with `played_in` set to the earlier match.
+- Match page and `match_update` for a series carry `bestOf`, `maps[]` (per map status, score, winner, stat lines, demo link) and the live `mapNumber`. Rounds and kills carry `mapNumber`.
 
 ## Rating
 
@@ -151,21 +179,23 @@ interface ServerDriver {
   capacity(): Promise<{ free: number; total: number }>
   start(req: StartServerRequest): Promise<StartServerResponse>
   stop(matchId: string): Promise<void>
-  fetchDemo?(matchId: string): Promise<ReadableStream | Buffer | null>   // dathost only, after match_end
+  fetchDemo?(matchId: string, mapNumber?: number): Promise<ReadableStream | Buffer | null>   // dathost only, after match_end. mapNumber picks one map of a series
   status?(matchId: string): Promise<"alive" | "gone" | "unknown">          // dathost. Hetzner liveness comes from the agent's GET /servers
 }
 ```
 Allocator order: every Hetzner host first. If none has a free slot, wait `SURGE_WAIT_SEC` (default 20) polling, then use DatHost. Matches record `driver` and `driverRef` on the matches table so stop and demo fetch route correctly. Env: `DATHOST_EMAIL` and `DATHOST_PASSWORD` (DatHost uses HTTP Basic, use a dedicated account), `DATHOST_TEMPLATE_SERVER_ID` (a prepared server with our plugin installed, cloned per match), `DATHOST_LOCATION` (default `dusseldorf`, their Frankfurt site), `SURGE_WAIT_SEC`. The API must call fetchDemo before stop, deleting the clone deletes its files.
 
-Match watchdog (apps/api/src/modules/match/watchdog.ts): every `WATCHDOG_INTERVAL_SEC` (default 30) inside the allocation loop, and once at API boot, every `starting`, `ready` or `live` match is checked. A Hetzner match whose id is missing from its agent's `GET /servers`, or a DatHost match whose `status()` is `gone`, ends `abandoned` with `cancelReason` `server_lost`. A match past `MATCH_MAX_MIN_AIM` (45) or `MATCH_MAX_MIN_RUSH` (40) minutes from its start ends `abandoned` with `timeout`. A `live` match whose server state is unknown and that sent no webhook for `MATCH_SILENCE_SEC` (900) ends as `server_lost`. None of these change ratings or issue cooldowns. Slot and GSLT are released and the result listeners get `abandoned` with no missing players.
+Match watchdog (apps/api/src/modules/match/watchdog.ts): every `WATCHDOG_INTERVAL_SEC` (default 30) inside the allocation loop, and once at API boot, every `starting`, `ready` or `live` match is checked. A Hetzner match whose id is missing from its agent's `GET /servers`, or a DatHost match whose `status()` is `gone`, ends `abandoned` with `cancelReason` `server_lost`. A match past `MATCH_MAX_MIN_AIM` (60, room for overtime) or `MATCH_MAX_MIN_RUSH` (40) minutes from its start ends `abandoned` with `timeout`. A series gets the cap once per map it can still play. A `live` match whose server state is unknown and that sent no webhook for `MATCH_SILENCE_SEC` (900) ends as `server_lost`. None of these change ratings or issue cooldowns. Slot and GSLT are released and the result listeners get `abandoned` with no missing players.
 `server_ready` that arrives while the match is still `allocating` (a DatHost boot) is held: the API records it and sends `server_ready` to players when `start()` returns connect info. The per-match allocation lock is a lease renewed while the start call runs.
 No-show penalties: a missing player gets a cooldown only when someone on the other team connected. A forfeit is rated only when the winning team connected, and winners who never connected stay unrated. When nobody connected the match ends with `cancelReason` `server_unreachable` and nobody is penalised.
 
 ## Match pages
 
 `GET /matches/:id` is public and returns `{ match: { id, mode, mapId, status, driver, startedAt, endedAt, teams: [{ name, score, players: [{ steamId, displayName, avatarUrl, tier, rating, kills, deaths, headshots, damage }] }], rounds: [{ round, winnerTeam, score: Record<team, number>, arena?, endedAt }], tournament?: { id, name, bracketMatchId, bestOf, gameNumber } } }`. Connect info is only included for participants, as `connect: { ip, port, password, connect }`. /ws needs a signed in session (401 otherwise). Signed-out viewers of match and tournament pages poll `GET /matches/:id` and `GET /tournaments/:id/bracket` every 5 s while the tab is visible.
+
+Match rooms: every match gets a `slug` of three or four random words (`brave-amber-falcon`, generator in `packages/shared/src/match-slug.ts`, unique index on `matches.slug`, null on older matches). `GET /matches/:id` takes the uuid or the slug. The web room lives at `/matches/<slug>`, and uuid links load and then replace the address with the slug. `match_found`, `veto_state` and `server_ready` carry `slug?`. For participants only, the detail also carries the current step, so a reload rebuilds the room: `accept?: { deadline, windowSec, accepted, required, responded }` while accepting, `veto?: { state, stepDeadline }` while in veto (the other team's votes are hidden while it acts), and `warmup?: { connected, expected }` while starting or ready. Series fields: `bestOf?`, `maps?: [{ mapNumber, mapId, status: upcoming|live|done, winnerTeam, score, demo?, playedIn?, players? }]`, `rounds[].mapNumber?` and `kills[].mapNumber?`. In a series `teams[].score` is maps won. `match_update` adds `mapNumber?` and `maps?` (without players). The room state mapping is `packages/shared/src/room.ts` (`roomFromDetail`, `applyRoomEvent`, `mergeRoomDetail`, `roomStage`). The Play page keeps only mode picking, party and queue. It sends the player to the room when a match starts.
 Rounds come from `round_end` webhooks stored in `match_rounds`.
-Live: client sends `subscribe_match { matchId }` / `unsubscribe_match { matchId }`; server sends `match_update { matchId, status, teams: [{ name, score }], lastRound?: Round }` on every round_end, match_started, match_end and cancel to subscribers. Any signed in player may subscribe.
+Client sends `resync {}` to get the party, queue and match phase replayed on a socket that is already open (a page mounting after the connect replay). Live: client sends `subscribe_match { matchId }` / `unsubscribe_match { matchId }`; server sends `match_update { matchId, status, teams: [{ name, score }], lastRound?: Round }` on every round_end, match_started, match_end and cancel to subscribers. Any signed in player may subscribe.
 
 ## Feature batch 2 (owners: challenges, match-api, match-web, stats, notify)
 

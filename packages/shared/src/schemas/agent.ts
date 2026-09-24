@@ -18,6 +18,23 @@ export const DemoUploadSchema = z.object({
 })
 export type DemoUpload = z.infer<typeof DemoUploadSchema>
 
+// A best-of series played on one server. Absent for single map matches
+export const SeriesConfigSchema = z
+  .object({
+    bestOf: z.number().int().min(2).max(7),
+    // Full ordered map list, one entry per map number
+    maps: z.array(MapEntrySchema).min(2),
+    // Map number to load first, counting from 1. Above 1 when a series resumes after a crash
+    startMapNumber: z.number().int().positive(),
+    // Maps each team already won before startMapNumber, keyed by team name
+    wins: z.record(z.string(), z.number().int().nonnegative()),
+    // One upload per map, index is mapNumber - 1
+    demoUploads: z.array(DemoUploadSchema).min(2),
+  })
+  .refine((s) => s.maps.length === s.bestOf && s.demoUploads.length === s.bestOf, "maps and demoUploads need bestOf entries")
+  .refine((s) => s.startMapNumber <= s.bestOf, "startMapNumber is past the last map")
+export type SeriesConfig = z.infer<typeof SeriesConfigSchema>
+
 export const StartServerRequestSchema = z.object({
   matchId: UuidSchema,
   mode: ModeSchema,
@@ -31,6 +48,8 @@ export const StartServerRequestSchema = z.object({
   demoUpload: DemoUploadSchema,
   // Built by resolveLaunch from the mode config and map. Drivers launch from this block only
   cs2: Cs2StartSchema,
+  // map, cs2 and demoUpload describe the map at series.startMapNumber
+  series: SeriesConfigSchema.optional(),
 })
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 
@@ -57,6 +76,8 @@ export type AgentHealth = z.infer<typeof AgentHealthSchema>
 export const PluginMatchConfigSchema = z.object({
   matchId: UuidSchema,
   mode: ModeSchema,
+  // The map the server starts on. The plugin reads its loadout from here
+  map: MapEntrySchema,
   allowedSteamIds: z.array(SteamId64Schema).min(1),
   teams: z.array(TeamRosterSchema).length(2),
   password: z.string().min(1),
@@ -64,5 +85,6 @@ export const PluginMatchConfigSchema = z.object({
   webhookSecret: z.string().min(16),
   demoUpload: DemoUploadSchema,
   winCondition: WinConditionSchema,
+  series: SeriesConfigSchema.optional(),
 })
 export type PluginMatchConfig = z.infer<typeof PluginMatchConfigSchema>

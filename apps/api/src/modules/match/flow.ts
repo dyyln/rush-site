@@ -29,7 +29,7 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } 
 import type { FastifyBaseLogger } from "fastify"
 import type { Redis } from "ioredis"
 import type { Db } from "../../db/client.js"
-import { cooldowns, demos, matchPlayers, matchRounds, matches, vetoes, type TeamRosterJson } from "../../db/schema.js"
+import { cooldowns, demos, matchMaps, matchPlayers, matchRounds, matches, vetoes, type TeamRosterJson } from "../../db/schema.js"
 import type { Rng } from "../../lib/clock.js"
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js"
 import type { EventLog } from "../../lib/event-log.js"
@@ -44,26 +44,55 @@ import { resolveAbandon, resolveAccept, type AcceptOutcome } from "./accept.js"
 import type { Allocator } from "./allocator.js"
 import { roundView, teamScores } from "./match-page.js"
 import { storeKill } from "./extras.js"
+import { newMatchSlug } from "./slug.js"
 import { demoKey } from "./storage.js"
+import {
+  isSeries,
+  loadMapRows,
+  mapViews,
+  mapWins,
+  padMaps,
+  seedPriorMaps,
+  seriesParams,
+  seriesWinner,
+  sumStats,
+  toStatsJson,
+  type PriorMap,
+} from "./series.js"
 import { MATCH_TIMEOUT, isWatched, type MatchWatchdog, type WatchdogReason } from "./watchdog.js"
 import { eachLimit } from "../../lib/async.js"
 
 type MatchRow = typeof matches.$inferSelect
 type PlayerRow = typeof matchPlayers.$inferSelect
 
+// Series only. Every decided map, with the match it was played on
+export type SeriesMapOutcome = { mapNumber: number; winnerTeam: string; matchId: string }
+
 export type MatchResultEvent =
-  | { matchId: string; outcome: "completed"; winnerTeam: string; score: Record<string, number> }
+  | { matchId: string; outcome: "completed"; winnerTeam: string; score: Record<string, number>; maps?: SeriesMapOutcome[] }
   | { matchId: string; outcome: "abandoned"; reason: string; missingSteamIds: string[] }
   | { matchId: string; outcome: "cancelled"; reason: string }
 
 export type ResultListener = (result: MatchResultEvent) => Promise<void>
+
+// One map of a series is decided. The series result follows through the result listeners
+export type MapResultEvent = { matchId: string; mapNumber: number; winnerTeam: string }
+export type MapResultListener = (result: MapResultEvent) => Promise<void>
 
 type TournamentTeam = { name: string; steamIds: string[]; displayName?: string }
 
 export type TournamentMatchParams = {
   mode: Mode
   teams: [TournamentTeam, TournamentTeam]
-  source: { kind: "tournament"; tournamentId: string; bracketMatchId: string; gameNumber: number; bestOf: number }
+  // gameNumber is the first map to play. Maps before it were decided on an earlier server and come in priorMaps
+  source: {
+    kind: "tournament"
+    tournamentId: string
+    bracketMatchId: string
+    gameNumber: number
+    bestOf: number
+    priorMaps?: PriorMap[]
+  }
 }
 
 export type FlowOptions = {
@@ -96,6 +125,9 @@ export type FlowDeps = {
 
 export const SERVER_CRASHED = "server_crashed"
 
+// The next map of a series did not load. The server is at fault, so it ends like a crash
+export const MAP_LOAD_FAILED = "map_load_failed"
+
 const TERMINAL = new Set(["finished", "abandoned", "cancelled"])
 
 // A started server can still be attached to a match in these statuses
@@ -109,6 +141,7 @@ export const ALLOCATION_CONCURRENCY = 4
 // Match lifecycle from match found to result. Postgres rows are the state, row locks serialise changes
 export class MatchFlow {
   private readonly listeners: ResultListener[] = []
+  private readonly mapListeners: MapResultListener[] = []
   private readonly playerHooks: ((steamIds: string[]) => Promise<void>)[] = []
   private readonly matchHooks: ((m: MatchRow) => Promise<void>)[] = []
   private readonly now: () => number
@@ -123,6 +156,20 @@ export class MatchFlow {
 
   onResult(listener: ResultListener): void {
     this.listeners.push(listener)
+  }
+
+  onMapResult(listener: MapResultListener): void {
+    this.mapListeners.push(listener)
+  }
+
+  private async emitMapResult(result: MapResultEvent): Promise<void> {
+    for (const l of this.mapListeners) {
+      try {
+        await l(result)
+      } catch (err) {
+        this.d.log.error({ err, matchId: result.matchId }, "map result listener failed")
+      }
+    }
   }
 
   // Runs when players enter a match. Presence uses it
@@ -176,6 +223,7 @@ export class MatchFlow {
     teams: [LiveTicket[], LiveTicket[]],
   ): Promise<{ ok: true; matchId: string } | { ok: false; lost: string[] }> {
     const matchId = randomUUID()
+    const slug = await newMatchSlug(this.d.db)
     const tickets = [...teams[0], ...teams[1]]
     const claim = await this.d.queue.claim(
       tickets.map((t) => t.id),
@@ -196,6 +244,7 @@ export class MatchFlow {
         source: "queue",
         teams: rosters,
         acceptDeadline: new Date(deadline),
+        slug,
         webhookSecret: randomToken(32),
         password: randomPassword(),
         createdAt: new Date(this.now()),
@@ -207,7 +256,7 @@ export class MatchFlow {
       )
     })
     const total = rosters.reduce((s, r) => s + r.steamIds.length, 0)
-    this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, mode, acceptDeadline: deadline, accepted: 0, required: total })
+    this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, slug, mode, acceptDeadline: deadline, accepted: 0, required: total })
     this.d.events?.emit("match", { event: "match_found", matchId, mode, teams: rosters })
     await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { ok: true, matchId }
@@ -215,15 +264,17 @@ export class MatchFlow {
 
   private sendMatchFound(
     steamIds: string[],
-    p: { matchId: string; mode: Mode; acceptDeadline: number; accepted: number; required: number },
+    p: { matchId: string; slug?: string | null; mode: Mode; acceptDeadline: number; accepted: number; required: number },
   ): void {
-    const payload: MatchFoundPayload = { ...p, acceptWindowSec: ACCEPT_WINDOW_SEC }
+    const { slug, ...rest } = p
+    const payload: MatchFoundPayload = { ...rest, ...(slug ? { slug } : {}), acceptWindowSec: ACCEPT_WINDOW_SEC }
     toUsers(this.d.notifier, steamIds, "match_found", payload)
   }
 
   // Tournament path. Skips queue and accept. Throws when no server slot is free so the caller retries
   async createTournamentMatch(params: TournamentMatchParams): Promise<{ matchId: string }> {
     const matchId = randomUUID()
+    const slug = await newMatchSlug(this.d.db)
     if (!this.d.options.allowUnresolvedModes && unresolvedConfig(params.mode).length > 0) {
       throw new Error(`mode ${params.mode} is not configured yet`)
     }
@@ -252,7 +303,8 @@ export class MatchFlow {
             hostId: reservation?.hostId ?? null,
             slotId: reservation?.slotId ?? null,
             gsltId: reservation?.gsltId ?? null,
-            webhookSecret: randomToken(32),
+            slug,
+        webhookSecret: randomToken(32),
             password: randomPassword(),
             createdAt: new Date(this.now()),
           })
@@ -260,7 +312,9 @@ export class MatchFlow {
         await tx.insert(matchPlayers).values(
           params.teams.flatMap((t, idx) => t.steamIds.map((steamId) => ({ matchId, steamId, team: idx, accepted: true }))),
         )
-        return this.enterPostAccept(tx, m!)
+        const post = await this.enterPostAccept(tx, m!)
+        await this.carryPriorMaps(tx, m!, params.source.priorMaps ?? [])
+        return post
       })
     } catch (err) {
       await this.d.allocator.release(matchId, "hetzner", false)
@@ -277,6 +331,7 @@ export class MatchFlow {
     teams: [{ name: string; steamIds: string[] }, { name: string; steamIds: string[] }]
   }): Promise<{ matchId: string }> {
     const matchId = randomUUID()
+    const slug = await newMatchSlug(this.d.db)
     if (!this.d.options.allowUnresolvedModes && unresolvedConfig(params.mode).length > 0) {
       throw new Error(`mode ${params.mode} is not configured yet`)
     }
@@ -290,7 +345,8 @@ export class MatchFlow {
           status: "allocating",
           source: "challenge",
           teams: rosters,
-          webhookSecret: randomToken(32),
+          slug,
+        webhookSecret: randomToken(32),
           password: randomPassword(),
           createdAt: new Date(this.now()),
         })
@@ -346,12 +402,13 @@ export class MatchFlow {
     const everyone = this.allSteamIds(m)
     const deadline = m.acceptDeadline?.getTime() ?? this.now()
     if (outcome.kind === "pending") {
-      this.sendMatchFound(everyone, { matchId: m.id, mode: m.mode, acceptDeadline: deadline, ...outcome })
+      this.sendMatchFound(everyone, { matchId: m.id, slug: m.slug, mode: m.mode, acceptDeadline: deadline, ...outcome })
       return
     }
     if (outcome.kind === "all_accepted") {
       this.sendMatchFound(everyone, {
         matchId: m.id,
+        slug: m.slug,
         mode: m.mode,
         acceptDeadline: deadline,
         accepted: everyone.length,
@@ -370,6 +427,15 @@ export class MatchFlow {
     this.d.events?.emit("match", { event: "accept_failed", matchId: m.id, reason: outcome.reason, penalize: outcome.penalize })
   }
 
+  // A resumed series keeps the maps already decided. The score starts at their map wins
+  private async carryPriorMaps(tx: Db, m: MatchRow, prior: PriorMap[]): Promise<void> {
+    if (!isSeries(m) || prior.length === 0) return
+    const [cur] = await tx.select({ maps: matches.maps }).from(matches).where(eq(matches.id, m.id))
+    await seedPriorMaps(tx, m.id, padMaps(cur?.maps ?? [], m.bestOf ?? 1), prior)
+    const wins = mapWins(m.teams, await loadMapRows(tx, m.id))
+    await tx.update(matches).set({ score: wins }).where(eq(matches.id, m.id))
+  }
+
   private vetoPlan(m: MatchRow, game1Maps: string[] | null): { format: VetoFormat } | { maps: string[] } {
     const cfg = getModeConfig(m.mode)
     if (cfg.vetoFormat === "none") return { maps: [cfg.maps[0]!.id] }
@@ -383,6 +449,7 @@ export class MatchFlow {
   // Runs inside the accept transaction. Starts the veto or goes straight to allocation
   private async enterPostAccept(tx: Db, m: MatchRow): Promise<PostAccept> {
     let game1Maps: string[] | null = null
+    // A later game or a resumed series plays the maps the first veto chose
     if (m.source === "tournament" && (m.gameNumber ?? 1) > 1 && m.tournamentId && m.bracketMatchKey) {
       const [g1] = await tx
         .select({ maps: matches.maps })
@@ -391,7 +458,7 @@ export class MatchFlow {
           and(
             eq(matches.tournamentId, m.tournamentId),
             eq(matches.bracketMatchKey, m.bracketMatchKey),
-            eq(matches.gameNumber, 1),
+            isNotNull(matches.maps),
           ),
         )
         .orderBy(desc(matches.createdAt))
@@ -401,11 +468,12 @@ export class MatchFlow {
     const plan = this.vetoPlan(m, game1Maps)
     const nowDate = new Date(this.now())
     if ("maps" in plan) {
-      const idx = Math.min(Math.max((m.gameNumber ?? 1) - 1, 0), plan.maps.length - 1)
-      const mapId = m.source === "tournament" && plan.maps.length > 1 ? plan.maps[idx]! : plan.maps[0]!
+      const maps = isSeries(m) ? padMaps(plan.maps, m.bestOf ?? 1) : plan.maps
+      const idx = Math.min(Math.max((m.gameNumber ?? 1) - 1, 0), maps.length - 1)
+      const mapId = m.source === "tournament" && maps.length > 1 ? maps[idx]! : maps[0]!
       await tx
         .update(matches)
-        .set({ status: "allocating", maps: plan.maps, mapId, allocationStartedAt: nowDate })
+        .set({ status: "allocating", maps, mapId, allocationStartedAt: nowDate })
         .where(eq(matches.id, m.id))
       return { kind: "allocate" }
     }
@@ -439,7 +507,7 @@ export class MatchFlow {
     const acting = state.done ? null : state.steps[state.stepIndex]?.team ?? null
     m.teams.forEach((team, idx) => {
       const view: VetoState = acting === idx || acting === null ? state : { ...state, votes: {} }
-      const payload: VetoStatePayload = { matchId: m.id, mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline }
+      const payload: VetoStatePayload = { matchId: m.id, ...(m.slug ? { slug: m.slug } : {}), mode: m.mode, state: view, stepDeadline: state.done ? null : stepDeadline }
       toUsers(this.d.notifier, team.steamIds, "veto_state", payload)
     })
   }
@@ -473,7 +541,7 @@ export class MatchFlow {
       .set({ state, stepDeadline: state.done ? null : new Date(stepDeadline), done: state.done, updatedAt: new Date(this.now()) })
       .where(eq(vetoes.matchId, m.id))
     if (state.done) {
-      const maps = state.maps
+      const maps = isSeries(m) ? padMaps(state.maps, m.bestOf ?? 1) : state.maps
       await tx
         .update(matches)
         .set({ status: "allocating", maps, mapId: maps[0]!, allocationStartedAt: new Date(this.now()) })
@@ -498,9 +566,23 @@ export class MatchFlow {
         return
       }
       const waitedMs = m.source === "tournament" ? Number.POSITIVE_INFINITY : this.now() - started
+      // A series runs every map on this one server. The plugin changes level between maps
+      const series = isSeries(m) ? seriesParams(m, await loadMapRows(this.d.db, matchId)) : undefined
+      if (series === null) {
+        await this.cancelMatch(matchId, "unknown_map", { requeue: true })
+        return
+      }
       try {
         const r = await this.d.allocator.allocate(
-          { matchId, mode: m.mode, map, teams: m.teams, password: m.password!, webhookSecret: m.webhookSecret },
+          {
+            matchId,
+            mode: m.mode,
+            map,
+            teams: m.teams,
+            password: m.password!,
+            webhookSecret: m.webhookSecret,
+            ...(series ? { series } : {}),
+          },
           waitedMs,
         )
         if (r.kind === "wait") {
@@ -538,10 +620,16 @@ export class MatchFlow {
           await this.d.allocator.release(matchId, r.driver, true)
           return
         }
-        await this.d.db
-          .insert(demos)
-          .values({ matchId, bucket: demo.bucket, key: demo.key })
-          .onConflictDoUpdate({ target: demos.matchId, set: { bucket: demo.bucket, key: demo.key } })
+        // Series demos get a row per map still to play. Rows for maps never played go at the end
+        const uploads = series && r.demos
+          ? r.demos.map((d, i) => ({ mapNumber: i + 1, d })).filter((x) => x.mapNumber >= series.startMapNumber)
+          : [{ mapNumber: 1, d: demo }]
+        for (const { mapNumber, d } of uploads) {
+          await this.d.db
+            .insert(demos)
+            .values({ matchId, mapNumber, bucket: d.bucket, key: d.key })
+            .onConflictDoUpdate({ target: [demos.matchId, demos.mapNumber], set: { bucket: d.bucket, key: d.key } })
+        }
         this.d.events?.emit("match", { event: "server_started", matchId, driver: r.driver, ip: response.ip, port: response.port })
         if (next === "ready") {
           const [fresh] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
@@ -598,8 +686,9 @@ export class MatchFlow {
       await this.d.db
         .update(demos)
         .set(event.ok ? { uploaded: true, deleteAfter: sql`now() + interval '30 days'` } : { uploaded: false })
-        .where(eq(demos.matchId, matchId))
-      if (TERMINAL.has(m.status)) await this.teardown(matchId)
+        .where(and(eq(demos.matchId, matchId), eq(demos.mapNumber, event.mapNumber ?? 1)))
+      // A series waits for the upload of its last played map
+      if (TERMINAL.has(m.status) && (event.mapNumber ?? 1) >= (await this.lastDemoMap(matchId))) await this.teardown(matchId)
       return
     }
     // Kills are frequent so they stay out of the admin event log
@@ -647,6 +736,7 @@ export class MatchFlow {
         return
       }
       case "match_started": {
+        if (isSeries(m)) await this.startSeriesMap(m, event.mapNumber ?? 1)
         await db
           .update(matches)
           .set({ status: "live", startedAt: new Date(this.now()) })
@@ -656,10 +746,12 @@ export class MatchFlow {
       }
       case "round_end": {
         const arena = (event as { arena?: unknown }).arena
+        const mapNumber = event.mapNumber ?? 1
         await db
           .insert(matchRounds)
           .values({
             matchId,
+            mapNumber,
             round: event.round,
             winnerTeam: event.winnerTeam,
             score: event.score,
@@ -667,22 +759,149 @@ export class MatchFlow {
             endedAt: new Date(this.now()),
           })
           .onConflictDoNothing()
-        await db.update(matches).set({ score: event.score }).where(eq(matches.id, matchId))
+        // A series keeps maps won on the match and the round score on the map
+        if (isSeries(m)) await this.liveMapScore(m, mapNumber, event.score)
+        else await db.update(matches).set({ score: event.score }).where(eq(matches.id, matchId))
         const [round] = await db
           .select()
           .from(matchRounds)
-          .where(and(eq(matchRounds.matchId, matchId), eq(matchRounds.round, event.round)))
-        await this.sendMatchUpdate(matchId, round ? roundView(round) : undefined)
+          .where(and(eq(matchRounds.matchId, matchId), eq(matchRounds.mapNumber, mapNumber), eq(matchRounds.round, event.round)))
+        await this.sendMatchUpdate(matchId, round ? roundView(round, isSeries(m)) : undefined)
         return
       }
+      case "map_end":
+        await this.endSeriesMap(m, event)
+        return
       case "match_end":
         await this.finishMatch(matchId, event)
         return
       case "match_abandoned":
         // A crashed server is nobody's fault. No rating change and no cooldown
-        if (event.reason === SERVER_CRASHED) await this.cancelMatch(matchId, SERVER_CRASHED, { requeue: false })
-        else await this.abandonMatch(matchId, event.missingSteamIds, event.reason)
+        if (event.reason === SERVER_CRASHED || event.reason === MAP_LOAD_FAILED) {
+          await this.cancelMatch(matchId, event.reason, { requeue: false })
+        } else {
+          await this.abandonMatch(matchId, event.missingSteamIds, event.reason)
+        }
         return
+    }
+  }
+
+  private async lastDemoMap(matchId: string): Promise<number> {
+    const [row] = await this.d.db
+      .select({ n: sql<number | null>`max(${demos.mapNumber})` })
+      .from(demos)
+      .where(eq(demos.matchId, matchId))
+    return Number(row?.n ?? 0)
+  }
+
+  // A series map went live. Its row holds the round score until map_end
+  private async startSeriesMap(m: MatchRow, mapNumber: number): Promise<void> {
+    const mapId = padMaps(m.maps ?? [], m.bestOf ?? 1)[mapNumber - 1] ?? m.mapId ?? ""
+    await this.d.db
+      .insert(matchMaps)
+      .values({ matchId: m.id, mapNumber, mapId, status: "live", startedAt: new Date(this.now()) })
+      .onConflictDoNothing()
+    await this.d.db.update(matches).set({ mapId }).where(eq(matches.id, m.id))
+  }
+
+  private async liveMapScore(m: MatchRow, mapNumber: number, score: Record<string, number>): Promise<void> {
+    const mapId = padMaps(m.maps ?? [], m.bestOf ?? 1)[mapNumber - 1] ?? m.mapId ?? ""
+    await this.d.db
+      .insert(matchMaps)
+      .values({ matchId: m.id, mapNumber, mapId, status: "live", score, startedAt: new Date(this.now()) })
+      .onConflictDoUpdate({
+        target: [matchMaps.matchId, matchMaps.mapNumber],
+        set: { score },
+        setWhere: sql`${matchMaps.status} = 'live'`,
+      })
+  }
+
+  // One map of a series is over. The series ends here once a team has the wins it needs,
+  // otherwise the server stays up and the plugin loads the next map
+  private async endSeriesMap(m: MatchRow, event: Extract<MatchEvent, { type: "map_end" }>): Promise<void> {
+    const r = await this.tx(async (tx) => {
+      const cur = await this.lock(tx, m.id)
+      if (!cur || TERMINAL.has(cur.status) || !isSeries(cur)) return null
+      const [row] = await tx
+        .select({ status: matchMaps.status })
+        .from(matchMaps)
+        .where(and(eq(matchMaps.matchId, m.id), eq(matchMaps.mapNumber, event.mapNumber)))
+      if (row?.status === "done") return null
+      const winner = cur.teams.some((t) => t.name === event.winnerTeam) ? event.winnerTeam : null
+      // A drawn map counts for nobody and the series goes on
+      if (!winner && event.winnerTeam !== DRAW_WINNER) this.d.log.warn({ matchId: m.id, mapNumber: event.mapNumber, winnerTeam: event.winnerTeam }, "series map ended without a winner")
+      const done = {
+        mapId: event.mapId,
+        status: "done",
+        winnerTeam: winner,
+        score: event.score,
+        players: toStatsJson(event.players),
+        endedAt: new Date(this.now()),
+      }
+      await tx
+        .insert(matchMaps)
+        .values({ matchId: m.id, mapNumber: event.mapNumber, ...done })
+        .onConflictDoUpdate({ target: [matchMaps.matchId, matchMaps.mapNumber], set: done })
+      const rows = await loadMapRows(tx, m.id)
+      const wins = mapWins(cur.teams, rows)
+      const decided = seriesWinner(cur.bestOf ?? 1, wins)
+      const nextMap = padMaps(cur.maps ?? [], cur.bestOf ?? 1)[event.mapNumber]
+      await tx
+        .update(matches)
+        .set({ score: wins, ...(!decided && nextMap ? { mapId: nextMap } : {}) })
+        .where(eq(matches.id, m.id))
+      // Running totals so the match page shows series stats between maps
+      for (const p of sumStats(rows)) {
+        await tx
+          .update(matchPlayers)
+          .set({ kills: p.kills, deaths: p.deaths, headshots: p.headshots, damage: p.damage })
+          .where(and(eq(matchPlayers.matchId, m.id), eq(matchPlayers.steamId, p.steamId)))
+      }
+      return { winner, decided, wins }
+    })
+    if (!r) return
+    this.d.events?.emit("match", { event: "map_end", matchId: m.id, mapNumber: event.mapNumber, winnerTeam: r.winner })
+    if (r.winner) await this.emitMapResult({ matchId: m.id, mapNumber: event.mapNumber, winnerTeam: r.winner })
+    if (r.decided) {
+      await this.finishMatch(m.id, { type: "match_end", winnerTeam: r.decided, score: r.wins, players: [], demoUploaded: false })
+    } else {
+      await this.sendMatchUpdate(m.id)
+    }
+  }
+
+  // Final series result from the map rows. The plugin's maps list fills in any map_end that never arrived
+  private async seriesOutcome(
+    tx: Db,
+    m: MatchRow,
+    event: Extract<MatchEvent, { type: "match_end" }>,
+  ): Promise<{ winnerTeam: string; score: Record<string, number>; players: MatchEndPlayers; maps: SeriesMapOutcome[] }> {
+    for (const x of event.maps ?? []) {
+      const winnerTeam = m.teams.some((t) => t.name === x.winnerTeam) ? x.winnerTeam : null
+      await tx
+        .insert(matchMaps)
+        .values({ matchId: m.id, mapNumber: x.mapNumber, mapId: x.mapId, status: "done", winnerTeam, score: x.score, endedAt: new Date(this.now()) })
+        .onConflictDoUpdate({
+          target: [matchMaps.matchId, matchMaps.mapNumber],
+          set: { mapId: x.mapId, status: "done", winnerTeam, score: x.score },
+          setWhere: sql`${matchMaps.status} <> 'done'`,
+        })
+    }
+    const rows = await loadMapRows(tx, m.id)
+    const wins = mapWins(m.teams, rows)
+    // The map rows decide. The plugin's winner counts only when maps are missing
+    const winnerTeam = seriesWinner(m.bestOf ?? 1, wins) ?? event.winnerTeam
+    const played = rows.filter((r) => !r.playedIn)
+    const stats = sumStats(rows)
+    const lastPlayed = played.reduce((n, r) => Math.max(n, r.mapNumber), 0)
+    // Maps the series never reached have no demo
+    await tx.delete(demos).where(and(eq(demos.matchId, m.id), gt(demos.mapNumber, Math.max(lastPlayed, m.gameNumber ?? 1))))
+    return {
+      winnerTeam,
+      score: wins,
+      players: stats.length > 0 ? stats : event.players,
+      maps: rows
+        .filter((r) => r.status === "done" && r.winnerTeam)
+        .map((r) => ({ mapNumber: r.mapNumber, winnerTeam: r.winnerTeam!, matchId: r.playedIn ?? m.id })),
     }
   }
 
@@ -695,6 +914,12 @@ export class MatchFlow {
       status: m.status as MatchStatus,
       teams: teamScores(m.teams, m.score),
       ...(lastRound ? { lastRound } : {}),
+    }
+    if (isSeries(m)) {
+      const maps = mapViews(m, await loadMapRows(this.d.db, matchId))
+      const live = maps.find((x) => x.status === "live")
+      payload.maps = maps
+      if (live) payload.mapNumber = live.mapNumber
     }
     this.d.notifier.send({ kind: "match", matchId }, { type: "match_update", payload, ts: Date.now() })
     await this.matchChanged(m)
@@ -722,6 +947,7 @@ export class MatchFlow {
     if (!m.serverIp || !m.serverPort || !m.connect) return
     const payload: ServerReadyPayload = {
       matchId: m.id,
+      ...(m.slug ? { slug: m.slug } : {}),
       ip: m.serverIp,
       port: m.serverPort,
       password: m.password ?? "",
@@ -735,20 +961,23 @@ export class MatchFlow {
     const r = await this.tx(async (tx) => {
       const m = await this.lock(tx, matchId)
       if (!m || TERMINAL.has(m.status) || m.ratingApplied) return null
+      // A series is rated once on its result. Score is maps won and stats are totals
+      const series = isSeries(m) ? await this.seriesOutcome(tx, m, event) : null
+      const result = series ?? { winnerTeam: event.winnerTeam, score: event.score, players: event.players }
       // A draw or an unknown team name leaves ratings alone
-      const winnerIdx = event.winnerTeam === DRAW_WINNER ? -1 : m.teams.findIndex((t) => t.name === event.winnerTeam)
+      const winnerIdx = result.winnerTeam === DRAW_WINNER ? -1 : m.teams.findIndex((t) => t.name === result.winnerTeam)
       const nowDate = new Date(this.now())
       await tx
         .update(matches)
         .set({
           status: "finished",
-          winnerTeam: winnerIdx >= 0 ? event.winnerTeam : null,
-          score: event.score,
+          winnerTeam: winnerIdx >= 0 ? result.winnerTeam : null,
+          score: result.score,
           endedAt: nowDate,
           ratingApplied: winnerIdx >= 0,
         })
         .where(eq(matches.id, matchId))
-      const stats = new Map(event.players.map((p) => [p.steamId, p]))
+      const stats = new Map(result.players.map((p) => [p.steamId, p]))
       for (const [idx, team] of m.teams.entries()) {
         for (const steamId of team.steamIds) {
           const s = stats.get(steamId)
@@ -778,11 +1007,13 @@ export class MatchFlow {
             )
           : []
       // The upload itself is confirmed later by a demo_uploaded event
-      await tx
-        .insert(demos)
-        .values({ matchId, bucket: "unknown", key: demoKey(matchId, m.createdAt) })
-        .onConflictDoNothing()
-      return { m, changes, winner: winnerIdx >= 0 ? event.winnerTeam : null }
+      if (!series) {
+        await tx
+          .insert(demos)
+          .values({ matchId, bucket: "unknown", key: demoKey(matchId, m.createdAt) })
+          .onConflictDoNothing()
+      }
+      return { m, changes, winner: winnerIdx >= 0 ? result.winnerTeam : null, score: result.score, maps: series?.maps }
     })
     // The server stays up until the demo upload is reported. See teardown
     if (!r) return
@@ -791,13 +1022,19 @@ export class MatchFlow {
       mode: r.m.mode,
       status: "completed",
       winnerTeam: r.winner,
-      score: event.score,
+      score: r.score,
       ratingChanges: r.changes,
     }
     toUsers(this.d.notifier, this.allSteamIds(r.m), "match_result", payload)
     await this.sendMatchUpdate(matchId)
     await this.d.trust.recomputeMany(this.allSteamIds(r.m))
-    await this.emitResult({ matchId, outcome: "completed", winnerTeam: r.winner ?? DRAW_WINNER, score: event.score })
+    await this.emitResult({
+      matchId,
+      outcome: "completed",
+      winnerTeam: r.winner ?? DRAW_WINNER,
+      score: r.score,
+      ...(r.maps ? { maps: r.maps } : {}),
+    })
   }
 
   // Stops the server once the match is over. DatHost demos are pulled first because deleting the clone deletes them
@@ -812,15 +1049,21 @@ export class MatchFlow {
   }
 
   private async collectSurgeDemo(m: MatchRow): Promise<void> {
-    try {
-      const [demo] = await this.d.db.select().from(demos).where(eq(demos.matchId, m.id))
-      const key = demo?.key ?? demoKey(m.id, m.createdAt)
-      if (await this.d.allocator.collectDemo(m.id, m.driver, key)) {
-        await this.d.db.update(demos).set({ uploaded: true }).where(eq(demos.matchId, m.id))
+    const rows = await this.d.db.select().from(demos).where(eq(demos.matchId, m.id)).orderBy(asc(demos.mapNumber))
+    // A series has one demo per played map on the same server
+    const targets = rows.length > 0 ? rows.map((d) => ({ mapNumber: d.mapNumber, key: d.key })) : [{ mapNumber: 1, key: demoKey(m.id, m.createdAt) }]
+    for (const t of targets) {
+      try {
+        if (await this.d.allocator.collectDemo(m.id, m.driver, t.key, isSeries(m) ? t.mapNumber : undefined)) {
+          await this.d.db
+            .update(demos)
+            .set({ uploaded: true })
+            .where(and(eq(demos.matchId, m.id), eq(demos.mapNumber, t.mapNumber)))
+        }
+      } catch (err) {
+        this.d.log.error({ err, matchId: m.id, mapNumber: t.mapNumber }, "surge demo collection failed")
+        this.d.events?.record({ kind: "error", type: "demo_fetch_failed", message: (err as Error).message, matchId: m.id })
       }
-    } catch (err) {
-      this.d.log.error({ err, matchId: m.id }, "surge demo collection failed")
-      this.d.events?.record({ kind: "error", type: "demo_fetch_failed", message: (err as Error).message, matchId: m.id })
     }
   }
 
@@ -1131,6 +1374,7 @@ export class MatchFlow {
       const players = await this.players(this.d.db, m.id)
       this.sendMatchFound([steamId], {
         matchId: m.id,
+        slug: m.slug,
         mode: m.mode,
         acceptDeadline: m.acceptDeadline?.getTime() ?? this.now(),
         accepted: players.filter((p) => p.accepted).length,
@@ -1145,6 +1389,7 @@ export class MatchFlow {
         const view = acting === idx ? state : { ...state, votes: {} }
         const payload: VetoStatePayload = {
           matchId: m.id,
+          ...(m.slug ? { slug: m.slug } : {}),
           mode: m.mode,
           state: view,
           stepDeadline: row.stepDeadline?.getTime() ?? null,
@@ -1154,6 +1399,7 @@ export class MatchFlow {
     } else if ((m.status === "ready" || m.status === "live") && m.connect && m.serverIp && m.serverPort) {
       const payload: ServerReadyPayload = {
         matchId: m.id,
+        ...(m.slug ? { slug: m.slug } : {}),
         ip: m.serverIp,
         port: m.serverPort,
         password: m.password ?? "",
@@ -1166,3 +1412,5 @@ export class MatchFlow {
 }
 
 type PostAccept = { kind: "veto"; state: VetoState; stepDeadline: number } | { kind: "allocate" }
+
+type MatchEndPlayers = Extract<MatchEvent, { type: "match_end" }>["players"]

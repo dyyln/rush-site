@@ -10,6 +10,7 @@ import { requireUser } from "../auth/session.js"
 import { buildMatchExtras } from "./extras.js"
 import { registerMatchExtrasRoutes } from "./extras-routes.js"
 import { buildMatchPage } from "./match-page.js"
+import { matchIdForSlug } from "./slug.js"
 
 const AcceptBody = z.object({ accept: z.boolean() })
 const VetoBody = z.object({ mapId: z.string().min(1).max(64) })
@@ -33,11 +34,13 @@ export function registerMatchRoutes(app: FastifyInstance, ctx: AppContext): void
     return { match: m ? await matchView(ctx, m.id, steamId) : null }
   })
 
+  // Takes the match uuid or its room id
   app.get("/matches/:id", async (req) => {
     const { id } = req.params as { id: string }
-    if (!Uuid.safeParse(id).success) throw notFound("match_not_found")
+    const matchId = Uuid.safeParse(id).success ? id : await matchIdForSlug(ctx.db, id)
+    if (!matchId) throw notFound("match_not_found")
     const viewer = await ctx.auth(req)
-    const match = await matchView(ctx, id, viewer)
+    const match = await matchView(ctx, matchId, viewer)
     if (!match) throw notFound("match_not_found")
     return { match }
   })

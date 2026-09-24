@@ -1,13 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MODE_CONFIGS, MODES, trustAtLeast, type Mode, type ServerReadyPayload, type TrustLevel, type VetoStatePayload } from "@rushsite/shared";
-import { Button } from "@/components/ui/Button";
+import { MODE_CONFIGS, MODES, roomPath, trustAtLeast, type Mode, type TrustLevel } from "@rushsite/shared";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { PlaySkeleton } from "@/components/skeletons/PlaySkeleton";
-import { ConnectSteps, type ConnectStep } from "@/components/match/ConnectSteps";
-import { Modal } from "@/components/ui/Modal";
 import { PartyPanel } from "@/components/ui/PartyPanel";
 import { GetVerifiedCard } from "@/components/trust/GetVerifiedCard";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
@@ -25,20 +23,16 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatTile } from "@/components/ui/StatTile";
 import { FormDots } from "@/components/ui/FormDots";
 import { TierChip } from "@/components/ui/TierChip";
-import { Timer } from "@/components/ui/Timer";
 import { useToast } from "@/components/ui/Toast";
-import { VetoBoard } from "@/components/ui/VetoBoard";
 import { ApiError, api } from "@/lib/api";
 import { formatStat } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { TRUST_NAMES } from "@/lib/trust";
-import { MODE_COPY, mapName, modeLabel } from "@/lib/modes";
+import { MODE_COPY, modeLabel } from "@/lib/modes";
 import { useSession } from "@/lib/session";
-import { usePlay, type Warmup } from "@/lib/usePlay";
+import { activeMatch, usePlay } from "@/lib/usePlay";
 import { StartCountdown } from "@/components/play/StartCountdown";
-import { VetoSummary } from "@/components/play/VetoSummary";
-import { ResultCard } from "@/components/play/ResultCard";
 import { cancelCopy, describeError, knownError } from "@/lib/errors";
 import { loadLastModes, saveLastModes } from "@/components/play/lastModes";
 import { COOLDOWN_EXPLAINER_FLAG, CooldownNote } from "./CooldownNote";
@@ -52,8 +46,12 @@ const TRUST_OPTIONS: { value: TrustLevel; label: string }[] = [
 
 const MAX_PARTY = Math.max(...MODES.map((m) => MODE_CONFIGS[m].teamSize));
 
+// Matches this tab already sent to their room. Coming back to Play then shows a link instead of bouncing
+const routedToRoom = new Set<string>();
+
 export function PlayView() {
   const { user, loading } = useSession();
+  const router = useRouter();
   const toast = useToast();
   const play = usePlay({
     onCancelled: (c) => {
@@ -115,7 +113,15 @@ export function PlayView() {
   // Signed out viewers see the cards as a solo player
   const partySize = user ? Math.max(1, play.party?.members.length ?? 1) : 1;
   const isLeader = !play.party?.partyId || play.party.leaderSteamId === user?.steamId;
-  const inMatch = play.match.phase !== "none" && play.match.phase !== "result";
+  const active = activeMatch(play.match);
+  const inMatch = !!active;
+
+  // The match room holds accept, veto, connect and the result. Play only sends the player there
+  useEffect(() => {
+    if (!active || !user || routedToRoom.has(active.matchId)) return;
+    routedToRoom.add(active.matchId);
+    router.push(roomPath(active));
+  }, [active?.matchId, active?.slug, user?.steamId]);
 
   // Mirror the live queue into the picker so it shows what is actually queued
   useEffect(() => {
@@ -130,12 +136,11 @@ export function PlayView() {
     const last = loadLastModes();
     if (last.length > 0) setSelected((s) => (s.length === 0 ? last : s));
   }, []);
-  const playAgain = useRef<() => void>(() => {});
 
-  // Starting a new queue clears the last result card
+  // A result belongs to the match room. Play forgets it
   useEffect(() => {
-    if (queued && play.match.phase === "result") play.dismissMatch();
-  }, [queued, play.match.phase]);
+    if (play.match.phase === "result") play.dismissMatch();
+  }, [play.match.phase]);
 
   // A cooldown right after a match found means this player declined or let the window lapse
   const lastFound = useRef(0);
@@ -182,12 +187,6 @@ export function PlayView() {
     if (eligible.length === 0) return;
     if (!play.joinQueue(eligible, effectiveMinTrust)) toast.push({ title: "Not connected", body: "Try again in a moment.", tone: "error" });
   }
-  playAgain.current = () => {
-    if (queued || inMatch) return;
-    if (cooldown) toast.push({ title: "On cooldown", body: "Start the queue again when it ends.", tone: "info" });
-    else if (eligible.length === 0) toast.push({ title: "Pick a mode", tone: "info" });
-    else start();
-  };
 
   // A friend's Join queue link lands here with ?modes=a,b&start=1
   const linked = useRef<{ modes: Mode[]; start: boolean } | null>(null);
@@ -233,8 +232,6 @@ export function PlayView() {
 
   if (loading) return <PlaySkeleton />;
 
-  const found = play.match.phase === "found" ? play.match : null;
-  const result = play.match.phase === "result" ? play.match : null;
   const inviteUrl = play.party?.inviteCode && origin ? `${origin}/invite/${play.party.inviteCode}` : null;
   async function ensureInvite(): Promise<string | null> {
     const p = await api.party.create();
@@ -254,46 +251,16 @@ export function PlayView() {
 
       <div className="grid-2">
         <div className="stack">
-          {result && user && (
-            <ResultCard
-              result={result.result}
-              mapId={result.mapId}
-              veto={result.veto}
-              mySteamId={user.steamId}
-              onQueueAgain={
-                isLeader
-                  ? () => {
-                      play.dismissMatch();
-                      playAgain.current();
-                    }
-                  : undefined
-              }
-              onDismiss={play.dismissMatch}
-            />
-          )}
-
-          {play.match.phase === "veto" && user && (
-            <Card tone="accent">
-              <VetoBoard
-                mode={play.match.veto.mode}
-                state={play.match.veto.state}
-                mySteamId={user.steamId}
-                stepDeadline={play.match.veto.stepDeadline}
-                onVote={play.vote}
-              />
+          {active && user && (
+            <Card tone="accent" eyebrow="You are in a match" title={modeLabelFor(play.match) ?? "Your match"}>
+              <div className="stack">
+                <p className="muted">Accept, veto, connect info and the result are all in the match room.</p>
+                <p>
+                  <ButtonLink href={roomPath(active)}>Open match room</ButtonLink>
+                </p>
+              </div>
             </Card>
           )}
-
-          {play.match.phase === "ready" && (
-            <ServerReady
-              server={play.match.server}
-              mode={play.match.veto?.mode ?? null}
-              veto={play.match.veto}
-              mySteamId={user?.steamId ?? ""}
-              warmup={play.warmup?.matchId === play.match.server.matchId ? play.warmup : null}
-            />
-          )}
-          {play.match.phase === "starting" && <ServerReady server={null} mode={play.match.mode} step={play.match.status === "starting" ? "starting" : "allocating"} />}
 
           {!inMatch && (
             <>
@@ -483,91 +450,17 @@ export function PlayView() {
         </aside>
       </div>
 
-      <Modal
-        open={!!found && !!user}
-        blocking
-        title="Match found"
-        footer={
-          found && !found.responded ? (
-            <>
-              <Button variant="ghost" onClick={() => play.respond(false)}>
-                Decline
-              </Button>
-              <Button onClick={() => play.respond(true)} data-autofocus>
-                Accept
-              </Button>
-            </>
-          ) : undefined
-        }
-      >
-        {found && (
-          <div className={styles.found}>
-            <Timer until={found.found.acceptDeadline} totalSec={found.found.acceptWindowSec} size="lg" label="Time to accept" />
-            <div>
-              <p className={styles.foundMode}>{modeLabel(found.found.mode)}</p>
-              {(() => {
-                const mine = me?.modes.find((m) => m.mode === found.found.mode);
-                return mine && mine.matches > 0 ? <TierChip tier={mine.tier} rating={mine.rating} size="sm" link={false} /> : null;
-              })()}
-              <p className="muted" aria-live="polite">
-                {found.found.accepted} of {found.found.required} accepted
-              </p>
-              <ol className={styles.pips} aria-hidden="true">
-                {Array.from({ length: found.found.required }, (_, i) => (
-                  <li key={i} className={i < found.found.accepted ? styles.pipOn : undefined} />
-                ))}
-              </ol>
-              {found.responded && <p className={styles.waiting}>Accepted. Waiting for others.</p>}
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
 
-type ServerReadyProps = {
-  server: ServerReadyPayload | null;
-  mode: Mode | null;
-  veto?: VetoStatePayload | null;
-  mySteamId?: string;
-  warmup?: Warmup | null;
-};
-
-function ServerReady({ server, mode, veto, mySteamId, warmup, step = "allocating" }: ServerReadyProps & { step?: ConnectStep }) {
-  if (!server) {
-    return (
-      <Card tone="accent" eyebrow={step === "starting" ? "Starting server" : "Allocating server"} title={mode ? modeLabel(mode) : "Your match"}>
-        <ConnectSteps step={step} />
-      </Card>
-    );
-  }
-  // Older payloads only had the connect string
-  const password = server.password || /password\s+(\S+)/.exec(server.connect)?.[1];
-  const steamUrl = `steam://connect/${server.ip}:${server.port}${password ? `/${encodeURIComponent(password)}` : ""}`;
-  const map = mode ? mapName(mode, server.mapId) : server.mapId;
-
-  return (
-    <Card tone="accent" eyebrow="Connect now" title={`Server ready on ${map}`}>
-      <div className="stack">
-        <p className="muted">Join the server now. If you do not connect in time you forfeit the match and lose rating.</p>
-        {veto && mySteamId && <VetoSummary mode={veto.mode} state={veto.state} mySteamId={mySteamId} />}
-        <ConnectSteps step="waiting" connected={warmup?.connected} expected={warmup?.expected} />
-        <label htmlFor="connect-string" className="visually-hidden">
-          Console connect command
-        </label>
-        <input id="connect-string" className={`${styles.connect} mono`} value={server.connect} readOnly onFocus={(e) => e.currentTarget.select()} />
-        <div className="row">
-          <CopyButton variant="primary" text={server.connect}>
-            Copy connect
-          </CopyButton>
-          <a className={`${styles.steamLink} ${styles.steamLinkSecondary}`} href={steamUrl}>
-            Launch CS2
-          </a>
-        </div>
-      </div>
-    </Card>
-  );
+// Mode of the active match when a message carried it
+function modeLabelFor(m: ReturnType<typeof usePlay>["match"]): string | null {
+  if (m.phase === "found") return modeLabel(m.found.mode);
+  if (m.phase === "veto") return modeLabel(m.veto.mode);
+  if (m.phase === "starting") return modeLabel(m.mode);
+  if (m.phase === "ready") return m.veto ? modeLabel(m.veto.mode) : null;
+  return null;
 }
 
 function Standing({ profile, mode }: { profile: Profile | null; mode: Mode }) {

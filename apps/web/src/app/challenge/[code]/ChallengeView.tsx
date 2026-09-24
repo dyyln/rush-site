@@ -148,7 +148,7 @@ export function ChallengeView({ code }: { code: string }) {
 
           {c.status === "accepted" && c.matchId && (
             <p>
-              Match starting. <a href="/play">Go to Play</a> for the veto, or <Link href={`/matches/${c.matchId}`}>open the match page</Link>.
+              Match starting. <Link href={`/matches/${c.matchId}`}>Open the match room</Link> for the veto and connect info.
             </p>
           )}
 

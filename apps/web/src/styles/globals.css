@@ -177,3 +177,16 @@ table {
 html[data-tiers-only] .rating-num {
   display: none;
 }
+
+/* Room for the chat sidebar on desktop. ChatSidebar sets data-chat on html */
+@media (min-width: 1024px) {
+  html[data-chat="open"] {
+    --chat-offset: var(--chat-width);
+  }
+  html[data-chat="rail"] {
+    --chat-offset: var(--chat-rail);
+  }
+  html[data-chat] body {
+    padding-right: var(--chat-offset);
+  }
+}

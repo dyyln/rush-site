@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { BRAND_NAME } from "@rushsite/shared";
+import { BRAND_NAME, isMatchSlug } from "@rushsite/shared";
 import { apiUrl, isMock } from "@/lib/env";
 import { mockMatchDetail } from "@/lib/mock";
 import { mvpReason } from "@/components/match/roster";
@@ -26,7 +26,7 @@ const C = {
 const UUID = /^[0-9a-f-]{36}$/i;
 
 async function loadMatch(id: string): Promise<MatchDetail | null> {
-  if (!UUID.test(id)) return null;
+  if (!UUID.test(id) && !isMatchSlug(id)) return null;
   if (isMock) return mockMatchDetail(id);
   // Server side may reach the api on an internal address
   const base = (process.env.API_INTERNAL_URL ?? apiUrl).replace(/\/$/, "");

@@ -69,4 +69,23 @@ export function validateLikeAgent(req: StartServerRequest): void {
   }
   if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.host) bad("webhookUrl must be an http or https URL")
   if (!req.webhookSecret) bad("webhookSecret is required")
+  validateSeriesLikeAgent(req)
+}
+
+// Mirrors validateSeries in validate.go
+function validateSeriesLikeAgent(req: StartServerRequest): void {
+  const s = req.series
+  if (!s) return
+  if (s.bestOf < 2 || s.bestOf > 7) bad("series.bestOf must be 2 to 7")
+  if (s.maps.length !== s.bestOf || s.demoUploads.length !== s.bestOf) bad("series needs bestOf maps and demoUploads")
+  if (s.startMapNumber < 1 || s.startMapNumber > s.bestOf) bad("series.startMapNumber is out of range")
+  s.maps.forEach((m, i) => {
+    if (!m.id) bad(`series map ${i + 1} has no id`)
+    if (m.workshopId) {
+      if (!WORKSHOP.test(m.workshopId)) bad(`series map ${i + 1} workshopId must be numeric`)
+    } else if (!MAP_NAME.test(m.mapName || m.id)) {
+      bad(`map name ${m.mapName || m.id} must be A-Z a-z 0-9 _`)
+    }
+  })
+  if (s.maps[s.startMapNumber - 1]!.id !== req.map.id) bad(`map does not match series map ${s.startMapNumber}`)
 }

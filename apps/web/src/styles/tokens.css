@@ -97,6 +97,9 @@
   --target-min: 44px;
   --content-max: 1200px;
   --gutter: 16px;
+  /* Chat sidebar on desktop, open and collapsed */
+  --chat-width: 320px;
+  --chat-rail: 56px;
 
   /* Motion */
   --duration-fast: 120ms;
@@ -105,6 +108,7 @@
 
   /* Layers */
   --z-header: 10;
+  --z-chat: 40;
   --z-modal: 50;
   --z-toast: 60;
 

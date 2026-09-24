@@ -26,6 +26,7 @@ var (
 	rePassword = regexp.MustCompile(`^[A-Za-z0-9_\-]{4,64}$`)
 	reArgFlag  = regexp.MustCompile(`^[+-][A-Za-z0-9_]{1,64}$`)
 	reArgValue = regexp.MustCompile(`^[A-Za-z0-9_.\-]{1,64}$`)
+	reWeapon   = regexp.MustCompile(`^weapon_[a-z0-9_]{1,40}$`)
 )
 
 // resolveCS2 turns the request's cs2 block into a launch spec.
@@ -148,7 +149,71 @@ func Validate(req *StartRequest, modes ModeTable, cfgDir string) (ModeSpec, erro
 	if req.WebhookSecret == "" {
 		return ModeSpec{}, invalid("webhookSecret is required")
 	}
+	if err := validateLoadout(req.Map.Loadout); err != nil {
+		return ModeSpec{}, err
+	}
+	if err := validateSeries(req); err != nil {
+		return ModeSpec{}, err
+	}
 	return spec, nil
+}
+
+// validateLoadout checks weapon names because the plugin gives them to players by name.
+func validateLoadout(l *Loadout) error {
+	if l == nil {
+		return nil
+	}
+	for _, p := range []*WeaponPair{l.Primary, l.Secondary} {
+		if p == nil {
+			continue
+		}
+		for _, w := range []string{p.CT, p.T} {
+			if w != "" && !reWeapon.MatchString(w) {
+				return invalid("loadout weapon %q is not allowed", w)
+			}
+		}
+	}
+	switch l.Armor {
+	case "", "none", "kevlar", "kevlar_helmet":
+		return nil
+	}
+	return invalid("loadout armor %q is not allowed", l.Armor)
+}
+
+// validateSeries checks the map list the plugin changes level through. The plugin runs these names as commands.
+func validateSeries(req *StartRequest) error {
+	s := req.Series
+	if s == nil {
+		return nil
+	}
+	if s.BestOf < 2 || s.BestOf > 7 {
+		return invalid("series.bestOf must be 2 to 7")
+	}
+	if len(s.Maps) != s.BestOf || len(s.DemoUploads) != s.BestOf {
+		return invalid("series needs bestOf maps and demoUploads")
+	}
+	if s.StartMapNumber < 1 || s.StartMapNumber > s.BestOf {
+		return invalid("series.startMapNumber is out of range")
+	}
+	for i, m := range s.Maps {
+		if m.ID == "" {
+			return invalid("series map %d has no id", i+1)
+		}
+		if m.WorkshopID != "" {
+			if !reWorkshop.MatchString(m.WorkshopID) {
+				return invalid("series map %d workshopId must be numeric", i+1)
+			}
+		} else if _, err := LevelName(m); err != nil {
+			return err
+		}
+		if err := validateLoadout(m.Loadout); err != nil {
+			return err
+		}
+	}
+	if start := s.Maps[s.StartMapNumber-1]; start.ID != req.Map.ID {
+		return invalid("map does not match series map %d", s.StartMapNumber)
+	}
+	return nil
 }
 
 // LevelName is the map name passed to +map when there is no workshop id.

@@ -7,6 +7,8 @@ import { MemoryTournamentStore } from "./memory-store.js"
 import type { TournamentService } from "./service.js"
 import type {
   EmitAudience,
+  MapResult,
+  MapResultHandler,
   MatchResult,
   MatchResultHandler,
   PartyInfo,
@@ -32,6 +34,7 @@ async function harness(cups: CupDefinition[]) {
   // Test hook that runs inside startMatch.
   const onStart: { fn?: (p: StartMatchParams) => Promise<void> } = {}
   let handler: MatchResultHandler | undefined
+  let mapHandler: MapResultHandler | undefined
   let service: TournamentService | undefined
   let seq = 0
 
@@ -54,6 +57,9 @@ async function harness(cups: CupDefinition[]) {
     },
     onMatchResult: (h) => {
       handler = h
+    },
+    onMapResult: (h) => {
+      mapHandler = h
     },
     emit: (m, audience) => {
       emitted.push(m)
@@ -85,6 +91,7 @@ async function harness(cups: CupDefinition[]) {
     onStart,
     tick: () => (service as TournamentService).tick(),
     result: (r: MatchResult) => (handler as MatchResultHandler)(r),
+    mapResult: (r: MapResult) => (mapHandler as MapResultHandler)(r),
     enter: (id: string, steamId?: string) =>
       app.inject({
         method: "POST",
@@ -365,6 +372,78 @@ describe("running a cup", () => {
     })
     expect(h.emitted.at(-1)?.payload.kind).toBe("completed")
     expect(h.emitted.at(-1)?.type).toBe("tournament_update")
+  })
+
+  it("plays a Bo3 final as one series and resumes it on a new server after a crash", async () => {
+    const t = await fiveEntrants()
+    await h.startNow(t.startsAt)
+    await h.result({ matchId: liveGame("r1m1").matchId, outcome: "abandoned", reason: "no_show", missingSteamIds: ["p5"] })
+    await win("r2m0", "A")
+    await win("r2m1", "B")
+    const first = liveGame("r3m0")
+    expect(first.source).toMatchObject({ gameNumber: 1, bestOf: 3 })
+    expect(first.source.priorMaps).toBeUndefined()
+    const starts = h.started.length
+
+    // A map result updates the live bracket but asks for no new server
+    await h.mapResult({ matchId: first.matchId, mapNumber: 1, winnerTeam: "B" })
+    await h.mapResult({ matchId: first.matchId, mapNumber: 1, winnerTeam: "B" })
+    expect(bm("r3m0")).toMatchObject({ status: "live", liveMatchId: first.matchId, games: [{ matchId: first.matchId, winner: "b", map: 1 }] })
+    expect(h.started).toHaveLength(starts)
+    expect(h.emitted.at(-1)?.payload).toMatchObject({ kind: "match_updated", bracketMatchId: "r3m0" })
+
+    // The server dies. The series resumes at map 2 with map 1 kept
+    await h.result({ matchId: first.matchId, outcome: "cancelled", reason: "server_crashed" })
+    const second = liveGame("r3m0")
+    expect(second.matchId).not.toBe(first.matchId)
+    expect(second.source).toMatchObject({ gameNumber: 2, bestOf: 3, priorMaps: [{ mapNumber: 1, winnerTeam: "B", matchId: first.matchId }] })
+
+    await h.mapResult({ matchId: second.matchId, mapNumber: 2, winnerTeam: "A" })
+    await h.result({
+      matchId: second.matchId,
+      outcome: "completed",
+      winnerTeam: "A",
+      score: { A: 2, B: 1 },
+      maps: [
+        { mapNumber: 1, winnerTeam: "B", matchId: first.matchId },
+        { mapNumber: 2, winnerTeam: "A", matchId: second.matchId },
+        { mapNumber: 3, winnerTeam: "A", matchId: second.matchId },
+      ],
+    })
+    expect(bm("r3m0")).toMatchObject({ status: "done", resolution: "played", winner: entryOf("p1") })
+    expect(bm("r3m0").games.map((g) => [g.map, g.winner])).toEqual([
+      [1, "b"],
+      [2, "a"],
+      [3, "a"],
+    ])
+    expect(h.only()).toMatchObject({ status: "completed", winnerEntryId: entryOf("p1") })
+    expect(h.started).toHaveLength(starts + 1)
+  })
+
+  it("replays a series that ended level from its first map", async () => {
+    const t = await fiveEntrants()
+    await h.startNow(t.startsAt)
+    await h.result({ matchId: liveGame("r1m1").matchId, outcome: "abandoned", reason: "no_show", missingSteamIds: ["p5"] })
+    await win("r2m0", "A")
+    await win("r2m1", "B")
+    const first = liveGame("r3m0")
+    await h.mapResult({ matchId: first.matchId, mapNumber: 1, winnerTeam: "A" })
+    await h.mapResult({ matchId: first.matchId, mapNumber: 3, winnerTeam: "B" })
+    await h.result({
+      matchId: first.matchId,
+      outcome: "completed",
+      winnerTeam: "draw",
+      score: { A: 1, B: 1 },
+      maps: [
+        { mapNumber: 1, winnerTeam: "A", matchId: first.matchId },
+        { mapNumber: 3, winnerTeam: "B", matchId: first.matchId },
+      ],
+    })
+    const again = liveGame("r3m0")
+    expect(again.matchId).not.toBe(first.matchId)
+    expect(again.source).toMatchObject({ gameNumber: 1, bestOf: 3 })
+    expect(again.source.priorMaps).toBeUndefined()
+    expect(bm("r3m0").games).toEqual([])
   })
 
   it("ignores results for unknown or repeated games", async () => {

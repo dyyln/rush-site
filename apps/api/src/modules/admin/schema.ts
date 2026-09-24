@@ -35,3 +35,11 @@ export const metricSamples = pgTable(
     index("metric_samples_sampled_idx").on(t.sampledAt),
   ],
 )
+
+// Admins added from the admin UI. ADMIN_STEAM_IDS admins are not stored here.
+export const admins = pgTable("admins", {
+  steamId: text("steam_id").primaryKey(),
+  addedBy: text("added_by").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})

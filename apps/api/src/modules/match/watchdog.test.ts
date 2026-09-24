@@ -125,7 +125,7 @@ describe("match watchdog on Hetzner", () => {
   it("ends a match that runs past the mode cap and stops its server", async () => {
     const { matchId, a, b } = await startDuel(h)
     await goLive(h, matchId, [a, b])
-    h.clock.advance(44 * MIN)
+    h.clock.advance(59 * MIN)
     await h.ctx.flow.allocationTick()
     expect((await row(h, matchId)).status).toBe("live")
     h.clock.advance(2 * MIN)

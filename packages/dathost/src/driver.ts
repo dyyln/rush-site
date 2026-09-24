@@ -250,7 +250,7 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
       }
     },
 
-    async fetchDemo(matchId: string): Promise<Buffer | null> {
+    async fetchDemo(matchId: string, mapNumber?: number): Promise<Buffer | null> {
       const id = await store.get(matchId)
       if (!id) return null
       const entries = await http.json<DathostFileEntry[] | null>("GET", `${serverPath(id)}/files`, {
@@ -262,8 +262,11 @@ export function createDathostDriver(opts: DathostDriverOptions): ServerDriver & 
         .map((p) => (demoDir && !p.startsWith(demoDir + "/") ? `${demoDir}/${p}` : p))
       if (demos.length === 0) return null
       // The file list has no timestamps so prefer the plugin's name for this match, then the last name in order
-      const own = `${demoBaseName(matchId)}.dem`
-      const pick = demos.find((p) => p.split("/").pop() === own) ?? [...demos].sort().at(-1)!
+      // A series map has its own file and no fallback, another map's demo would be wrong
+      const own = mapNumber ? `${demoBaseName(matchId)}_m${mapNumber}.dem` : `${demoBaseName(matchId)}.dem`
+      const exact = demos.find((p) => p.split("/").pop() === own)
+      if (!exact && mapNumber) return null
+      const pick = exact ?? [...demos].sort().at(-1)!
       const res = await http.request("GET", `${serverPath(id)}/files${filePath(pick)}`)
       return Buffer.from(await res.arrayBuffer())
     },
