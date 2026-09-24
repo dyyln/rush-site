@@ -191,10 +191,12 @@
 }
 
 /* Rush rooms and rounds in one card */
+/* Rooms and rounds share one glass panel, like the team panels above */
 .flow {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
+  border-radius: var(--radius-sm);
 }
 
 /* Rating change in the player tables */
