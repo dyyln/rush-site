@@ -235,7 +235,6 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
           {pool.map((room) => {
             const h = state.history.find((e) => e.mapId === room);
             const onMap = h ? phaseAt(h.step)?.mapNumber : undefined;
-            const slot = onMap !== undefined ? maps[onMap - 1]?.slots.find((x) => x.room === room)?.slot : undefined;
             const thisMap = !!h && onMap === cur?.mapNumber;
             const available = !h;
             const selectable = myTurn && available && !!onVote;
@@ -249,7 +248,6 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   state={available ? "available" : thisMap ? "picked" : "taken"}
                   stampLabel={!available && !thisMap ? `Map ${onMap}` : undefined}
                   by={by}
-                  note={thisMap && slot !== undefined ? `For ${rushSlotLabel(slot)}` : undefined}
                   tag={h?.noVotes ? "auto" : undefined}
                   voted={myVote === room}
                   votes={available ? counts.get(room) : undefined}

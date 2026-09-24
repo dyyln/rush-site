@@ -131,12 +131,6 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
           const c = info(room);
           const selectable = myTurn && c.state === "available" && !!onVote;
           const by = c.team !== undefined ? { label: teamName(c.team).toLowerCase(), side: sideOf(c.team) } : undefined;
-          const note =
-            c.state === "picked" && c.slot !== undefined
-              ? `For ${rushSlotLabel(c.slot)}`
-              : c.state === "start"
-                ? "Last room left, plays as the start room"
-                : undefined;
           return (
             <li key={room}>
               <MapCard
@@ -146,7 +140,6 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
                 state={c.state === "start" ? "decider" : c.state}
                 stampLabel={c.state === "start" ? "Start room" : undefined}
                 by={by}
-                note={note}
                 tag={c.auto ? "auto" : undefined}
                 voted={myVote === room}
                 votes={c.state === "available" ? counts.get(room) : undefined}
