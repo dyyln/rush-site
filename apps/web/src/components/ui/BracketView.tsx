@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLayoutEffect, useRef, useState } from "react";
+import { isRushMode } from "@rushsite/shared";
 import { BadgeEmblem } from "@/components/profile/BadgeEmblem";
 import { bracketPath } from "@/components/tournaments/bracketPath";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
@@ -286,7 +287,7 @@ function MatchBox({ match, byId, mode, highlight, onPath, isNext, compact }: Mat
               <li key={x.mapNumber} className={cx(styles.map, x.status === "live" && styles.mapLive)}>
                 <span className={styles.mapName}>
                   <span className={cx(styles.mapNo, "mono")}>{x.mapNumber}</span>
-                  <span className="mono">{x.mapId ? (mode ? mapName(mode, x.mapId) : x.mapId) : `Map ${x.mapNumber}`}</span>
+                  <span className="mono">{x.mapId && !(mode && isRushMode(mode)) ? (mode ? mapName(mode, x.mapId) : x.mapId) : `Map ${x.mapNumber}`}</span>
                 </span>
                 <span className={cx(styles.mapScore, "mono")}>
                   <span className={cx(x.winner === "a" && styles.scoreWon)}>{x.score.a}</span>

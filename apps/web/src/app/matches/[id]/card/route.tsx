@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { BRAND_NAME, isMatchSlug } from "@rushsite/shared";
+import { BRAND_NAME, isMatchSlug, isRushMode } from "@rushsite/shared";
 import { apiUrl, isMock } from "@/lib/env";
 import { mockMatchDetail } from "@/lib/mock";
 import { mvpReason } from "@/components/match/roster";
@@ -53,11 +53,7 @@ let fontsPromise: Promise<Font[]> | null = null;
 
 // Falls back to the built in font when Google Fonts is unreachable
 function loadFonts(): Promise<Font[]> {
-  fontsPromise ??= Promise.all([
-    googleFont("Chakra Petch", 700),
-    googleFont("IBM Plex Sans", 500),
-    googleFont("IBM Plex Mono", 500),
-  ]).catch(() => {
+  fontsPromise ??= Promise.all([googleFont("Chakra Petch", 700), googleFont("IBM Plex Sans", 500), googleFont("IBM Plex Mono", 500)]).catch(() => {
     fontsPromise = null;
     return [];
   });
@@ -71,10 +67,7 @@ const MONO = "IBM Plex Mono";
 function LogoMark({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill={C.accent}>
-      <path
-        fillRule="evenodd"
-        d="M10 4h44a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6zM32 10a22 22 0 1 0 0 44 22 22 0 1 0 0-44z"
-      />
+      <path fillRule="evenodd" d="M10 4h44a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6zM32 10a22 22 0 1 0 0 44 22 22 0 1 0 0-44z" />
       <path d="M40 14.1A19 19 0 0 1 40 49.9z" />
       <path d="M36 25.4A6 6 0 1 0 36 32.6z" />
       <path d="M36 37h-7c-5 0-7 3-7 7v6.2a19 19 0 0 0 14 1.3z" />
@@ -103,9 +96,7 @@ function Team({ name, score, own, won }: { name: string; score: number; own: boo
         <Marker own={own} />
         <div style={{ display: "flex", marginLeft: 14, fontFamily: DISPLAY, fontSize: 40, fontWeight: 700, color: C.text }}>{clip(name, 18)}</div>
       </div>
-      <div style={{ display: "flex", height: 30, marginTop: 8, fontFamily: DISPLAY, fontSize: 22, letterSpacing: 4, color: C.win }}>
-        {won ? "WINNER" : ""}
-      </div>
+      <div style={{ display: "flex", height: 30, marginTop: 8, fontFamily: DISPLAY, fontSize: 22, letterSpacing: 4, color: C.win }}>{won ? "WINNER" : ""}</div>
     </div>
   );
 }
@@ -139,7 +130,7 @@ function Card({ m }: { m: MatchDetail }) {
         </div>
         <div style={{ display: "flex", alignItems: "center" }}>
           <div style={{ display: "flex", fontFamily: DISPLAY, fontSize: 24, letterSpacing: 3, color: C.muted }}>{modeLabel(m.mode).toUpperCase()}</div>
-          {m.mapId && (
+          {m.mapId && !isRushMode(m.mode) && (
             <div style={{ display: "flex", marginLeft: 20, fontFamily: MONO, fontSize: 24, color: C.text }}>{mapName(m.mode, m.mapId)}</div>
           )}
           <div

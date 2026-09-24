@@ -253,13 +253,16 @@ function ModeDetail({ stats, recent, weapon }: { stats: ModeStats; recent: Match
           />
         )}
       </dl>
-      <div className="grid-2">
+      {/* Rush has one map, so it has no best maps */}
+      <div className={isRushMode(stats.mode) ? undefined : "grid-2"}>
         <Card title="Rating history">
           <RatingChart key={stats.mode} points={stats.history} label={`${MODE_COPY[stats.mode].label} rating history`} />
         </Card>
-        <Card title="Best maps">
-          <BestMaps mode={stats.mode} maps={stats.bestMaps} />
-        </Card>
+        {!isRushMode(stats.mode) && (
+          <Card title="Best maps">
+            <BestMaps mode={stats.mode} maps={stats.bestMaps} />
+          </Card>
+        )}
       </div>
     </div>
   );

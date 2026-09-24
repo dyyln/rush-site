@@ -15,9 +15,7 @@ export const PRESENCE_ORDER: Record<Presence, number> = { online: 0, queue: 1, m
 // Friends on the site now (online, queue or match) first, then offline friends. Names sort within each group
 export function sortByPresence<T extends { presence: Presence; displayName: string }>(list: readonly T[]): T[] {
   const group = (p: Presence) => (p === "offline" ? 1 : 0);
-  return [...list].sort(
-    (a, b) => group(a.presence) - group(b.presence) || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
-  );
+  return [...list].sort((a, b) => group(a.presence) - group(b.presence) || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }));
 }
 
 // Case-insensitive name match. A pasted SteamID64 matches too
@@ -26,10 +24,9 @@ export function matchesQuery(p: { displayName: string; steamId: string }, query:
   return !q || p.displayName.toLowerCase().includes(q) || p.steamId.includes(q);
 }
 
-// Rush always plays on Complex, so it reads well before the map is set
+// Rush has one map, so only aim matches name theirs
 function mapLabel(d: PresenceDetail): string | null {
-  if (!d.mode) return null;
-  if (isRushMode(d.mode)) return mapName(d.mode, d.mapId ?? "rush_001");
+  if (!d.mode || isRushMode(d.mode)) return null;
   return d.mapId ? mapName(d.mode, d.mapId) : null;
 }
 
@@ -72,18 +69,12 @@ export function PresenceLine({ presence, detail }: { presence: Presence; detail?
 
 // Avatar initials or image with a presence dot. Colour is backed by the text line and a hidden label.
 // Pass labelled={false} when nearby text already says the presence, so screen readers do not hear it twice
-export function PresenceAvatar({
-  name,
-  src,
-  presence,
-  labelled = true,
-}: {
-  name: string;
-  src: string | null;
-  presence: Presence;
-  labelled?: boolean;
-}) {
-  const initials = name.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
+export function PresenceAvatar({ name, src, presence, labelled = true }: { name: string; src: string | null; presence: Presence; labelled?: boolean }) {
+  const initials =
+    name
+      .replace(/[^a-z0-9]/gi, "")
+      .slice(0, 2)
+      .toUpperCase() || "?";
   return (
     <span className={styles.avatar}>
       {src ? (
@@ -94,9 +85,7 @@ export function PresenceAvatar({
           {initials}
         </span>
       )}
-      <span className={`${styles.dot} ${styles[presence]}`}>
-        {labelled && <span className="visually-hidden">{PRESENCE_LABEL[presence]}</span>}
-      </span>
+      <span className={`${styles.dot} ${styles[presence]}`}>{labelled && <span className="visually-hidden">{PRESENCE_LABEL[presence]}</span>}</span>
     </span>
   );
 }

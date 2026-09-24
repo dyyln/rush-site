@@ -16,14 +16,25 @@ const columns: Column<MyReport>[] = [
   {
     key: "player",
     header: "Player",
-    cell: (r) => <Link href={`/profile/${r.reported.steamId}`} className={styles.cellLink}>{r.reported.displayName}</Link>,
+    cell: (r) => (
+      <Link href={`/profile/${r.reported.steamId}`} className={styles.cellLink}>
+        {r.reported.displayName}
+      </Link>
+    ),
   },
   { key: "reason", header: "Reason", cell: (r) => REASON[r.reason] },
   {
     key: "match",
     header: "Match",
     hideOnMobile: true,
-    cell: (r) => (r.matchId ? <Link href={`/matches/${r.matchId}`} className={styles.cellLink}>{r.match ? MODE_COPY[r.match.mode].short : "Match"}</Link> : "--"),
+    cell: (r) =>
+      r.matchId ? (
+        <Link href={`/matches/${r.matchId}`} className={styles.cellLink}>
+          {r.match ? MODE_COPY[r.match.mode].short : "Match"}
+        </Link>
+      ) : (
+        "--"
+      ),
   },
   { key: "outcome", header: "Outcome", cell: (r) => <OutcomeBadge outcome={r.outcome} /> },
   { key: "date", header: "Reported", align: "right", hideOnMobile: true, cell: (r) => shortDate(r.createdAt) },
@@ -35,7 +46,7 @@ export function MyReports() {
   return (
     <section aria-labelledby="your-reports-heading" className="stack">
       <h2 id="your-reports-heading">Your reports</h2>
-      <p className="muted">Only you can see this list. Each report shows where its case stands.</p>
+      <p className="muted">Only you can see this list. Each report shows the status of the case.</p>
       {data.status === "error" ? (
         <div className="row">
           <p className="muted">Could not load your reports.</p>

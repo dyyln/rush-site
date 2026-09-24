@@ -32,7 +32,13 @@ export function TournamentsView() {
   const upcoming = open.status === "success" ? [...open.data].sort(byStart) : [];
   const next = upcoming[0] ?? null;
   const rest = upcoming.slice(1);
-  const winners = past.status === "success" ? past.data.filter((t) => t.winner).sort((a, b) => byStart(b, a)).slice(0, 6) : [];
+  const winners =
+    past.status === "success"
+      ? past.data
+          .filter((t) => t.winner)
+          .sort((a, b) => byStart(b, a))
+          .slice(0, 6)
+      : [];
   useBackdrop(next?.mode ?? null);
 
   return (
@@ -55,7 +61,7 @@ export function TournamentsView() {
       ) : (
         <div className={cx("glass", styles.emptyHero)}>
           <p className={styles.kicker}>Cups</p>
-          <p>No cup open for sign ups{mode === "all" ? "" : ` in ${MODE_COPY[mode].label}`} right now. Daily and weekly cups open ahead of their start.</p>
+          <p>No cup open for sign ups{mode === "all" ? "" : ` in ${MODE_COPY[mode].label}`} right now. Daily and weekly cups open ahead of time.</p>
         </div>
       )}
 

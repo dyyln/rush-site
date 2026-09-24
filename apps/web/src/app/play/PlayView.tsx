@@ -233,7 +233,7 @@ function ModeTile({ mode, checked, reason, searching, locked, partySize, stats, 
           checked={on}
           disabled={locked || off}
           onChange={() => toggleSelectedMode(mode)}
-          aria-describedby={`mode-${mode}-desc mode-${mode}-reason mode-${mode}-stats ${mapPoolId(mode)}`}
+          aria-describedby={`mode-${mode}-reason mode-${mode}-stats ${mapPoolId(mode)}`}
         />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={MODE_ART[mode]} alt="" className={styles.art} />
@@ -251,9 +251,8 @@ function ModeTile({ mode, checked, reason, searching, locked, partySize, stats, 
           <span id={`mode-${mode}-reason`} className={reason ? styles.reason : "visually-hidden"}>
             {reason ?? ""}
           </span>
-          <span className={styles.tileName}>{copy.name}</span>
-          <span id={`mode-${mode}-desc`} className={styles.tileBlurb}>
-            {copy.blurb}
+          <span className={styles.tileName}>
+            <span className={styles.tileFormat}>{copy.format}</span> {copy.name}
           </span>
           <span id={mapPoolId(mode)} className="visually-hidden">
             {pool}

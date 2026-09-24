@@ -1,4 +1,5 @@
 import type { ReviewFlag, ReviewMatch, ReviewPlayer, ReviewReport, TrustLevel } from "@rushsite/shared";
+import { isRushMode } from "@rushsite/shared";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -87,7 +88,7 @@ export function MatchLine({ match }: { match: ReviewMatch }) {
   return (
     <p className={styles.matchLine}>
       <span className="eyebrow">{MODE_COPY[match.mode].short}</span>
-      {match.mapId && <span className="mono">{mapName(match.mode, match.mapId)}</span>}
+      {match.mapId && !isRushMode(match.mode) && <span className="mono">{mapName(match.mode, match.mapId)}</span>}
       {a && b && (
         <span className="mono">
           {a.name} {a.score}:{b.score} {b.name}

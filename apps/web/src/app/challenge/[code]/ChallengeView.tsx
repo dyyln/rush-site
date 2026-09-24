@@ -188,8 +188,6 @@ export function ChallengeView({ code }: { code: string }) {
       </InviteBanner>
 
       <Card className={styles.body}>
-        <p className="muted">{MODE_COPY[c.mode].blurb}.</p>
-
         {size > 1 && open && (
           <p className="muted">
             {MODE_COPY[c.mode].format} is played by whole parties. Each side needs a party of {size}, and the party leader answers.

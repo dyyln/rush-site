@@ -43,7 +43,7 @@ const RANKED: Tile[] = [
     format: "3v3",
     size: 3,
     art: "/backdrops/rush_001_1.webp",
-    blurb: "Valve's Rush on Complex",
+    blurb: "Rush",
     queue: 43,
     live: 13,
     tier: { tier: "gold", rating: 1712, rank: 214 },

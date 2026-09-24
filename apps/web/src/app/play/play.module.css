@@ -234,9 +234,9 @@
   text-transform: uppercase;
   text-shadow: 0 2px 16px rgb(0 0 0 / 0.7);
 }
-.tileBlurb {
-  font-size: var(--text-sm);
-  color: var(--color-text);
+/* "3v3 RUSH": the format keeps its lower case v */
+.tileFormat {
+  text-transform: none;
 }
 .tileFoot {
   display: flex;

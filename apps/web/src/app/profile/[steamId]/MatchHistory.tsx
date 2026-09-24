@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { isTestMode, RANKED_MODES, type Mode } from "@rushsite/shared";
+import { isRushMode, isTestMode, RANKED_MODES, type Mode } from "@rushsite/shared";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -30,7 +30,9 @@ function scoreText(m: MatchSummary): string {
   return m.result === "abandoned" ? "--" : `${m.scoreFor}:${m.scoreAgainst}`;
 }
 
+// Rush has one map, so only aim matches name theirs
 function mapsText(m: MatchSummary): string {
+  if (isRushMode(m.mode)) return "";
   if (isSeries(m) && m.maps && m.maps.length > 0) return m.maps.map((id) => mapName(m.mode, id)).join(", ");
   return m.mapId ? mapName(m.mode, m.mapId) : "";
 }
@@ -38,8 +40,7 @@ function mapsText(m: MatchSummary): string {
 // One sentence so the link reads well on its own
 function rowLabel(m: MatchSummary): string {
   const series = isSeries(m) ? `Best of ${m.bestOf}, ` : "";
-  const score =
-    m.result === "abandoned" ? "" : isSeries(m) ? `, maps ${m.scoreFor} to ${m.scoreAgainst}` : `, ${m.scoreFor} to ${m.scoreAgainst}`;
+  const score = m.result === "abandoned" ? "" : isSeries(m) ? `, maps ${m.scoreFor} to ${m.scoreAgainst}` : `, ${m.scoreFor} to ${m.scoreAgainst}`;
   const maps = mapsText(m);
   return `${RESULT_LABEL[m.result]}${score}. ${series}${modeLabel(m.mode)}${maps ? ` on ${maps}` : ""}. ${m.kills} kills, ${m.deaths} deaths. ${isTestMode(m.mode) ? "Unrated" : `Rating ${signed(m.ratingDelta)}`}. ${shortDate(m.playedAt)}`;
 }
@@ -163,10 +164,7 @@ export function MatchHistory({ steamId, first, firstCursor }: { steamId: string;
       {state.status === "error" && (
         <p role="alert" className="row">
           <span className={styles.down}>Could not load matches.</span>
-          <Button
-            variant="secondary"
-            onClick={() => (state.cursor ? loadMore() : setAttempt((n) => n + 1))}
-          >
+          <Button variant="secondary" onClick={() => (state.cursor ? loadMore() : setAttempt((n) => n + 1))}>
             Retry
           </Button>
         </p>

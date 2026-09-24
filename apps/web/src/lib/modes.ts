@@ -3,7 +3,7 @@ import { knownMap } from "./mapPoolStore";
 
 export { isTestMode, MODES, RANKED_MODES };
 
-type ModeCopy = { label: string; name: string; short: string; format: string; blurb: string; players: string };
+type ModeCopy = { label: string; name: string; short: string; format: string; players: string };
 
 export const MODE_COPY: Record<Mode, ModeCopy> = {
   aim1v1: {
@@ -12,7 +12,6 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "1v1",
     format: "1v1",
     players: "1 vs 1",
-    blurb: "Duel 1v1 in aim maps",
   },
   aim2v2: {
     label: "2v2 Aim",
@@ -20,7 +19,6 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "2v2",
     format: "2v2",
     players: "2 vs 2",
-    blurb: "Partner up in aim maps",
   },
   rush3v3: {
     label: "3v3 Rush",
@@ -28,7 +26,6 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "Rush",
     format: "3v3",
     players: "3 vs 3",
-    blurb: "Valve's Rush on Complex",
   },
   rush1v1: {
     label: "1v1 Rush Test",
@@ -36,7 +33,6 @@ export const MODE_COPY: Record<Mode, ModeCopy> = {
     short: "Rush 1v1",
     format: "1v1",
     players: "1 vs 1",
-    blurb: "Unrated test queue for Rush with two players",
   },
 };
 

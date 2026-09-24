@@ -19,10 +19,10 @@ export function HomeModes() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className={styles.modeArt} src={MODE_ART[mode]} alt="" />
                 <span className={styles.modeShade} />
-                <span className={styles.modeFormat}>{copy.format}</span>
                 <span className={styles.modeText}>
-                  <span className={styles.modeName}>{copy.name}</span>
-                  <span className={styles.modeBlurb}>{copy.blurb}</span>
+                  <span className={styles.modeName}>
+                    <span className={styles.modeFormat}>{copy.format}</span> {copy.name}
+                  </span>
                 </span>
               </div>
             </li>
