@@ -122,18 +122,18 @@
 .fanCard {
   transition:
     transform 220ms var(--ease),
-    left 500ms var(--ease),
-    top 500ms var(--ease),
-    opacity 300ms var(--ease);
+    left 350ms var(--ease),
+    top 350ms var(--ease),
+    opacity 250ms var(--ease);
 }
 /* Out of the fan. Fades first, then moves to the back while invisible so it comes back in behind */
 .fanCard[data-hidden] {
   opacity: 0;
   transition:
-    opacity 300ms var(--ease),
-    transform 0s 300ms,
-    left 0s 300ms,
-    top 0s 300ms;
+    opacity 250ms var(--ease),
+    transform 0s 250ms,
+    left 0s 250ms,
+    top 0s 250ms;
 }
 .fanImg {
   aspect-ratio: 16 / 10;

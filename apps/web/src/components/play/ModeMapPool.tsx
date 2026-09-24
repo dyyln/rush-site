@@ -14,7 +14,7 @@ function poolNote(mode: Mode): string | null {
 // Cards on show at once. With more maps or rooms than this the fan cycles through them
 const FAN_VISIBLE = 5;
 // How long the front card stays before the next one comes in
-const FAN_STEP_MS = 1800;
+const FAN_STEP_MS = 800;
 
 export function mapPoolId(mode: Mode) {
   return `mode-${mode}-maps`;
