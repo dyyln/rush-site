@@ -1,6 +1,6 @@
 /* Play: mode tiles in the middle, friends and chat on the right. The dock at the bottom of the page queues */
 .page {
-  padding-top: var(--space-4);
+  padding-top: var(--space-6);
   padding-bottom: var(--space-8);
 }
 .main {
