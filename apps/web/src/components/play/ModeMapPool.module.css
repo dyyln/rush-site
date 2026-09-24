@@ -37,10 +37,9 @@
   }
 
   .strip {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-content: start;
-    gap: var(--space-2) 6px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     opacity: 0;
     visibility: hidden;
     transform: translateY(4px);
@@ -70,23 +69,7 @@
   }
 }
 
-.single {
-  grid-template-columns: minmax(0, 1fr);
-}
-.single .tile {
-  grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-3);
-}
 
-.tile {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-.thumb {
-  border: 1px solid var(--color-border);
-}
 .caption {
   display: flex;
   flex-direction: column;
@@ -94,23 +77,19 @@
   min-width: 0;
 }
 .name {
-  font-size: 0.6875rem;
+  font-size: var(--text-sm);
   line-height: 1.2;
   color: var(--color-text);
   overflow-wrap: anywhere;
-}
-.single .name {
-  font-size: var(--text-sm);
 }
 .note {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
-/* Rush: room screenshots stacked diagonally, each one a step right and down from the last.
-   They start piled up and fan out when the strip is revealed */
+/* The maps, or for Rush a spread of its rooms, stacked diagonally with each one a step right
+   and down from the last. They start piled up and fan out when the strip is revealed */
 .fan {
-  --fan-count: 5;
   --fan-w: 64%;
   --fan-step-x: calc((100% - var(--fan-w)) / (var(--fan-count) - 1));
   --fan-step-y: 9px;
@@ -125,8 +104,7 @@
   left: 0;
   top: 0;
   width: var(--fan-w);
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
+  overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.45);
@@ -142,7 +120,24 @@
   }
 }
 .fanCard {
-  transition-property: transform, left, top;
+  transition:
+    transform 220ms var(--ease),
+    left 500ms var(--ease),
+    top 500ms var(--ease),
+    opacity 300ms var(--ease);
+}
+/* Out of the fan. Fades first, then moves to the back while invisible so it comes back in behind */
+.fanCard[data-hidden] {
+  opacity: 0;
+  transition:
+    opacity 300ms var(--ease),
+    transform 0s 300ms,
+    left 0s 300ms,
+    top 0s 300ms;
+}
+.fanImg {
+  aspect-ratio: 16 / 10;
+  border-radius: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
