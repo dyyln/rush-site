@@ -57,13 +57,13 @@ public class ControllerTests
         foreach (var id in new[] { A1, A2, A3 }) Join(m, id, Side.CT);
         foreach (var id in new[] { B1, B2, B3 }) Join(m, id, Side.T);
         Assert.True(m.OnJoinTeamRequest(A1, Side.CT));
-        Assert.Contains("Rush", m.ReadyHint());
+        Assert.Contains("No ready-up", m.ReadyHint());
         m.OnRoundFreezeEnd(isWarmup: false);
         m.OnPlayerDisconnected(B1);
         _clock.Advance(10);
         m.Tick();
-        // Holding warmup until the lineup is complete is the only mp_ command Rush sends.
-        Assert.DoesNotContain(_game.Commands, c => RoundConVars.Any(c.StartsWith) && !c.StartsWith("mp_warmup_pausetimer"));
+        // Holding and ending warmup are the only mp_ commands Rush sends.
+        Assert.DoesNotContain(_game.Commands, c => RoundConVars.Any(c.StartsWith) && !c.StartsWith("mp_warmup_pausetimer") && c != "mp_warmup_end");
         Assert.Empty(_game.Moves);
         Assert.Empty(_game.ForcedJoins);
     }

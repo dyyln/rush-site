@@ -26,7 +26,9 @@ public enum MatchPhase
 // Rush (valve_rush). Valve's rush_001.js runs round rules and the match end.
 // The plugin never touches mp_ round convars or pauses. It does hold each config team on its
 // configured side (teams[0] CT and teams[1] T by default) and holds warmup until every player
-// is in and on their side. Both are server fill, not rule changes.
+// is in and on their side. Then it runs the same start countdown as aim and ends warmup with
+// mp_warmup_end. Valve's warmup did not end on its own with fewer than the mode's 6 players.
+// None of this changes the game rules.
 //
 // Both flows enforce the whitelist and password, record and upload the demo, track rounds and stats,
 // and emit round_end, match_end and match_abandoned.
@@ -46,7 +48,7 @@ public sealed class MatchController
 
     private readonly PresenceTracker _presence;
     private readonly StatsAggregator _stats;
-    private readonly StartCountdown? _countdown;
+    private readonly StartCountdown _countdown;
     private readonly SeriesTracker? _series;
     private readonly Dictionary<string, int> _teamScore;
     private readonly MatchMessages _msg;
@@ -77,6 +79,7 @@ public sealed class MatchController
     private DateTimeOffset _lastLineupReminder = DateTimeOffset.MinValue;
     private bool _warmupHeld;
     private int _lastCountdownSaid;
+    private bool _waitingForRoomsSaid;
     // Series. When the next map may load, and when its load was asked for.
     private DateTimeOffset? _nextMapAt;
     private DateTimeOffset? _mapLoadingSince;
@@ -124,9 +127,9 @@ public sealed class MatchController
         _teamScore = cfg.Teams.ToDictionary(t => t.Name, _ => 0);
         _msg = new MatchMessages(cfg);
 
+        _countdown = new StartCountdown(settings.StartCountdown);
         if (ManagesMatch)
         {
-            _countdown = new StartCountdown(settings.StartCountdown);
             _firstTo = NewFirstTo();
         }
         else
@@ -155,7 +158,7 @@ public sealed class MatchController
     private int? EventMapNumber => _series is null ? null : MapNumber;
     public MapConfig? CurrentMap => _cfg.MapAt(MapNumber);
     public string CurrentMapId => CurrentMap?.Id ?? _game.CurrentMapName ?? "unknown";
-    public bool CountdownRunning => _countdown?.Running == true;
+    public bool CountdownRunning => _countdown.Running;
     public MatchMessages Messages => _msg;
 
     public string DemoName => "rushsite_" + SafeName(_cfg.MatchId) + (_series is null ? "" : "_m" + MapNumber);
@@ -244,27 +247,27 @@ public sealed class MatchController
                 FireRushRooms();
                 break;
             case MatchPhase.Live:
-                _countdown?.Close();
+                _countdown.Close();
                 if (MapDecided) _endDeadline = _clock.UtcNow + _settings.MatchEndWait;
                 break;
             case MatchPhase.BetweenMaps:
-                _countdown?.Close();
+                _countdown.Close();
                 ScheduleDemoStop();
                 _nextMapAt = _clock.UtcNow;
                 break;
             case MatchPhase.Ended:
-                _countdown?.Close();
+                _countdown.Close();
                 ScheduleDemoStop();
                 ScheduleEndKick();
                 break;
             case MatchPhase.Abandoned:
-                _countdown?.Close();
+                _countdown.Close();
                 ScheduleDemoStop();
                 break;
         }
         _game.Log($"restored match {_cfg.MatchId} after a plugin reload. phase {Phase} round {_round} " +
                   $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))}.");
-        if (Phase == MatchPhase.Warmup && ManagesMatch)
+        if (Phase == MatchPhase.Warmup)
             _game.PrintToAll(_msg.Line($"The match plugin reloaded. The match starts once everyone is in and on their side."));
         SaveState();
     }
@@ -313,6 +316,7 @@ public sealed class MatchController
             _roomsConfirmed = true;
             _game.Log($"rush rooms confirmed by the script for map {MapNumber}.");
             SaveState();
+            UpdateCountdown(_clock.UtcNow);
             return;
         }
         FailRushRooms("different", string.Join(",", ids));
@@ -349,6 +353,7 @@ public sealed class MatchController
                   (reason == "no_reply" ? " Is rushsite_rooms.vpk installed and named in gameinfo.gi?" : ""));
         _sink.Enqueue(new RushRoomsFailed(reason, _roomPlan!.Path) { Detail = detail, MapNumber = EventMapNumber });
         SaveState();
+        UpdateCountdown(_clock.UtcNow);
     }
 
     // Console command. Sends the rooms again, for testing on a server.
@@ -494,10 +499,13 @@ public sealed class MatchController
             var required = _sides.RequiredSide(steamId);
             if (required is not null && _settings.TryChangeTeam) _game.TryMovePlayer(steamId, required.Value);
             _game.PrintToPlayer(steamId, _msg.Line($"Join your team's side. The match starts once everyone is in and on their side."));
-            UpdateAimCountdown(_clock.UtcNow);
+            UpdateCountdown(_clock.UtcNow);
         }
         if (IsRush && Phase == MatchPhase.Warmup)
+        {
             _game.PrintToPlayer(steamId, _msg.Line($"Your team plays {SideName(RequiredRushSide(steamId))}."));
+            UpdateCountdown(_clock.UtcNow);
+        }
     }
 
     // name is the name from the disconnect event when the adapter has it.
@@ -526,7 +534,7 @@ public sealed class MatchController
             _game.PrintToAll(_msg.Disconnected(who, grace, pausing));
             _game.PrintCenterToAll(MatchMessages.DisconnectedCenter(who, grace));
         }
-        UpdateAimCountdown(_clock.UtcNow, steamId, left: true);
+        UpdateCountdown(_clock.UtcNow, steamId, left: true);
     }
 
     private void RememberName(string steamId, string? name = null)
@@ -559,7 +567,7 @@ public sealed class MatchController
     {
         if (!_cfg.IsAllowed(steamId)) return;
         _sides.SetPlayerSide(steamId, side);
-        UpdateAimCountdown(_clock.UtcNow, steamId);
+        UpdateCountdown(_clock.UtcNow, steamId);
         // The game can place a player without a jointeam, for example auto assign. Send them to their side.
         if (IsRush && EnforcesRushTeams && side.IsPlaying() && !_sides.IsOnRequiredSide(steamId))
             RedirectToRequiredSide(steamId, "placed on the wrong side");
@@ -664,19 +672,28 @@ public sealed class MatchController
         _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)).ToList();
 
     // Ready-up is gone. The command only explains what happens now.
-    public string ReadyHint() => IsRush
-        ? _msg.Line($"Ready-up is not used in Rush. Valve's warmup starts the match once everyone is on their side.")
-        : _msg.Line($"No ready-up needed. The match starts on its own once everyone is in and on their side.");
+    public string ReadyHint() =>
+        _msg.Line($"No ready-up needed. The match starts on its own once everyone is in and on their side.");
 
-    // Aim. Runs the start countdown from the current lineup.
+    private bool LineupComplete => IsRush
+        ? RushNotReady().Count == 0
+        : _presence.AllConnected && _sides.TeamsAreValid(_cfg.AllowedSteamIds);
+
+    // Rush. The script must have answered the room set before warmup ends.
+    // Applying rooms resets the script's game state and it refuses rooms after the first round.
+    // A failed set is already reported, so the match goes ahead on Valve's draw.
+    private bool RushRoomsSettled => _roomPlan is null || _roomsConfirmed || _roomsFailedSent;
+
+    // Runs the start countdown from the current lineup.
     // changedBy is the player whose leave or side change caused this update, when known.
-    private void UpdateAimCountdown(DateTimeOffset now, string? changedBy = null, bool left = false)
+    private void UpdateCountdown(DateTimeOffset now, string? changedBy = null, bool left = false)
     {
-        if (_countdown is null || Phase != MatchPhase.Warmup || _mapLoadingSince is not null) return;
-        var complete = _presence.AllConnected && _sides.TeamsAreValid(_cfg.AllowedSteamIds);
-        switch (_countdown.Update(complete, now))
+        if (Phase != MatchPhase.Warmup || _mapLoadingSince is not null) return;
+        var mayFire = !IsRush || RushRoomsSettled;
+        switch (_countdown.Update(LineupComplete, now, mayFire))
         {
             case CountdownChange.Started:
+                _waitingForRoomsSaid = false;
                 _lastCountdownSaid = _countdown.SecondsLeft(now);
                 _lastCenterSaid = _lastCountdownSaid;
                 _game.Log("all players are in and on their side. Start countdown running.");
@@ -687,10 +704,17 @@ public sealed class MatchController
                 AnnounceCountdownCancelled(changedBy, left);
                 break;
             case CountdownChange.Fired:
-                StartAimMatch("all players in and on their side");
+                if (IsRush) EndRushWarmup();
+                else StartAimMatch("all players in and on their side");
                 break;
             default:
                 var secs = _countdown.SecondsLeft(now);
+                if (_countdown.Running && secs <= 0 && !mayFire && !_waitingForRoomsSaid)
+                {
+                    _waitingForRoomsSaid = true;
+                    _game.Log("start countdown done. Waiting for the rush_001 script to answer the room set.");
+                    _game.PrintToAll(_msg.Line($"Loading the rooms from the veto."));
+                }
                 if (!_countdown.Running || secs <= 0) break;
                 if (CountdownMarks.Due(secs, _lastCountdownSaid, CountdownMarks.IsStartMark))
                 {
@@ -737,10 +761,22 @@ public sealed class MatchController
         return true;
     }
 
+    // Rush. The lineup is complete and the rooms are settled. Valve's own warmup can wait
+    // for the mode's full 6 players, so end it here. The match goes live on Valve's start signal.
+    private void EndRushWarmup()
+    {
+        _game.Log($"ending Rush warmup for {(_series is null ? "the match" : "map " + MapNumber)}. All players in and on their side. Rooms {(_roomPlan is null ? "random" : RoomsState.Trim())}.");
+        _warmupHeld = false;
+        _game.ExecuteCommand("mp_warmup_pausetimer 0");
+        StartRecording();
+        _game.ExecuteCommand("mp_warmup_end");
+        SaveState();
+    }
+
     private void StartAimMatch(string why)
     {
         var wc = _cfg.ParsedWinCondition;
-        _countdown!.Close();
+        _countdown.Close();
         _game.Log($"starting {(_series is null ? "match" : "map " + MapNumber)}. {why}.");
         // Runs first. The cfg sets pausetimer 1 and its startmoney only applies on the warmup end restart.
         _game.ExecuteCommand(ModeCfgExec);
@@ -775,6 +811,7 @@ public sealed class MatchController
         if (notReady.Count > 0)
             _game.Log($"Rush went live with players missing or off their side: {string.Join(",", notReady)}.");
         _warmupHeld = false;
+        _countdown.Close();
         StartRecording();
         GoLive();
     }
@@ -973,8 +1010,8 @@ public sealed class MatchController
     private void TickAimWarmup(DateTimeOffset now)
     {
         RefreshAllSides();
-        UpdateAimCountdown(now);
-        if (Phase != MatchPhase.Warmup || _countdown!.Running) return;
+        UpdateCountdown(now);
+        if (Phase != MatchPhase.Warmup || _countdown.Running) return;
         if (now - _lastLineupReminder < TimeSpan.FromSeconds(15)) return;
         _lastLineupReminder = now;
         foreach (var id in _cfg.AllowedSteamIds.Where(id => _presence.IsConnected(id) && !_sides.IsOnRequiredSide(id)))
@@ -1010,20 +1047,12 @@ public sealed class MatchController
     private void TickRushWarmup(DateTimeOffset now)
     {
         RefreshAllSides();
-        var notReady = RushNotReady();
-        if (_settings.HoldRushWarmup)
-        {
-            if (notReady.Count > 0 && (!_warmupHeld || _game.GetConVar("mp_warmup_pausetimer") == "0"))
-            {
-                HoldRushWarmup();
-            }
-            else if (notReady.Count == 0 && _warmupHeld)
-            {
-                _warmupHeld = false;
-                _game.ExecuteCommand("mp_warmup_pausetimer 0");
-                _game.PrintToAll(_msg.Line($"All players are in and on their side. Warmup continues."));
-            }
-        }
+        // Warmup was ended. Valve's start signal moves the match to live.
+        if (_countdown.Fired) return;
+        // Held until the countdown ends warmup. A cfg run in between can clear the hold.
+        if (_settings.HoldRushWarmup && (!_warmupHeld || _game.GetConVar("mp_warmup_pausetimer") == "0"))
+            HoldRushWarmup();
+        UpdateCountdown(now);
         var wrong = WrongSidePlayers();
         if (wrong.Count > 0 && now - _lastLineupReminder >= TimeSpan.FromSeconds(15))
         {
@@ -1204,16 +1233,17 @@ public sealed class MatchController
         _warmupHeld = false;
         _lastCountdownSaid = 0;
         _lastCenterSaid = 0;
+        _waitingForRoomsSaid = false;
         _away.Clear();
         _lastLineupReminder = DateTimeOffset.MinValue;
         foreach (var t in _teamScore.Keys.ToList()) _teamScore[t] = 0;
         _sides = NewSideMap();
         _stats.Reset();
         _loadout = null;
+        _countdown.Reset();
         if (ManagesMatch)
         {
             _firstTo = NewFirstTo();
-            _countdown!.Reset();
         }
         else
         {
@@ -1329,7 +1359,7 @@ public sealed class MatchController
 
     public string Status()
     {
-        var countdown = _countdown is null ? "n/a" : _countdown.Running ? $"{_countdown.SecondsLeft(_clock.UtcNow)}s" : _countdown.Fired ? "done" : "waiting";
+        var countdown = _countdown.Running ? $"{_countdown.SecondsLeft(_clock.UtcNow)}s" : _countdown.Fired ? "done" : "waiting";
         var series = _series is null ? "" : $"map {MapNumber}/{_series.BestOf} {CurrentMapId} series {SeriesScoreText()} ";
         return $"match {_cfg.MatchId} mode {_cfg.Mode} phase {Phase} {series}round {_round} " +
                $"score {string.Join(" ", _teamScore.Select(kv => kv.Key + "=" + kv.Value))} " +

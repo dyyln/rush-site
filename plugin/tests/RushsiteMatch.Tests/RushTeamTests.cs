@@ -126,8 +126,13 @@ public class RushTeamTests
         _game.Sides[A3] = Side.CT;
         m.Tick();
         Assert.Empty(m.RushNotReady());
+        Assert.True(m.CountdownRunning);
+        Assert.Contains(_game.Chat, c => c.Contains("All players are in"));
+        Assert.DoesNotContain("mp_warmup_pausetimer 0", _game.Commands);
+        _clock.Advance(10);
+        m.Tick();
         Assert.Contains("mp_warmup_pausetimer 0", _game.Commands);
-        Assert.Contains(_game.Chat, c => c.Contains("All players are in and on their side"));
+        Assert.Contains("mp_warmup_end", _game.Commands);
 
         m.OnRushMatchLive();
         Assert.Equal(MatchPhase.Live, m.Phase);
@@ -147,8 +152,11 @@ public class RushTeamTests
         Join(m, B1, Side.T, 2);
         m.Tick();
         Assert.Empty(m.RushNotReady());
-        Assert.Contains("mp_warmup_pausetimer 0", _game.Commands);
+        Assert.True(m.CountdownRunning);
         Assert.False(m.OnJoinTeamRequest(A1, Side.T));
+        _clock.Advance(10);
+        m.Tick();
+        Assert.Contains("mp_warmup_end", _game.Commands);
 
         m.OnRushMatchLive();
         Assert.Equal(MatchPhase.Live, m.Phase);

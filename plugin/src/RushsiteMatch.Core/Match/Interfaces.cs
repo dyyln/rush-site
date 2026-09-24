@@ -79,7 +79,7 @@ public sealed class MatchSettings
 {
     public TimeSpan ConnectGrace { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan DisconnectGrace { get; init; } = TimeSpan.FromMinutes(3);
-    // Aim. Countdown that starts once every player is in and on their side.
+    // Every mode. Countdown that starts once every player is in and on their side, then ends warmup.
     public TimeSpan StartCountdown { get; init; } = TimeSpan.FromSeconds(10);
     // Aim. mp_respawn_immunitytime.
     public TimeSpan AimSpawnImmunity { get; init; } = TimeSpan.FromSeconds(2);
@@ -104,7 +104,7 @@ public sealed class MatchSettings
     public bool TryChangeTeam { get; init; }
     // Rush. Wrong team joins a player may make before being kicked.
     public int TeamJoinRefusalsBeforeKick { get; init; } = 3;
-    // Rush. Hold warmup with mp_warmup_pausetimer until every player is in and on their side.
+    // Rush. Hold warmup with mp_warmup_pausetimer until the start countdown ends it.
     public bool HoldRushWarmup { get; init; } = true;
     // Rush. Send the veto's rushRooms to our rush_001.js on each map.
     public bool RushRooms { get; init; } = true;
