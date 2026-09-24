@@ -310,6 +310,7 @@ function MapStats({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: n
       kills={kills}
       roster={roster}
       rushPath={rush ? rushRoundPath(m, rounds, mapNumber, sideOf) : null}
+      map={!rush && m.mapId ? { id: m.mapId, name: mapName(m.mode, m.mapId) } : undefined}
     />
   );
   return (

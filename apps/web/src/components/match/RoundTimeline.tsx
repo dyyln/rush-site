@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { TeamMarker, type TeamSide } from "@/components/ui/TeamMarker";
 import { RoomImage } from "@/components/rush/RoomImage";
+import { MapThumb } from "@/components/play/MapThumb";
 import { rushRoomName } from "@/lib/rushRooms";
 import type { MatchKill, MatchRound } from "@/lib/types";
 import { KillFeed } from "./KillFeed";
@@ -25,9 +26,11 @@ type Props = {
   highlight?: string;
   // Rush only. Draws where play was each round under the segments
   rushPath?: RushRoundPath | null;
+  // Aim: the map, pictured beside each round's kills
+  map?: { id: string; name: string };
 };
 
-export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight, rushPath }: Props) {
+export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight, rushPath, map }: Props) {
   // A clicked round stays picked. Hover and keyboard focus show a round for as long as they last
   const [pinned, setPinned] = useState<number | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -162,7 +165,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
       <ol id={feedId} ref={feedRef} style={lockHeight !== null ? { minHeight: lockHeight } : undefined} className={styles.all} aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}>
         {feedRounds.map((r) => (
           <li key={r.round} className={styles.allRound}>
-            <RoundInfo r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} />
+            <RoundInfo r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} map={map} />
             <div className={styles.roundKills}>{kills ? <KillFeed kills={killsOf(r.round)} roster={roster} highlight={highlight} /> : <NoKills />}</div>
           </li>
         ))}
@@ -172,22 +175,25 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
 }
 
 // Left of each round's kills: the round number in the winner's colour, the score and, in Rush, the room
-function RoundInfo({ r, side, score, rush }: { r: MatchRound; side: TeamSide; score: string; rush: boolean }) {
+function RoundInfo({ r, side, score, rush, map }: { r: MatchRound; side: TeamSide; score: string; rush: boolean; map?: { id: string; name: string } }) {
   const room = rush && r.arena ? rushRoomName(r.arena) : null;
+  // Rush pictures the room of the round, aim the map
+  const art = room ? <RoomImage room={r.arena!} /> : map ? <MapThumb mapId={map.id} /> : null;
+  const place = room ?? map?.name ?? null;
   return (
     <div className={styles.roundInfo}>
       <h3 className="visually-hidden">
         Round {r.round}, {r.winnerTeam === "draw" ? "draw" : `${r.winnerTeam} won`}, {score}
         {room ? `, ${room}` : ""}
       </h3>
-      {rush && r.arena ? (
-        // Rush: the room picture carries the round badge top right, the room bottom left and the score bottom right
+      {art ? (
+        // The room or map picture carries the round badge top right, the place bottom left and the score bottom right
         <span className={styles.roundRoom} aria-hidden="true">
-          <RoomImage room={r.arena} />
+          {art}
           <span className={cx(styles.roundBadge, styles.onArt, "mono")} data-side={r.winnerTeam === "draw" ? undefined : side}>
             {r.round}
           </span>
-          <span className={styles.roundRoomName}>{room}</span>
+          <span className={styles.roundRoomName}>{place}</span>
           <span className={cx(styles.roundScoreArt, "mono")}>{score}</span>
         </span>
       ) : (
