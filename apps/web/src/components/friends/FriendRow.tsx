@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type { Friend, SteamOnlyFriend } from "@rushsite/shared";
 import { ChallengeButton } from "@/components/challenges/ChallengeButton";
 import { FriendAction } from "@/components/party/FriendAction";
@@ -94,25 +94,27 @@ function InviteIconButton({ friend, actions }: { friend: Friend; actions: Action
   );
 }
 
-// A friend here: avatar, name and presence link to the profile. Invite, Challenge and Watch or Join queue
-// sit on the right as icons, shown on hover or keyboard focus, and always on touch screens
+// A friend here: avatar and name link to the profile, the status line sits under the name. With a mouse,
+// hovering the row or focusing anything in it fades the status line out and Invite, Challenge and Watch or
+// Join queue in, in the same place. Touch screens keep the status and show the icons on the right
 export function FriendRow({ friend, actions, joinable }: { friend: Friend; actions: Actions; joinable?: JoinableModes }) {
   const { displayName: name, presence, detail } = friend;
+  const statusId = useId();
   const watchId = presence === "match" ? detail?.matchId : undefined;
   const join = presence === "queue" && detail?.modes?.length ? (joinable?.(detail.modes) ?? []) : [];
   const joinLabels = join.map((m) => MODE_COPY[m].label).join(", ");
-  // The dot's hidden label repeats the presence line, except in a match where the line shows mode and map
+  // The dot's hidden label repeats the status line, except in a match where the line shows mode and map
   const dotLabelled = presence === "match" && !!detail?.mode;
 
   return (
     <li className={cx(styles.row, styles.compactRow)}>
-      <Link href={`/profile/${friend.steamId}`} className={styles.profileLink}>
+      <Link href={`/profile/${friend.steamId}`} className={styles.profileLink} aria-describedby={statusId}>
         <PresenceAvatar name={name} src={friend.avatarUrl} presence={presence} labelled={dotLabelled} />
-        <span className={styles.names}>
-          <span className={styles.name}>{name}</span>
-          <PresenceLine presence={presence} detail={detail} />
-        </span>
+        <span className={styles.name}>{name}</span>
       </Link>
+      <span id={statusId} className={styles.status}>
+        <PresenceLine presence={presence} detail={detail} />
+      </span>
       <span className={styles.iconActions}>
         {watchId && (
           <Link href={`/matches/${watchId}`} className={styles.iconButton} aria-label={`Watch ${name}'s match`}>

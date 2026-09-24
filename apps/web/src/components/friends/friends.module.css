@@ -460,25 +460,43 @@ a.name:hover {
   transform: rotate(180deg);
 }
 
-/* Compact friend row: one link (avatar, name, presence) and icon actions on the right.
-   Icons show on row hover or while anything in the row has focus, and always on touch screens */
+/* Compact friend row. A grid: avatar | name over status | touch icons. The profile link spans the avatar and
+   both text rows (a subgrid), the status line and the mouse icons share the cell under the name */
 .compactRow {
-  position: relative;
-  flex-wrap: nowrap;
-  gap: var(--space-1);
-  padding-block: var(--space-1);
+  display: grid;
+  grid-template-columns: calc(36px + var(--space-3)) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 0;
+  padding-block: var(--space-2);
 }
 
 .profileLink {
-  display: flex;
-  flex: 1 1 auto;
+  display: grid;
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
   align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
   min-height: var(--target-min);
   border-radius: var(--radius-sm);
   color: inherit;
   text-decoration: none;
+}
+
+.profileLink > :first-child {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+/* Above the icons' hit areas, which reach up from the status line */
+.compactRow .name {
+  position: relative;
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: start;
+  max-width: 100%;
 }
 
 .profileLink:hover .name {
@@ -491,12 +509,25 @@ a.name:hover {
   box-shadow: var(--focus-ring);
 }
 
-.iconActions {
-  display: flex;
-  flex: none;
-  align-items: center;
+/* Text only, so clicks fall through to the profile link underneath */
+.status {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  pointer-events: none;
 }
 
+.iconActions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-items: center;
+  margin-left: var(--space-2);
+}
+
+/* Plain glyphs on a transparent 44px hit area. Accent on hover and focus, ring for keyboard focus */
 .iconButton {
   position: relative;
   display: inline-flex;
@@ -509,32 +540,29 @@ a.name:hover {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   cursor: pointer;
   text-decoration: none;
+  transition: color var(--duration-fast) var(--ease);
 }
 
-.iconButton:hover {
-  background: var(--color-surface-1);
-  color: var(--color-text);
+.iconButton:hover,
+.iconButton:focus-visible {
+  color: var(--color-accent-hover);
 }
 
 .iconButton:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-  color: var(--color-text);
 }
 
 .iconButton[aria-disabled="true"] {
   cursor: default;
 }
 
-.iconButton[aria-disabled="true"]:hover {
-  background: transparent;
-}
-
 .iconDone,
-.iconDone:hover {
+.iconDone:hover,
+.iconDone:focus-visible {
   color: var(--color-win);
 }
 
@@ -574,33 +602,55 @@ a.name:hover {
   opacity: 1;
 }
 
-/* Mouse and trackpad: icons float over the end of the row until it is hovered or focused, so names get the
-   full width. Hidden icons cannot be clicked. They stay focusable: tabbing onto one puts focus inside the row,
-   which shows them. Touch screens skip this block and always show the icons in the row */
+/* Mouse and trackpad: the icons sit where the status line is and swap with it on row hover, or while anything
+   in the row has focus. Hidden icons cannot be clicked but stay focusable: tabbing onto one puts focus inside
+   the row, which shows them. Durations drop to 0 under prefers-reduced-motion (tokens.css) */
 @media (hover: hover) and (pointer: fine) {
   .iconActions {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    padding-left: var(--space-1);
-    background: var(--glass-strong);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    grid-column: 2;
+    grid-row: 2;
+    align-self: stretch;
+    margin-left: 0;
+    /* Same line box as the status line, for the 1lh below */
+    font-size: var(--text-sm);
     opacity: 0;
     pointer-events: none;
+    transition: opacity var(--duration-normal) var(--ease);
+  }
+
+  /* Hit areas stay 44px but overhang the status line, so the row keeps its height.
+     The first glyph lines up with the text above it */
+  .iconActions .iconButton {
+    margin-block: calc((1lh - var(--target-min)) / 2);
+  }
+
+  .iconActions > :first-child {
+    margin-left: calc((18px - var(--target-min)) / 2);
+  }
+
+  /* Icons start at the left here, so tooltips grow rightwards */
+  .iconActions .tip {
+    right: auto;
+    left: 0;
+  }
+
+  /* The challenge dialog renders inside the icons but must stay usable whatever the row state */
+  .iconActions dialog {
+    pointer-events: auto;
+  }
+
+  .status {
+    transition: opacity var(--duration-normal) var(--ease);
   }
 
   .compactRow:hover .iconActions,
   .compactRow:focus-within .iconActions {
-    z-index: 1;
     opacity: 1;
     pointer-events: auto;
   }
-}
 
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .iconActions {
-    transition: opacity 120ms ease;
+  .compactRow:hover .status,
+  .compactRow:focus-within .status {
+    opacity: 0;
   }
 }
