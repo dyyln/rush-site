@@ -14,6 +14,8 @@ import type { RushRoundPath } from "./RushRoomTrack";
 import styles from "./RoundTimeline.module.css";
 
 type Props = {
+  // Keep the "Rounds" heading for screen readers only, when a tab around it already says it
+  hideHeading?: boolean;
   rounds: MatchRound[];
   teamA: string;
   teamB: string;
@@ -30,7 +32,7 @@ type Props = {
   map?: { id: string; name: string };
 };
 
-export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight, rushPath, map }: Props) {
+export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster, highlight, rushPath, map, hideHeading }: Props) {
   // A clicked round stays picked. Hover and keyboard focus show a round for as long as they last
   const [pinned, setPinned] = useState<number | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -84,7 +86,7 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
   return (
     <section aria-labelledby="rounds-heading" className="stack">
       <div className={styles.head}>
-        <h2 id="rounds-heading" className={styles.sub}>
+        <h2 id="rounds-heading" className={hideHeading ? "visually-hidden" : styles.sub}>
           Rounds
         </h2>
         {pinned !== null && (
@@ -145,7 +147,12 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
                 </span>
               )}
               {rushPath && (
-                <PathCell path={rushPath} slot={rushPath.slotOf.get(r.round)} next={next ? rushPath.slotOf.get(next.round) : (rushPath.pending ?? undefined)} side={side} />
+                <PathCell
+                  path={rushPath}
+                  slot={rushPath.slotOf.get(r.round)}
+                  next={next ? rushPath.slotOf.get(next.round) : (rushPath.pending ?? undefined)}
+                  side={side}
+                />
               )}
             </li>
           );
@@ -162,7 +169,13 @@ export function RoundTimeline({ rounds, teamA, teamB, sideA, rush, kills, roster
       </ol>
 
       {/* Every round's kills, or only the round pointed at or picked */}
-      <ol id={feedId} ref={feedRef} style={lockHeight !== null ? { minHeight: lockHeight } : undefined} className={styles.all} aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}>
+      <ol
+        id={feedId}
+        ref={feedRef}
+        style={lockHeight !== null ? { minHeight: lockHeight } : undefined}
+        className={styles.all}
+        aria-label={shown === null ? "Kills by round" : `Kills in round ${shown}`}
+      >
         {feedRounds.map((r) => (
           <li key={r.round} className={styles.allRound}>
             <RoundInfo r={r} side={sideOf(r.winnerTeam)} score={scoreOf(r)} rush={rush} map={map} />
@@ -225,7 +238,16 @@ function PathCell({ path, slot, next, side, pending }: { path: RushRoundPath; sl
     <span className={styles.path} style={{ height }} aria-hidden="true">
       <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" width="100%" height={height}>
         {Array.from({ length: path.slots }, (_, s) => (
-          <line key={s} className={styles.pathGuide} data-castle={s === 0 || s === path.slots - 1 || undefined} x1={0} x2={100} y1={y(s)} y2={y(s)} vectorEffect="non-scaling-stroke" />
+          <line
+            key={s}
+            className={styles.pathGuide}
+            data-castle={s === 0 || s === path.slots - 1 || undefined}
+            x1={0}
+            x2={100}
+            y1={y(s)}
+            y2={y(s)}
+            vectorEffect="non-scaling-stroke"
+          />
         ))}
         {slot !== undefined && next !== undefined && (
           <line className={styles.pathLine} data-side={side} x1={50} y1={y(slot)} x2={150} y2={y(next)} vectorEffect="non-scaling-stroke" />

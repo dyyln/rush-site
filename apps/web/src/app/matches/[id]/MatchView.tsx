@@ -111,7 +111,6 @@ function MatchRoom({ m: base, room, stage, onRespond, onVote }: RoomProps) {
   const liveMap = maps.find((x) => x.mapNumber === room.liveMap) ?? maps.find((x) => x.status === "live");
   const currentMapId = liveMap?.mapId ?? m.mapId;
   const names = useMemo(() => Object.fromEntries(base.teams.flatMap((t) => t.players.map((p) => [p.steamId, p.displayName]))), [base.teams]);
-  const [a, b] = m.teams;
   // Scores and stats once the server is up or rounds are in
   const scored = SCORED.includes(stage) || m.rounds.length > 0 || finished;
   // Once a single match is over its details split into tabs. A series keeps its map tabs
@@ -351,7 +350,7 @@ function PostMatchTabs({ m, sideOf, roster, reports }: StatsProps & { reports: R
         {current === "scoreboard" ? (
           <PlayerTables m={m} sideOf={sideOf} />
         ) : current === "rounds" ? (
-          <MapRounds m={m} sideOf={sideOf} roster={roster} />
+          <MapRounds m={m} sideOf={sideOf} roster={roster} inTab />
         ) : (
           reports
         )}
@@ -361,7 +360,8 @@ function PostMatchTabs({ m, sideOf, roster, reports }: StatsProps & { reports: R
 }
 
 // The round timeline with its kill feed. Rush adds the room track above it
-function MapRounds({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: number }) {
+// inTab: the Rounds tab already names the section, so the timeline's own heading is only read out
+function MapRounds({ m, sideOf, roster, mapNumber, inTab }: StatsProps & { mapNumber?: number; inTab?: boolean }) {
   const [a, b] = m.teams;
   const rounds = mapNumber === undefined ? m.rounds : m.rounds.filter((r) => (r.mapNumber ?? 1) === mapNumber);
   const kills = mapNumber === undefined ? m.kills : m.kills?.filter((k) => (k.mapNumber ?? 1) === mapNumber);
@@ -377,6 +377,7 @@ function MapRounds({ m, sideOf, roster, mapNumber }: StatsProps & { mapNumber?: 
       roster={roster}
       rushPath={rush ? rushRoundPath(m, rounds, mapNumber, sideOf) : null}
       map={!rush && m.mapId ? { id: m.mapId, name: mapName(m.mode, m.mapId) } : undefined}
+      hideHeading={inTab}
     />
   );
   return (
