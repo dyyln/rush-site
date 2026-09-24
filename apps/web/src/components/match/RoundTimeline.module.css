@@ -158,18 +158,45 @@
   display: block;
   width: 100%;
 }
-.roundRoomName {
+/* Room name bottom left and score bottom right, on a scrim along the bottom */
+.roundRoom::after {
+  content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 2px var(--space-1);
-  background: linear-gradient(0deg, rgb(8 7 12 / 0.85), transparent);
+  inset: 45% 0 0;
+  background: linear-gradient(0deg, rgb(8 7 12 / 0.9), transparent);
+  pointer-events: none;
+}
+.roundRoomName,
+.roundScoreArt {
+  position: absolute;
+  z-index: 1;
+  bottom: 2px;
   font-size: 0.6875rem;
   font-weight: 600;
   white-space: nowrap;
+}
+.roundRoomName {
+  left: var(--space-1);
+  right: 36px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.roundScoreArt {
+  right: var(--space-1);
+}
+/* Round badge on the picture, top right */
+.onArt {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-1);
+  right: var(--space-1);
+  background: rgb(8 7 12 / 0.75);
+}
+.onArt[data-side="own"] {
+  background: color-mix(in srgb, var(--team-own) 55%, rgb(8 7 12));
+}
+.onArt[data-side="enemy"] {
+  background: color-mix(in srgb, var(--team-enemy) 50%, rgb(8 7 12));
 }
 .roundKills {
   min-width: 0;

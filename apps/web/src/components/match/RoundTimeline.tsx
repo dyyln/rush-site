@@ -180,16 +180,22 @@ function RoundInfo({ r, side, score, rush }: { r: MatchRound; side: TeamSide; sc
         Round {r.round}, {r.winnerTeam === "draw" ? "draw" : `${r.winnerTeam} won`}, {score}
         {room ? `, ${room}` : ""}
       </h3>
-      <span className={styles.roundTop} aria-hidden="true">
-        <span className={cx(styles.roundBadge, "mono")} data-side={r.winnerTeam === "draw" ? undefined : side} title={r.winnerTeam === "draw" ? "Draw" : `${r.winnerTeam} won`}>
-          {r.round}
-        </span>
-        <span className={cx(styles.roundScore, "mono")}>{score}</span>
-      </span>
-      {rush && r.arena && (
+      {rush && r.arena ? (
+        // Rush: the room picture carries the round badge top right, the room bottom left and the score bottom right
         <span className={styles.roundRoom} aria-hidden="true">
           <RoomImage room={r.arena} />
+          <span className={cx(styles.roundBadge, styles.onArt, "mono")} data-side={r.winnerTeam === "draw" ? undefined : side}>
+            {r.round}
+          </span>
           <span className={styles.roundRoomName}>{room}</span>
+          <span className={cx(styles.roundScoreArt, "mono")}>{score}</span>
+        </span>
+      ) : (
+        <span className={styles.roundTop} aria-hidden="true">
+          <span className={cx(styles.roundBadge, "mono")} data-side={r.winnerTeam === "draw" ? undefined : side}>
+            {r.round}
+          </span>
+          <span className={cx(styles.roundScore, "mono")}>{score}</span>
         </span>
       )}
     </div>
