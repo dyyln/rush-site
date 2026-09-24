@@ -213,7 +213,7 @@ export function RushRoomTrack({ rooms, rounds, teams, live, building, title = "R
                 data-latest={(building && building.latestSlot === slot.index) || undefined}
                 aria-current={isCurrent ? "step" : undefined}
               >
-                {/* The kind shows in the border (castle colour, dashed start room), so it is only spoken */}
+                {/* The slot kind is only spoken. Castles show it in their colour, the start room is the middle one */}
                 <span className="visually-hidden">
                   {slot.kind === "castle" ? (slot.index === 0 ? "T castle" : "CT castle") : SLOT_LABEL[slot.kind]}, slot {slot.index}
                   {held ? `, held by ${held.label}` : ""}

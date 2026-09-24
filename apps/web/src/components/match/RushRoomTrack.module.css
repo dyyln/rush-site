@@ -132,10 +132,6 @@
   color: var(--team-enemy);
   border-top-style: double;
 }
-.slot[data-kind="start"] {
-  border-style: dashed;
-  border-color: var(--color-border-strong);
-}
 .slot[data-kind="castle"] .name {
   color: var(--color-text);
 }
