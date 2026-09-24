@@ -36,6 +36,8 @@ type MapCardProps = {
   note?: string;
   // Makes the card a button
   onSelect?: () => void;
+  // Hover or keyboard focus on a selectable card, true on enter and false on leave
+  onPreview?: (active: boolean) => void;
   disabled?: boolean;
   actionLabel?: string;
   // Small tag after the name, like "auto" for a timed out ban
@@ -67,6 +69,7 @@ export function MapCard({
   by,
   note,
   onSelect,
+  onPreview,
   disabled,
   actionLabel = "Ban",
   tag,
@@ -148,7 +151,15 @@ export function MapCard({
       .filter(Boolean)
       .join(", ");
     return (
-      <button type="button" className={cls} data-enter="off" onClick={onSelect} disabled={disabled} aria-pressed={!!voted} aria-label={label} data-map={mapId}>
+      <button
+        type="button"
+        className={cls}
+        data-enter="off"
+        onClick={onSelect}
+        onMouseEnter={onPreview && (() => onPreview(true))}
+        onMouseLeave={onPreview && (() => onPreview(false))}
+        onFocus={onPreview && (() => onPreview(true))}
+        onBlur={onPreview && (() => onPreview(false))} disabled={disabled} aria-pressed={!!voted} aria-label={label} data-map={mapId}>
         {body}
       </button>
     );

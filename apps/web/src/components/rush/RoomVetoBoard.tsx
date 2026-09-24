@@ -9,6 +9,7 @@ import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
 import { ComplexLayout } from "./ComplexLayout";
+import { usePreviewRoom } from "./usePreviewRoom";
 import styles from "./Rush.module.css";
 
 type Props = {
@@ -51,6 +52,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
   // Steps and rooms of the running phase only. Earlier phases live in the layout
   const phaseSteps = state.steps.map((s, i) => ({ s, i })).filter(({ s }) => (s.phase ?? 0) === phaseIdx);
   const phasePool = running ? state.pool.filter((r) => running.phase.pool.includes(r)) : [];
+  const { previewRoom, previewOf } = usePreviewRoom(state.stepIndex);
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote);
 
   // Acting team members who voted for this room, in team order
@@ -119,7 +121,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
         })}
       </ol>
 
-      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} flip={flip} />
+      <ComplexLayout slots={slots} sideOf={sideOf} nextSlot={nextSlot} previewRoom={previewRoom} flip={flip} />
 
       {phaseSteps.length > 0 && (
       <ol className={styles.steps} aria-label="Veto steps">
@@ -167,6 +169,7 @@ export function RoomVetoBoard({ state, mySteamId, stepDeadline, onVote, names = 
                 voterTotal={actingTeam?.steamIds.length}
                 voterSide={step && step.team === myTeam ? "own" : "enemy"}
                 onSelect={selectable ? () => onVote?.(room) : undefined}
+                onPreview={selectable ? previewOf(room) : undefined}
                 actionLabel={step?.action === "pick" ? "Pick" : "Ban"}
               />
             </li>

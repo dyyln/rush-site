@@ -21,6 +21,7 @@ import { MapCard, type MapCardVoter } from "@/components/ui/MapCard";
 import { useVetoTicks } from "@/components/play/useVetoTicks";
 import { rushRoomImage, rushRoomName, rushSlotLabel } from "@/lib/rushRooms";
 import { ComplexLayout } from "./ComplexLayout";
+import { usePreviewRoom } from "./usePreviewRoom";
 import styles from "./Rush.module.css";
 import own from "./SeriesRoomVeto.module.css";
 
@@ -80,6 +81,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
   const mapSteps = cur ? state.steps.map((s, i) => ({ s, i })).filter(({ i }) => phaseAt(i)?.mapNumber === cur.mapNumber) : [];
   const pool = cur && cur.kind !== "side" && step?.phase !== undefined ? (phases[step.phase]?.pool ?? []) : [];
   const lastMap = format.maps;
+  const { previewRoom, previewOf } = usePreviewRoom(state.stepIndex);
   useVetoTicks(state.done ? null : stepDeadline, myTurn && !myVote);
 
   // Acting team members who voted for this key, in team order
@@ -173,7 +175,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   {done && <span className="visually-hidden">, done</span>}
                 </span>
               </div>
-              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} flip={flip} compact />
+              <ComplexLayout slots={mp.slots} sideOf={sideOf} nextSlot={current ? nextSlot : null} previewRoom={current ? previewRoom : null} flip={flip} compact />
             </li>
           );
         })}
@@ -261,6 +263,7 @@ export function SeriesRoomVetoBoard({ state, mySteamId, stepDeadline, onVote, na
                   voterTotal={actingTeam?.steamIds.length}
                   voterSide={step && step.team === myTeam ? "own" : "enemy"}
                   onSelect={selectable ? () => onVote?.(room) : undefined}
+                  onPreview={selectable ? previewOf(room) : undefined}
                   actionLabel="Pick"
                 />
               </li>
