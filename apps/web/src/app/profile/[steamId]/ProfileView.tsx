@@ -223,7 +223,17 @@ function ModeDetail({ stats, recent, weapon }: { stats: ModeStats; recent: Match
       <dl className={styles.statRow}>
         <Stat label="Rating" value={<RatingText value={stats.rating} fallback={<TierChip tier={stats.tier} link={false} />} />} />
         <Stat label="Matches" value={stats.matches} />
-        <Stat label="Win rate" value={formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)} sub={`${stats.wins}W ${stats.losses}L`} />
+        <Stat
+          label="Win rate"
+          value={
+            <>
+              {formatStat(winRate(stats.wins, stats.matches), "pct", stats.matches)}
+              <span className={styles.wl}>
+                <span className={styles.w}>{stats.wins}W</span> <span className={styles.l}>{stats.losses}L</span>
+              </span>
+            </>
+          }
+        />
         <Stat label="Headshot" value={formatStat(stats.headshotPct, "pct", stats.matches)} />
         <Stat label="K/D" value={formatStat(stats.kd, "kd", stats.matches)} />
         <Stat
@@ -309,12 +319,11 @@ function SteamLogo() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
+function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className={styles.stat}>
       <dt>{label}</dt>
       <dd className={cx(styles.statValue, "mono")}>{value}</dd>
-      {sub && <dd className={styles.statSub}>{sub}</dd>}
     </div>
   );
 }

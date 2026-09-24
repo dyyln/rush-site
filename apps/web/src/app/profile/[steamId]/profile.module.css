@@ -343,9 +343,6 @@
   font-size: var(--text-2xl);
   line-height: 1.2;
 }
-.statSub {
-  font-size: var(--text-sm);
-}
 /* No rule at the start of a wrapped line */
 @media (max-width: 699px) {
   .stat:nth-child(2n + 1) {
@@ -361,6 +358,17 @@
 }
 .formDots {
   align-items: center;
+}
+.wl {
+  margin-left: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.w {
+  color: var(--color-win);
+}
+.l {
+  color: var(--color-loss);
 }
 .favouriteKills {
   font-family: var(--font-mono);
