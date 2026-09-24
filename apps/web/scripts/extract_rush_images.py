@@ -1,7 +1,9 @@
-# Writes public/rush-rooms/<id>.webp from the room screenshots in a local CS2 install. Rerun after CS2 updates.
-# Usage: python apps/web/scripts/extract_rush_rooms.py "<steam library>/steamapps/common/Counter-Strike Global Offensive"
+# Writes the Rush images the site takes from a local CS2 install. Rerun after CS2 updates.
+# public/rush-rooms/<id>.webp: room tiles from the clean room screenshots
+# public/backdrops/<name>.webp: full screen scenes from the 1080p loading screens
+# Usage: python apps/web/scripts/extract_rush_images.py "<steam library>/steamapps/common/Counter-Strike Global Offensive"
 # Needs: pip install vpk lz4 texture2ddecoder numpy pillow
-import os, struct, sys
+import io, os, struct, sys
 import lz4.block, numpy as np, texture2ddecoder, vpk
 from PIL import Image
 
@@ -12,6 +14,9 @@ SRC = "panorama/images/map_icons/screenshots/rush_hud/{}_room_png.vtex_c"
 SHOT = (1280, 900)
 OUT = (640, 400)
 DXT5 = 2
+# Rush loading screens, plain PNGs inside the texture files. tokens.css picks the page backdrop from these
+LOADING = ["rush_001", "rush_001_1", "rush_001_2", "rush_001_3", "rush_001_4"]
+LOADING_SRC = "panorama/images/map_icons/screenshots/1080p/{}_png.vtex_c"
 
 def decode(data: bytes) -> Image.Image:
     # Source 2 resource: the pixel data follows the block section, whose size is the first field
@@ -47,14 +52,24 @@ def thumb(im: Image.Image) -> Image.Image:
     top = (h - ch) // 2
     return im.crop((0, top, w, top + ch)).resize(OUT, Image.LANCZOS)
 
+def embedded_png(data: bytes) -> Image.Image:
+    start = data.find(bytes.fromhex("89504e47"))
+    if start < 0:
+        raise ValueError("no embedded PNG")
+    return Image.open(io.BytesIO(data[start:])).convert("RGB")
+
 def main():
     game = sys.argv[1] if len(sys.argv) > 1 else r"C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive"
     pak = vpk.open(os.path.join(game, "game", "csgo", "pak01_dir.vpk"))
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "rush-rooms")
+    public = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public")
     for room in ROOMS:
-        path = os.path.join(out, f"{room}.webp")
+        path = os.path.join(public, "rush-rooms", f"{room}.webp")
         thumb(decode(pak.get_file(SRC.format(room)).read())).save(path, "WEBP", quality=80, method=6)
-        print(f"{room}.webp {os.path.getsize(path) // 1024} KB")
+        print(f"rush-rooms/{room}.webp {os.path.getsize(path) // 1024} KB")
+    for name in LOADING:
+        path = os.path.join(public, "backdrops", f"{name}.webp")
+        embedded_png(pak.get_file(LOADING_SRC.format(name)).read()).save(path, "WEBP", quality=80, method=6)
+        print(f"backdrops/{name}.webp {os.path.getsize(path) // 1024} KB")
 
 if __name__ == "__main__":
     main()
