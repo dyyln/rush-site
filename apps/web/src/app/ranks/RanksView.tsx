@@ -114,7 +114,12 @@ export function RanksView() {
                     {mine.length > 0 && (
                       <span className={styles.youTag}>
                         <span className="visually-hidden">Your rank in </span>
-                        {mine.map((m) => MODE_COPY[m].short).join(" ")}
+                        {mine.map((m, i) => (
+                          <span key={m} className={/^\dv\d$/.test(MODE_COPY[m].short) ? styles.format : undefined}>
+                            {i > 0 && " "}
+                            {MODE_COPY[m].short}
+                          </span>
+                        ))}
                       </span>
                     )}
                   </div>

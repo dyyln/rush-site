@@ -55,11 +55,21 @@
   border-color: var(--color-accent);
   background: var(--color-surface-2);
 }
-.tier[data-tier="bronze"] { --tier-color: var(--tier-bronze); }
-.tier[data-tier="silver"] { --tier-color: var(--tier-silver); }
-.tier[data-tier="gold"] { --tier-color: var(--tier-gold); }
-.tier[data-tier="platinum"] { --tier-color: var(--tier-platinum); }
-.tier[data-tier="elite"] { --tier-color: var(--tier-elite); }
+.tier[data-tier="bronze"] {
+  --tier-color: var(--tier-bronze);
+}
+.tier[data-tier="silver"] {
+  --tier-color: var(--tier-silver);
+}
+.tier[data-tier="gold"] {
+  --tier-color: var(--tier-gold);
+}
+.tier[data-tier="platinum"] {
+  --tier-color: var(--tier-platinum);
+}
+.tier[data-tier="elite"] {
+  --tier-color: var(--tier-elite);
+}
 .emblem {
   flex: none;
   color: var(--tier-color);
@@ -162,4 +172,8 @@
     align-items: flex-start;
     background: var(--color-surface-2);
   }
+}
+/* "2v2" keeps its lower case v inside the upper case tag */
+.format {
+  text-transform: none;
 }
