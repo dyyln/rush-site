@@ -49,6 +49,8 @@
   display: flex;
   flex-direction: column;
   background: var(--color-surface-1);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 .panel[hidden] {
   display: none;

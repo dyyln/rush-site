@@ -14,7 +14,7 @@ export function ModeAvailabilityHint({ status }: { status: ServiceStatus | null 
     ? [{ key: "all", text: `All modes unavailable: ${unavailableText(down[0]!.reason).toLowerCase()}` }]
     : down.map((m) => ({ key: m.mode, text: `${MODE_COPY[m.mode].label}: ${unavailableText(m.reason)}` }));
   return (
-    <div className={styles.card} role="status">
+    <div className={`glass ${styles.card}`} role="status">
       <ul className={styles.lines}>
         {lines.map((l) => (
           <li key={l.key} className={styles.line}>

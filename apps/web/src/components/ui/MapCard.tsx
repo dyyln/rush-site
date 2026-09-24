@@ -45,7 +45,7 @@ export function MapCard({ mapId, name, state = "available", voted, votes, note, 
       </span>
     </>
   );
-  const cls = cx(styles.card, styles[state], voted && styles.voted, onSelect && !disabled && styles.interactive);
+  const cls = cx("glass", styles.card, styles[state], voted && styles.voted, onSelect && !disabled && styles.interactive);
   if (onSelect) {
     return (
       <button

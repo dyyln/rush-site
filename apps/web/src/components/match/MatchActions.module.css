@@ -28,10 +28,14 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  background: var(--color-surface-2);
+  background: var(--glass-strong);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--card-radius);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+/* Focus lands on the panel itself when it opens, its controls keep their rings */
+.popover:focus {
+  outline: none;
 }
 .popTitle {
   font-size: var(--text-md);

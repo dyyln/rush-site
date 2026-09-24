@@ -83,9 +83,6 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
-  background: var(--color-surface-2);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
 }
 .caret {
   position: absolute;

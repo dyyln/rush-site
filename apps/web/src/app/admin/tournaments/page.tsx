@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { entryName, roundName } from "@/components/ui/BracketView";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
@@ -613,7 +614,7 @@ function CupTools({ cup, onChanged }: { cup: TournamentSummary; onChanged: () =>
   const openMatches = (t.bracket?.matches ?? []).filter((m) => OPEN_MATCH.has(m.status) && m.a && m.b);
 
   return (
-    <div id="cup-tools" className={cs.panel} aria-label={`Tools for ${t.name}`} role="region">
+    <Card as="div" tone="flat" padded={false} id="cup-tools" className={cs.panel} aria-label={`Tools for ${t.name}`} role="region">
       <h3>{t.name}</h3>
       {t.bracket && (
         <section className="stack" aria-label="Open series">
@@ -757,6 +758,6 @@ function CupTools({ cup, onChanged }: { cup: TournamentSummary; onChanged: () =>
           refresh();
         }}
       />
-    </div>
+    </Card>
   );
 }

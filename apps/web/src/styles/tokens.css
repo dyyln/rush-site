@@ -1,12 +1,28 @@
 /* Design tokens. Every colour, size and font used by the web app lives here. */
 :root {
-  /* Surfaces */
+  /* Surfaces. The page sits on a blurred scene, so surfaces are tinted glass.
+     --color-bg stays opaque: focus rings and badge cut-outs need a solid colour */
   --color-bg: #0f0e13;
-  --color-surface-1: #17151f;
-  --color-surface-2: #1f1c2a;
-  --color-surface-3: #282435;
-  --color-border: #2c2838;
-  --color-border-strong: #433d55;
+  --color-surface-1: rgb(18 16 26 / 0.62);
+  --color-surface-2: rgb(34 30 46 / 0.58);
+  --color-surface-3: rgb(255 255 255 / 0.08);
+  --color-border: rgb(255 255 255 / 0.09);
+  --color-border-strong: rgb(255 255 255 / 0.17);
+
+  /* Glass. Only outer panels blur, nested blur smears and costs frames */
+  --glass-blur: blur(20px) saturate(1.25);
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  /* Inner vignette, darker towards the panel edges like the in-game menus */
+  --glass-vignette: inset 0 0 48px rgb(4 3 8 / 0.45);
+  --glass-shadow: var(--glass-highlight), var(--glass-vignette);
+  --glass-strong: rgb(16 14 22 / 0.8);
+
+  /* Scene behind the page. At this tint only full-strength text passes 4.5:1 directly
+     on the scene, so muted and accent text belong on glass */
+  --backdrop-image: url("/backdrops/rush-tower.webp");
+  /* Softens the upscaled 720p capture. Drop to 0 with a 1440p or 4K image */
+  --backdrop-blur: 6px;
+  --backdrop-tint: rgb(10 9 14 / 0.66);
   /* Edge of outlined controls. At least 3:1 on every surface */
   --color-border-control: #7a7292;
 
@@ -124,6 +140,28 @@
 @media (min-width: 768px) {
   :root {
     --gutter: 24px;
+  }
+}
+
+/* Solid surfaces where glass can't blur or isn't wanted */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --color-surface-1: rgb(23 21 31 / 0.94);
+    --color-surface-2: rgb(31 28 42 / 0.94);
+    --glass-strong: rgb(16 14 22 / 0.97);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --color-surface-1: #17151f;
+    --color-surface-2: #1f1c2a;
+    --color-surface-3: #282435;
+    --color-border: #2c2838;
+    --color-border-strong: #433d55;
+    --glass-strong: #17151f;
+    --glass-blur: none;
+    --glass-vignette: 0 0 0 transparent;
+    --backdrop-tint: rgb(10 9 14 / 0.9);
   }
 }
 

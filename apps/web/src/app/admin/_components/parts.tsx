@@ -30,7 +30,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className={styles.header}>
+    <header className={cx("title-band", styles.header)}>
       <div>
         <h1>{title}</h1>
         {description && <p>{description}</p>}

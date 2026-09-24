@@ -9,7 +9,7 @@ const SIZES = [16, 24];
 
 function Tile({ id, label, render }: { id: string; label: string; render: (size: number) => ReactNode }) {
   return (
-    <li className={styles.tile}>
+    <li className={`glass ${styles.tile}`}>
       <div className={styles.samples}>
         {SIZES.map((s) => (
           <span key={s} className={styles.sample}>

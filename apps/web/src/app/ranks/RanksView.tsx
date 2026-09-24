@@ -69,7 +69,7 @@ export function RanksView() {
               const y = dist[m].you;
               const n = y ? toNext(y.rating) : null;
               return (
-                <li key={m} className={styles.youCard}>
+                <li key={m} className={`glass ${styles.youCard}`}>
                   <span className={styles.youMode}>{MODE_COPY[m].label}</span>
                   {y ? <TierChip tier={y.tier} rating={y.rating} size="sm" link={false} /> : <TierChip unranked size="sm" link={false} />}
                   <span className="muted">
@@ -91,7 +91,7 @@ export function RanksView() {
           {LADDER.map((t) => {
             const mine = dist ? MODES.filter((m) => dist[m].you?.tier === t.id) : [];
             return (
-              <li key={t.id} className={styles.tier} data-current={mine.length > 0 || undefined}>
+              <li key={t.id} className={`glass ${styles.tier}`} data-current={mine.length > 0 || undefined}>
                 <div className={styles.tierMain}>
                   <div className={styles.tierHead}>
                     <TierChip tier={t.id} link={false} />
