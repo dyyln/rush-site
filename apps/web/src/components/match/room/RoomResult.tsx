@@ -1,8 +1,7 @@
 "use client";
 
 import { TIERS, type MatchResultPayload } from "@rushsite/shared";
-import { ButtonLink } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { cx } from "@/components/ui/cx";
 import { TierChip } from "@/components/ui/TierChip";
 import { signed } from "@/lib/format";
 import type { MatchDetail } from "@/lib/types";
@@ -52,35 +51,41 @@ export function RoomResult({ m, result, viewer }: { m: MatchDetail; result: Matc
   // A spectator would only see the winner here, which MatchSummary already shows below
   if (!participant && outcome !== "abandoned" && m.status === "finished") return null;
 
+  const headline = participant ? HEADLINE[outcome] : winnerLabel ? `${winnerLabel.displayName ?? winnerLabel.name} won` : HEADLINE[outcome];
+  // A finished match has its headline in the hero and Queue again in the dock, so this band only adds the rating
+  const inHero = m.status === "finished";
+  const rating = participant && delta !== undefined && delta !== 0;
+  const unrated = participant && m.unrated;
+  if (inHero && !rating && !unrated) {
+    return (
+      <p role="status" className="visually-hidden">
+        {headline}
+      </p>
+    );
+  }
+
   return (
-    <Card tone="raised" as="div">
-      <section className={styles.result} data-outcome={outcome} aria-labelledby="result-heading" role="status">
-        <h2 id="result-heading" className={styles.headline}>
-          {participant ? HEADLINE[outcome] : winnerLabel ? `${winnerLabel.displayName ?? winnerLabel.name} won` : HEADLINE[outcome]}
-        </h2>
-        {outcome === "abandoned" && <p className="muted">Someone left or never joined. The player list shows who forfeited.</p>}
-        {participant && delta !== undefined && delta !== 0 && (
-          <p className={styles.ratingLine}>
-            <span className="muted">Rating</span>
-            {change && (
-              <>
-                <span className="mono">{Math.round(change.before)}</span>
-                <span aria-hidden="true">to</span>
-                <TierChip tier={change.tierAfter} rating={Math.round(change.after)} size="sm" link={false} />
-              </>
-            )}
-            <span className={`mono ${delta >= 0 ? styles.up : styles.down}`}>{signed(delta)}</span>
-            {tierMove && <span>{tierMove}</span>}
-          </p>
-        )}
-        {participant && m.unrated && <p className="muted">Unrated match. Your rating did not change.</p>}
-        {participant && !m.tournament && (
-          <p>
-            <ButtonLink href={`/play?modes=${m.mode}&start=1`}>Queue again</ButtonLink>
-          </p>
-        )}
-      </section>
-    </Card>
+    <section className={cx("glass", styles.result)} data-outcome={outcome} aria-labelledby="result-heading" role="status">
+      <h2 id="result-heading" className={cx(styles.headline, inHero && "visually-hidden")}>
+        {headline}
+      </h2>
+      {outcome === "abandoned" && <p className="muted">Someone left or never joined. The player list shows who forfeited.</p>}
+      {rating && (
+        <p className={styles.ratingLine}>
+          <span className={styles.ratingTag}>Rating</span>
+          {change && (
+            <>
+              <span className="mono">{Math.round(change.before)}</span>
+              <span aria-hidden="true">to</span>
+              <TierChip tier={change.tierAfter} rating={Math.round(change.after)} size="sm" link={false} />
+            </>
+          )}
+          <span className={`mono ${delta >= 0 ? styles.up : styles.down}`}>{signed(delta)}</span>
+          {tierMove && <span>{tierMove}</span>}
+        </p>
+      )}
+      {unrated && <p className="muted">Unrated match. Your rating did not change.</p>}
+    </section>
   );
 }
 
