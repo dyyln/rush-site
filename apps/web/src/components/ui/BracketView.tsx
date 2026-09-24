@@ -1,9 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import { useLayoutEffect, useRef, useState } from "react";
+import { BadgeEmblem } from "@/components/profile/BadgeEmblem";
 import { bracketPath } from "@/components/tournaments/bracketPath";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import { resolutionText, sideMarks } from "@/components/tournaments/bracketScore";
 import { mapName } from "@/lib/modes";
-import type { Bracket, BracketMatch, EntryView, Mode } from "@/lib/types";
+import type { Bracket, BracketMatch, CupCadence, EntryView, Mode } from "@/lib/types";
+import { Badge } from "./Badge";
 import { TeamCard, type TeamCardPlayer } from "./TeamCard";
 import { TeamMarker, type TeamSide } from "./TeamMarker";
 import { cx } from "./cx";
@@ -15,6 +20,10 @@ type BracketViewProps = {
   highlightEntryId?: string | null;
   // Turns map ids into map names on series scores
   mode?: Mode;
+  // Picks the trophy above the final: weekly cups stand on a stepped plinth
+  cadence?: CupCadence;
+  // Entry picked outside the bracket, such as a hovered entrant. Everything off its route dims
+  traceEntryId?: string | null;
 };
 
 export function roundName(round: number, rounds: number): string {
@@ -25,6 +34,9 @@ export function roundName(round: number, rounds: number): string {
   return `Round ${round}`;
 }
 
+// Short titles for the narrow mirrored columns. The full name is still spoken
+const SHORT_ROUND: Record<string, string> = { Semifinals: "Semis", Quarterfinals: "Quarters" };
+
 export function entryName(e: EntryView | undefined): string {
   if (!e) return "TBD";
   return e.name ?? e.players?.map((p) => p.displayName).join(", ") ?? e.captainSteamId;
@@ -34,42 +46,93 @@ export function entryPlayers(e: EntryView): TeamCardPlayer[] {
   return e.players ?? e.steamIds.map((steamId) => ({ steamId, displayName: steamId, avatarUrl: null }));
 }
 
-export function BracketView({ bracket, entries, highlightEntryId, mode }: BracketViewProps) {
-  const byId = new Map(entries.map((e) => [e.id, e]));
+type Column = { round: number; matches: BracketMatch[]; half: "top" | "bottom" | null; out: "right" | "left" | null };
+
+// Mirrored, the two halves of the draw meet at the final in the middle. Each column needs this much room,
+// and the final takes MIRROR_FINAL_GROW times a column. Both match the flex values in BracketView.module.css
+const MIRROR_COLUMN_MIN = 140;
+const MIRROR_FINAL_GROW = 1.4;
+const MIRROR_GAP = 16;
+
+// Mirrored only when every column fits at its minimum width, otherwise rounds run left to right and scroll
+function useMirrored(rounds: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [mirrored, setMirrored] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || rounds < 2) {
+      setMirrored(false);
+      return;
+    }
+    const cols = rounds * 2 - 1;
+    const need = (cols - 1 + MIRROR_FINAL_GROW) * MIRROR_COLUMN_MIN + (cols - 1) * MIRROR_GAP;
+    const check = () => setMirrored(el.clientWidth >= need);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [rounds]);
+  return { ref, mirrored };
+}
+
+function columnsOf(bracket: Bracket, mirrored: boolean): Column[] {
+  const inRound = (r: number) => bracket.matches.filter((m) => m.round === r).sort((a, b) => a.index - b.index);
   const rounds = Array.from({ length: bracket.rounds }, (_, i) => i + 1);
+  if (!mirrored) return rounds.map((r) => ({ round: r, matches: inRound(r), half: null, out: r < bracket.rounds ? "right" : null }));
+  const before = rounds.slice(0, -1);
+  const split = (r: number) => {
+    const all = inRound(r);
+    const cut = Math.ceil(all.length / 2);
+    return [all.slice(0, cut), all.slice(cut)] as const;
+  };
+  return [
+    ...before.map((r): Column => ({ round: r, matches: split(r)[0], half: "top", out: "right" })),
+    { round: bracket.rounds, matches: inRound(bracket.rounds), half: null, out: null },
+    ...before.reverse().map((r): Column => ({ round: r, matches: split(r)[1], half: "bottom", out: "left" })),
+  ];
+}
+
+export function BracketView({ bracket, entries, highlightEntryId, mode, cadence, traceEntryId }: BracketViewProps) {
+  const byId = new Map(entries.map((e) => [e.id, e]));
   const path = bracketPath(bracket, highlightEntryId);
-  const next = path?.nextId ? bracket.matches.find((m) => m.id === path.nextId) : undefined;
+  const trace = bracketPath(bracket, traceEntryId);
+  const { ref, mirrored } = useMirrored(bracket.rounds);
+  const columns = columnsOf(bracket, mirrored);
 
   return (
-    <div className={styles.wrap}>
-      {path && (
-        <p className={styles.legend}>
-          <span className={styles.swatch} aria-hidden="true" />
-          <span>
-            Your route is highlighted.{" "}
-            {path.outcome === "champion"
-              ? "You won the cup."
-              : path.outcome === "eliminated"
-                ? `Out in the ${roundName(path.round, bracket.rounds).toLowerCase()}.`
-                : next
-                  ? `Next: ${roundName(next.round, bracket.rounds).toLowerCase()}${next.status === "live" ? ", live now" : ""}.`
-                  : ""}
-          </span>
-        </p>
-      )}
-      <div className={styles.scroller} role="region" aria-label="Bracket" tabIndex={0}>
-        <ol className={styles.rounds}>
-          {rounds.map((r) => {
-            const matches = bracket.matches.filter((m) => m.round === r).sort((a, b) => a.index - b.index);
-            const bo = matches[0]?.bestOf ?? 1;
+    <div className={styles.wrap} ref={ref}>
+      <div className={styles.scroller} role="region" aria-label="Bracket" tabIndex={mirrored ? undefined : 0}>
+        <ol className={cx(styles.rounds, mirrored && styles.mirrored)} data-tracing={trace ? "" : undefined}>
+          {columns.map((c) => {
+            const bo = c.matches[0]?.bestOf ?? 1;
+            const final = c.round === bracket.rounds;
             return (
-              <li key={r} className={styles.round}>
+              <li key={`${c.round}-${c.half ?? "all"}`} className={cx(styles.round, final && styles.finalRound)} data-out={c.out ?? undefined}>
                 <h3 className={styles.roundTitle}>
-                  {roundName(r, bracket.rounds)} <span className="muted">Bo{bo}</span>
+                  {mirrored ? (
+                    <>
+                      <span aria-hidden="true">{SHORT_ROUND[roundName(c.round, bracket.rounds)] ?? roundName(c.round, bracket.rounds)}</span>
+                      <span className="visually-hidden">{roundName(c.round, bracket.rounds)}</span>
+                    </>
+                  ) : (
+                    roundName(c.round, bracket.rounds)
+                  )}{" "}
+                  <span className="muted">Bo{bo}</span>
+                  {c.half && <span className="visually-hidden">, {c.half} half</span>}
                 </h3>
                 <ol className={styles.matches}>
-                  {matches.map((m) => (
-                    <li key={m.id} className={cx(styles.slot, path?.connectorIds.has(m.id) && styles.pathOut)}>
+                  {c.matches.map((m) => (
+                    <li
+                      key={m.id}
+                      className={cx(
+                        styles.slot,
+                        path?.connectorIds.has(m.id) && styles.pathOut,
+                        trace?.matchIds.has(m.id) && styles.traced,
+                        trace?.connectorIds.has(m.id) && styles.tracedOut,
+                      )}
+                    >
+                      {/* Sits above the final without moving it, so the card stays level with the semis */}
+                      {final && <BadgeEmblem kind="cup_champion" cadence={cadence} size={mirrored ? 64 : 80} className={styles.trophy} />}
                       <MatchBox
                         match={m}
                         byId={byId}
@@ -77,6 +140,7 @@ export function BracketView({ bracket, entries, highlightEntryId, mode }: Bracke
                         highlight={highlightEntryId}
                         onPath={!!path?.matchIds.has(m.id)}
                         isNext={path?.nextId === m.id}
+                        compact={mirrored}
                       />
                     </li>
                   ))}
@@ -102,9 +166,11 @@ type MatchBoxProps = {
   highlight?: string | null;
   onPath: boolean;
   isNext: boolean;
+  // Narrow mirrored column. Seeds are only spoken there
+  compact: boolean;
 };
 
-function MatchBox({ match, byId, mode, highlight, onPath, isNext }: MatchBoxProps) {
+function MatchBox({ match, byId, mode, highlight, onPath, isNext, compact }: MatchBoxProps) {
   // The viewer's entry is own. Otherwise the top slot is own
   const ownIndex = highlight && match.b === highlight ? 1 : 0;
   const sideOf = (i: number): TeamSide => (i === ownIndex ? "own" : "enemy");
@@ -120,7 +186,7 @@ function MatchBox({ match, byId, mode, highlight, onPath, isNext }: MatchBoxProp
   const note = resolutionText(match);
   const series = match.bestOf > 1 && (match.maps?.length ?? 0) > 0;
   return (
-    <div className={cx("glass", styles.match, live && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
+    <div className={cx("glass", styles.match, href && styles.linked, live && styles.live, onPath && styles.path, onPath && !placed && styles.ahead)}>
       {onPath && <span className="visually-hidden">{placed ? "Your match. " : "On your route. "}</span>}
       {sides.map((s, i) => {
         const won = !!s.id && match.winner === s.id;
@@ -131,7 +197,11 @@ function MatchBox({ match, byId, mode, highlight, onPath, isNext }: MatchBoxProp
           <div key={i} className={cx(styles.side, won && styles.won, lost && styles.lost, s.id && s.id === highlight && styles.me)}>
             <span className={styles.lead}>
               <TeamMarker side={sideOf(i)} />
-              <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
+              {compact ? (
+                s.seed != null && <span className="visually-hidden">Seed {s.seed}, </span>
+              ) : (
+                <span className={cx(styles.seed, "mono")}>{s.seed ?? ""}</span>
+              )}
             </span>
             {entry ? (
               <TeamCard title={label} players={entryPlayers(entry)} meanRating={entry.rating} className={styles.entryTrigger}>
@@ -171,21 +241,20 @@ function MatchBox({ match, byId, mode, highlight, onPath, isNext }: MatchBoxProp
           })}
         </ol>
       )}
-      {(href || isNext || note || live) && (
-        <div className={styles.footer}>
+      {(live || isNext || note) && (
+        <span className={styles.tags}>
           {live && <LiveBadge />}
-          {isNext && <span className={styles.next}>{placed ? "Your next match" : "Next if you win"}</span>}
-          {note && <span className={styles.resolution}>{note}</span>}
-          {href && (
-            <Link
-              href={href}
-              className={styles.matchLink}
-              aria-label={`${live ? "Watch" : "Open"} match room, ${names[0]} against ${names[1]}`}
-            >
-              {live ? "Watch" : "Match"}
-            </Link>
-          )}
-        </div>
+          {isNext && <Badge tone="accent">{placed ? "Your match" : "If you win"}</Badge>}
+          {note && <Badge>{note}</Badge>}
+        </span>
+      )}
+      {/* The whole card opens the match room. Team names stay above it for their team card */}
+      {href && (
+        <Link href={href} className={styles.cardLink}>
+          <span className="visually-hidden">
+            {live ? "Watch" : "Open"} match room, {names[0]} against {names[1]}
+          </span>
+        </Link>
       )}
     </div>
   );

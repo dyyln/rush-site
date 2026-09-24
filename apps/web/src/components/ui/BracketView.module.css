@@ -5,11 +5,12 @@
   border-radius: var(--radius-md);
 }
 .rounds {
+  --bracket-gap: var(--space-5);
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  gap: var(--space-5);
+  gap: var(--bracket-gap);
   min-width: min-content;
 }
 .round {
@@ -17,6 +18,50 @@
   display: flex;
   flex-direction: column;
   scroll-snap-align: start;
+}
+/* Mirrored: the halves meet at the final in the middle and the columns share the width.
+   The gap matches MIRROR_GAP in BracketView.tsx */
+.mirrored {
+  --bracket-gap: var(--space-4);
+  min-width: 0;
+}
+.mirrored .round {
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* The final is the bigger tile, with the champion trophy above it */
+.finalRound {
+  flex-basis: 300px;
+}
+.mirrored .finalRound {
+  flex: 1.4 1 0;
+}
+.trophy {
+  position: absolute;
+  bottom: calc(100% + var(--space-3));
+  left: 50%;
+  translate: -50% 0;
+}
+.finalRound .side {
+  min-height: var(--target-min);
+  font-size: var(--text-md);
+}
+.finalRound .score {
+  font-size: var(--text-lg);
+}
+.mirrored .roundTitle {
+  white-space: nowrap;
+}
+.mirrored .side {
+  grid-template-columns: auto 1fr minmax(20px, auto);
+  gap: 6px;
+  padding: 0 6px;
+  font-size: var(--text-xs);
+}
+.mirrored .finalRound .side {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
 }
 .roundTitle {
   font-size: var(--text-sm);
@@ -38,20 +83,69 @@
 .slot {
   position: relative;
 }
-.round:not(:last-child) .slot::after {
+/* Stub toward the next round, on the right, or on the left in the mirrored bottom half */
+.round[data-out] .slot::after {
   content: "";
   position: absolute;
-  right: calc(-1 * var(--space-5));
   top: 50%;
-  width: var(--space-5);
+  width: var(--bracket-gap);
   border-top: 1px solid var(--color-border-strong);
+}
+.round[data-out="right"] .slot::after {
+  right: calc(-1 * var(--bracket-gap));
+}
+.round[data-out="left"] .slot::after {
+  left: calc(-1 * var(--bracket-gap));
 }
 .match {
   position: relative;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
-  overflow: hidden;
+}
+/* The link covers the card. Content sits above it and lets clicks through, except team names */
+.cardLink {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+}
+.cardLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.linked .side,
+.linked .maps {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.linked .entryTrigger {
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .linked:has(> .cardLink:hover) {
+    --glass-wash: var(--glass-hover-wash);
+    --glass-edge: var(--glass-hover-highlight);
+  }
+}
+/* Live, route and result tags sit on the top edge, so they cost no height */
+.tags {
+  position: absolute;
+  top: 0;
+  left: var(--space-2);
+  z-index: 2;
+  max-width: calc(100% - 2 * var(--space-2));
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 2px;
+  transform: translateY(-50%);
+  background: var(--glass-strong);
+  pointer-events: none;
+}
+.tags > * {
+  padding-block: 0;
+  font-size: 10px;
 }
 .live {
   border-color: var(--color-win);
@@ -74,6 +168,7 @@
   text-align: right;
 }
 .entryTrigger {
+  justify-self: start;
   min-width: 0;
   min-height: 36px;
 }
@@ -106,6 +201,7 @@
   margin: 0;
   padding: var(--space-1) var(--space-2);
   border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--color-surface-1);
   display: flex;
   flex-direction: column;
@@ -170,55 +266,14 @@
 .me {
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
-.resolution {
-  display: block;
-  padding: 2px 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
 .lead {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1);
 }
-.footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-2);
-  border-top: 1px solid var(--color-border);
-}
-.matchLink {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target-min);
-  font-size: var(--text-xs);
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
 .wrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.legend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.swatch {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-accent);
-  border-radius: var(--radius-sm);
+  min-width: 0;
 }
 .path {
   border-color: var(--color-accent);
@@ -231,14 +286,19 @@
   border-style: dashed;
   box-shadow: none;
 }
-.round:not(:last-child) .pathOut::after {
+.round[data-out] .pathOut::after {
   border-top: 2px solid var(--color-accent);
 }
-.next {
-  font-size: var(--text-xs);
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-accent-hover);
-  padding: var(--space-1) 0;
+
+/* Tracing an entry from the entrant list: its route stays, everything else steps back */
+.slot > .match,
+.slot::after {
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.rounds[data-tracing] .slot:not(.traced) > .match,
+.rounds[data-tracing] .slot:not(.tracedOut)::after {
+  opacity: 0.3;
+}
+.rounds[data-tracing] .tracedOut::after {
+  border-top: 2px solid var(--color-text);
 }

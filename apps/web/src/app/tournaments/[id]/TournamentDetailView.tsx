@@ -4,23 +4,21 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TEAM_NAME_MAX, TeamNameSchema, trustAtLeast } from "@rushsite/shared";
 import { AvatarStack } from "@/components/tournaments/AvatarStack";
+import { EntrantList } from "@/components/tournaments/EntrantList";
 import { LiveBadge } from "@/components/tournaments/LiveBadge";
 import { LocalTime } from "@/components/tournaments/LocalTime";
 import { VerifiedNote } from "@/components/tournaments/VerifiedNote";
 import { WithdrawDialog } from "@/components/tournaments/WithdrawDialog";
 import { registeredToast } from "@/components/tournaments/toasts";
 import { useLiveScores } from "@/components/tournaments/useLiveScores";
-import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { BracketView, entryName, entryPlayers } from "@/components/ui/BracketView";
-import { TeamCard } from "@/components/ui/TeamCard";
+import { BracketView, entryName } from "@/components/ui/BracketView";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SignInLink } from "@/components/ui/SignInLink";
 import { Card } from "@/components/ui/Card";
 import { CountdownRing } from "@/components/ui/CountdownRing";
 import { cx } from "@/components/ui/cx";
-import { StatTile } from "@/components/ui/StatTile";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
 import { describeError } from "@/lib/errors";
@@ -239,6 +237,8 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
   const [teamNameError, setTeamNameError] = useState<string>();
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const bracket = useLiveScores(t.bracket, !!user);
+  // Entry hovered in the entrant list, whose route the bracket traces
+  const [traced, setTraced] = useState<string | null>(null);
 
   async function toggleEntry() {
     let name: string | undefined;
@@ -285,16 +285,42 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
           <p>
             {MODE_COPY[t.mode].label}. {formatLabel(t)}.
           </p>
-          {t.entries.length > 0 && (
-            <a href="#entrants-heading" className={styles.stackLink}>
-              <AvatarStack
-                people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: captainAvatar(e) }))}
-                total={t.entrantCount}
-                size="md"
-              />
-              <span>See all entrants</span>
-            </a>
-          )}
+          <div className={styles.metaRow}>
+            <dl className={styles.facts}>
+              <div>
+                <dt>{t.status === "open" ? "Starts" : "Started"}</dt>
+                <dd>
+                  <LocalTime iso={t.startsAt} />
+                </dd>
+              </div>
+              <div>
+                <dt>Entrants</dt>
+                <dd>
+                  {t.entrantCount}/{t.maxEntrants}
+                </dd>
+              </div>
+              <div>
+                <dt>Prize</dt>
+                <dd>Profile badges</dd>
+              </div>
+              {winner && (
+                <div>
+                  <dt>Champion</dt>
+                  <dd>{entryName(winner)}</dd>
+                </div>
+              )}
+            </dl>
+            {t.entries.length > 0 && (
+              <a href="#entrants-heading" className={styles.stackLink}>
+                <AvatarStack
+                  people={t.entries.map((e) => ({ steamId: e.id, displayName: entryName(e), avatarUrl: captainAvatar(e) }))}
+                  total={t.entrantCount}
+                  size="md"
+                />
+                <span>See all entrants</span>
+              </a>
+            )}
+          </div>
         </div>
         {t.status === "open" && (
           <div className={styles.aside}>
@@ -353,17 +379,10 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
         onClose={() => setConfirmWithdraw(false)}
       />
 
-      <div className={styles.facts}>
-        <StatTile label="Starts" value={<LocalTime iso={t.startsAt} className={styles.small} />} />
-        <StatTile label="Entrants" value={`${t.entrantCount}/${t.maxEntrants}`} />
-        <StatTile label="Prize" value={<span className={styles.small}>Profile badges</span>} />
-        {winner && <StatTile label="Champion" value={<span className={styles.small}>{entryName(winner)}</span>} />}
-      </div>
-
       {t.bracket && (
         <section aria-labelledby="bracket-heading" className="stack">
           <h2 id="bracket-heading">Bracket</h2>
-          <BracketView bracket={bracket ?? t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} mode={t.mode} />
+          <BracketView bracket={bracket ?? t.bracket} entries={t.entries} highlightEntryId={t.myEntryId} mode={t.mode} cadence={t.cadence} traceEntryId={traced} />
         </section>
       )}
       <section aria-labelledby="entrants-heading" className="stack">
@@ -372,18 +391,14 @@ function Detail({ t, reload }: { t: TournamentDetail; reload: () => void }) {
         {t.entries.length === 0 ? (
           <p className="muted">No sign ups yet.</p>
         ) : (
-          <ol className={styles.entrants}>
-            {t.entries.map((e) => (
-              <li key={e.id} className={`glass ${styles.entrant}`}>
-                <TeamCard title={entryName(e)} players={entryPlayers(e)} meanRating={e.rating} className={styles.entrantTrigger}>
-                  <Avatar name={entryName(e)} src={captainAvatar(e)} size="sm" />
-                  <span className={styles.entrantName}>{entryName(e)}</span>
-                </TeamCard>
-                {e.disqualified && <Badge tone="loss">DQ</Badge>}
-                {e.rating !== null && <span className="mono muted rating-num">{e.rating}</span>}
-              </li>
-            ))}
-          </ol>
+          <EntrantList
+            entries={t.entries}
+            bracket={bracket ?? t.bracket}
+            maxEntrants={t.maxEntrants}
+            signups={t.status === "open"}
+            myEntryId={t.myEntryId}
+            onTrace={setTraced}
+          />
         )}
       </section>
     </div>

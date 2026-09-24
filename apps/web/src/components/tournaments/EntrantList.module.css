@@ -1,0 +1,108 @@
+/* Standings once the bracket exists, sign up order before. One compact row per entry */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+}
+.row {
+  display: grid;
+  grid-template-columns: 24px auto minmax(0, 1fr) auto;
+  grid-template-areas: "num avatar name name" "num avatar status tier";
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  min-height: 56px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  transition: border-color var(--duration-fast) var(--ease);
+}
+.row:hover,
+.row:focus-within {
+  border-color: var(--color-border-strong);
+}
+.num {
+  grid-area: num;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+.row > :nth-child(2) {
+  grid-area: avatar;
+}
+.trigger {
+  grid-area: name;
+  justify-self: start;
+  min-width: 0;
+  min-height: 0;
+  align-self: end;
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.tier {
+  grid-area: tier;
+  display: flex;
+}
+.status {
+  grid-area: status;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The viewer's entry carries the same accent edge as in the bracket */
+.me {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+/* Standing. Placings in their place colours, knocked out entries step back */
+.row[data-standing="champion"] .status {
+  color: var(--place-champion);
+  font-weight: 600;
+}
+.row[data-standing="runnerUp"] .status {
+  color: var(--place-runner-up);
+  font-weight: 600;
+}
+.row[data-standing="playing"] .status {
+  color: var(--color-win);
+}
+.row[data-standing="alive"] .status {
+  color: var(--color-text);
+}
+.row[data-standing="dq"] .status {
+  color: var(--color-loss);
+}
+.row[data-standing="out"] .name,
+.row[data-standing="dq"] .name {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+.row[data-standing="out"] > :nth-child(2),
+.row[data-standing="dq"] > :nth-child(2) {
+  opacity: 0.5;
+}
+
+/* Places still free while sign ups are open */
+.open {
+  grid-template-columns: 24px 1fr;
+  grid-template-areas: none;
+  border-style: dashed;
+  border-color: var(--color-border-control);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.row.open > * {
+  grid-area: auto;
+}
