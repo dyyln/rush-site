@@ -51,16 +51,17 @@ describe("metric sampling", () => {
     // Too old to count for this sample
     await seedMatch("rush3v3", new Date(T0 - 3 * MIN), [10])
 
-    const first = await sampleMetrics(db, { at: new Date(T0), queueDepth: depth(3, 0, 6), activeSockets: 12 })
-    expect(first.written).toBe(8)
+    const first = await sampleMetrics(db, { at: new Date(T0), queueDepth: depth(3, 0, 6), activeSockets: 12, onlineUsers: 7 })
+    expect(first.written).toBe(9)
     // The same minute again is a no-op
-    expect((await sampleMetrics(db, { at: new Date(T0 + 10_000), queueDepth: depth(9), activeSockets: 1 })).written).toBe(0)
+    expect((await sampleMetrics(db, { at: new Date(T0 + 10_000), queueDepth: depth(9), activeSockets: 1, onlineUsers: 1 })).written).toBe(0)
 
     const rows = await db.select().from(metricSamples)
     const get = (metric: string, mode = "") => rows.find((r) => r.metric === metric && r.mode === mode)
     expect(get("queue_depth", "aim1v1")?.value).toBe(3)
     expect(get("queue_depth", "rush3v3")?.value).toBe(6)
     expect(get("active_sockets")?.value).toBe(12)
+    expect(get("online_users")?.value).toBe(7)
     expect(get("matches_found")?.value).toBe(2)
     // Median of the per match mean waits, 50 and 100
     expect(get("median_wait_sec", "aim1v1")?.value).toBe(75)
@@ -76,7 +77,7 @@ describe("metric sampling", () => {
       { metric: "active_sockets", mode: "", sampledAt: old, value: 1 },
       { metric: "active_sockets", mode: "", sampledAt: kept, value: 2 },
     ])
-    const r = await sampleMetrics(db, { at: new Date(T0), queueDepth: depth(), activeSockets: 0 })
+    const r = await sampleMetrics(db, { at: new Date(T0), queueDepth: depth(), activeSockets: 0, onlineUsers: 0 })
     expect(r.pruned).toBe(1)
     const left = await db.select().from(metricSamples)
     expect(left.some((x) => x.sampledAt.getTime() === old.getTime())).toBe(false)
@@ -87,7 +88,7 @@ describe("metric sampling", () => {
 describe("metrics view", () => {
   it("buckets samples per range and leaves gaps as null", async () => {
     for (let i = 0; i < 30; i++) {
-      await sampleMetrics(db, { at: new Date(T0 - i * MIN), queueDepth: depth(i % 2 === 0 ? 2 : 4), activeSockets: 10 })
+      await sampleMetrics(db, { at: new Date(T0 - i * MIN), queueDepth: depth(i % 2 === 0 ? 2 : 4), activeSockets: 10, onlineUsers: 6 })
     }
     await db.insert(metricSamples).values({ metric: "matches_found", mode: "", sampledAt: new Date(T0 - 5 * MIN), value: 7 })
 
@@ -99,6 +100,7 @@ describe("metrics view", () => {
     expect(hour.queueDepth.aim1v1.at(-1)).toEqual({ t: Date.parse("2026-09-23T12:00:00Z"), v: 2 })
     expect(hour.queueDepth.aim1v1[0]!.v).toBeNull()
     expect(hour.activeSockets.at(-1)?.v).toBe(10)
+    expect(hour.onlineUsers.at(-1)?.v).toBe(6)
     expect(hour.matchesStepSec).toBe(300)
     expect(hour.matchesFound.reduce((n, p) => n + (p.v ?? 0), 0)).toBe(7)
 

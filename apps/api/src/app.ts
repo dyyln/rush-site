@@ -27,6 +27,7 @@ import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { sampleMetrics } from "./modules/admin/metrics.js"
 import { fetchWorkshopItem } from "./modules/maps/workshop.js"
 import { LocalHub, setAdminAccess, type Audience } from "./modules/ws/hub.js"
+import { countOnline } from "./modules/ws/online.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
 
 export type BuildAppOptions = Omit<ContextDeps, "log"> & {
@@ -93,7 +94,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
     await ctx.redis.ping()
     return {
       ok: true,
-      ws: { users: hub.connectedUsers(), ...realtimeMetrics },
+      ws: { users: hub.connectedUsers(), online: await countOnline(ctx.redis, ctx.now()), ...realtimeMetrics },
       loops: loopMetrics.snapshot(["matchmaker", "refresh"]),
     }
   })
@@ -271,11 +272,16 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics,
     // A pass can wait on a 15 s agent call, so the lock outlives it
     loop("match_alloc", ctx.env.ALLOCATION_TICK_INTERVAL_MS, () => ctx.flow.allocationTick(ctx.env.ALLOCATION_CONCURRENCY), 30_000)
     loop("hosts", 30_000, () => ctx.allocator.syncHosts(ctx.env.AGENT_URLS))
-    // Dashboard samples. Socket count is this instance only
+    // Dashboard samples. Socket count is this instance only, online players count every instance
     loop("metric_samples", 60_000, async () => {
       const depth = Object.fromEntries(MODES.map((m) => [m, 0])) as Record<Mode, number>
       for (const t of await queueSnapshot(ctx)) for (const m of t.modes) depth[m] += t.steamIds.length
-      await sampleMetrics(ctx.db, { at: new Date(ctx.now()), queueDepth: depth, activeSockets: hub.connectedSockets() })
+      await sampleMetrics(ctx.db, {
+        at: new Date(ctx.now()),
+        queueDepth: depth,
+        activeSockets: hub.connectedSockets(),
+        onlineUsers: await countOnline(ctx.redis, ctx.now()),
+      })
     })
     // Mode availability goes out only when it changes. Admin flag writes also send at once
     loop("service_status", 5000, () => publishServiceStatus(ctx))

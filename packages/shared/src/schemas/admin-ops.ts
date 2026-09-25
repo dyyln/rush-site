@@ -90,6 +90,8 @@ export const MetricsViewSchema = z.object({
   medianWaitSec: z.record(ModeSchema, z.array(MetricPointSchema)),
   // Open websockets, mean per bucket
   activeSockets: z.array(MetricPointSchema),
+  // Unique signed in players with an open socket, mean per bucket. Several tabs count once
+  onlineUsers: z.array(MetricPointSchema),
   // Matches found per bucket of matchesStepSec, every mode together
   matchesFound: z.array(MetricPointSchema),
   matchesStepSec: z.number().int().positive(),

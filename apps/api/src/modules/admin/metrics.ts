@@ -8,13 +8,15 @@ import type { Db } from "./types.js"
 export const METRIC_RETENTION_MS = 7 * 24 * 3600_000
 const MINUTE_MS = 60_000
 
-export type MetricName = "queue_depth" | "matches_found" | "median_wait_sec" | "active_sockets"
+export type MetricName = "queue_depth" | "matches_found" | "median_wait_sec" | "active_sockets" | "online_users"
 
 export type SampleInput = {
   at: Date
   // Players waiting per mode
   queueDepth: Record<Mode, number>
   activeSockets: number
+  // Unique signed in players with an open socket on any instance
+  onlineUsers: number
 }
 
 export const RANGES: Record<MetricsRange, { spanMs: number; stepSec: number; matchesStepSec: number }> = {
@@ -63,6 +65,7 @@ export async function sampleMetrics(db: Db, input: SampleInput): Promise<{ writt
   }
   add("matches_found", "", found.reduce((n, r) => n + Number(r.n), 0), since)
   add("active_sockets", "", input.activeSockets)
+  add("online_users", "", input.onlineUsers)
 
   const written = await db.insert(metricSamples).values(rows).onConflictDoNothing().returning({ metric: metricSamples.metric })
   const pruned = await db
@@ -124,7 +127,7 @@ export async function metricsView(db: Db, range: MetricsRange, now: Date): Promi
   const barFrom = barTo - Math.ceil(cfg.spanMs / mStepMs) * mStepMs
 
   const [lines, bars] = await Promise.all([
-    buckets(db, new Date(lineFrom), new Date(lineTo), cfg.stepSec, ["queue_depth", "median_wait_sec", "active_sockets"]),
+    buckets(db, new Date(lineFrom), new Date(lineTo), cfg.stepSec, ["queue_depth", "median_wait_sec", "active_sockets", "online_users"]),
     buckets(db, new Date(barFrom), new Date(barTo), cfg.matchesStepSec, ["matches_found"]),
   ])
   const perMode = (metric: MetricName, round: number) =>
@@ -138,6 +141,7 @@ export async function metricsView(db: Db, range: MetricsRange, now: Date): Promi
     queueDepth: perMode("queue_depth", 10),
     medianWaitSec: perMode("median_wait_sec", 1),
     activeSockets: series(lines, "active_sockets", "", lineFrom, lineTo, stepMs, "avg", 10),
+    onlineUsers: series(lines, "online_users", "", lineFrom, lineTo, stepMs, "avg", 10),
     matchesFound: series(bars, "matches_found", "", barFrom, barTo, mStepMs, "sum"),
     matchesStepSec: cfg.matchesStepSec,
   }

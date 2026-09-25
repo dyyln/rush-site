@@ -15,6 +15,7 @@ import {
   WS_MESSAGES_PER_SEC,
 } from "../../lib/security.js"
 import { MAX_MATCH_SUBSCRIPTIONS, MAX_TOURNAMENT_SUBSCRIPTIONS, type LocalHub } from "./hub.js"
+import { dropOnline, touchOnline } from "./online.js"
 
 type AuthedRequest = FastifyRequest & { wsSteamId?: string }
 
@@ -72,6 +73,7 @@ export function attachSocket(
   let alive = true
   const heartbeat = () => {
     void ctx.presence.heartbeat(steamId).catch((err) => log.warn({ err, steamId }, "presence heartbeat failed"))
+    void touchOnline(ctx.redis, steamId, ctx.now()).catch((err) => log.warn({ err, steamId }, "online heartbeat failed"))
   }
   socket.on("pong", () => {
     alive = true
@@ -149,6 +151,7 @@ export function attachSocket(
   socket.on("close", () => {
     clearInterval(ping)
     hub.remove(steamId, socket)
+    if (!hub.hasUser(steamId)) void dropOnline(ctx.redis, steamId).catch((err) => log.warn({ err, steamId }, "online drop failed"))
   })
 
   // Initial snapshot so a reconnecting client catches up

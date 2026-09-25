@@ -155,6 +155,10 @@ export class LocalHub {
     }
   }
 
+  hasUser(steamId: string): boolean {
+    return this.byUser.has(steamId)
+  }
+
   connectedUsers(): number {
     return this.byUser.size
   }

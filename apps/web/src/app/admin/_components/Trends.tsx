@@ -90,9 +90,16 @@ export function Trends() {
             refreshing={live.refreshing || !live.data}
           />
           <TimeSeriesChart
-            title="Active sockets"
-            sub="Open websocket connections"
-            series={m ? [{ id: "sockets", label: "Sockets", color: "var(--series-1)", points: m.activeSockets }] : []}
+            title="Players online"
+            sub="Signed in players with the site open. Several tabs count once"
+            series={
+              m
+                ? [
+                    { id: "online", label: "Players", color: "var(--series-1)", points: m.onlineUsers },
+                    { id: "sockets", label: "Sockets", color: "var(--series-2)", points: m.activeSockets },
+                  ]
+                : []
+            }
             stepSec={m?.stepSec ?? 60}
             refreshing={live.refreshing || !live.data}
           />
