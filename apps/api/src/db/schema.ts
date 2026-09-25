@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  date,
   doublePrecision,
   index,
   integer,
@@ -72,6 +73,19 @@ export const users = pgTable(
   },
   // Leaderboard name search. text_pattern_ops lets prefix LIKE use the index
   (t) => [index("users_display_name_lower_idx").using("btree", sql`lower(${t.displayName}) text_pattern_ops`)],
+)
+
+// One row per user per UTC day with a sign in or a signed in page load. Feeds the admin activity metrics
+export const userActivityDays = pgTable(
+  "user_activity_days",
+  {
+    steamId: steamId()
+      .notNull()
+      .references(() => users.steamId, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    firstSeenAt: ts("first_seen_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.steamId, t.day] }), index("user_activity_days_day_idx").on(t.day)],
 )
 
 // Last Steam Web API snapshot for a user

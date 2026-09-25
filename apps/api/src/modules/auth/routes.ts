@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm"
-import type { FastifyInstance } from "fastify"
+import type { FastifyBaseLogger, FastifyInstance } from "fastify"
 import { users } from "../../db/schema.js"
 import { ApiError, unauthorized } from "../../lib/errors.js"
 import { randomToken } from "../../lib/hmac.js"
 import type { AppContext } from "../../context.js"
+import { ActivityRecorder } from "./activity.js"
 import { SESSION_COOKIE, requireUser, sessionIdFrom, setSessionCookie } from "./session.js"
 import { buildLoginUrl, checkAssertion, verifyWithSteam } from "./steam.js"
 
@@ -23,6 +24,10 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
   const callbackUrl = `${env.API_PUBLIC_URL.replace(/\/+$/, "")}/auth/steam/callback`
   const realm = new URL(env.API_PUBLIC_URL).origin
   const web = env.PUBLIC_URL.replace(/\/+$/, "")
+  const activity = new ActivityRecorder(ctx.db, ctx.redis, ctx.now)
+  // Activity feeds the admin metrics. A failed write must not fail the request
+  const touch = (steamId: string, log: FastifyBaseLogger) =>
+    void activity.touch(steamId).catch((err) => log.warn({ err, steamId }, "activity write failed"))
 
   app.get("/auth/steam", async (req, reply) => {
     const state = randomToken(16)
@@ -90,6 +95,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     await ctx.users.upsertFromSteam(steamId, summary, playtime)
     const sid = await ctx.sessions.create(steamId)
     setSessionCookie(reply, sid, { secure, domain: env.COOKIE_DOMAIN, maxAgeSec: env.SESSION_TTL_DAYS * 86400 })
+    touch(steamId, req.log)
     void ctx.trust.onLogin(steamId).catch((err) => req.log.error({ err, steamId }, "trust refresh failed"))
     void ctx.friends.syncSteam(steamId).catch((err) => req.log.warn({ err, steamId }, "steam friends auto-link failed"))
     return reply.redirect(`${web}${login.redirect}`, 302)
@@ -115,6 +121,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const steamId = await requireUser(ctx.auth, req)
     const [user] = await ctx.db.select().from(users).where(eq(users.steamId, steamId))
     if (!user) throw unauthorized()
+    touch(steamId, req.log)
     const trust = (await ctx.trust.levels([steamId]))[steamId]!
     return {
       user: {
