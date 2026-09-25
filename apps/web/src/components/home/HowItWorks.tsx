@@ -1,9 +1,9 @@
 import styles from "./home.module.css";
 
 const STEPS = [
-  { title: "Sign in with Steam", body: "We will never ask for your credentials, sign in securely via Steam." },
+  { title: "Sign in with Steam", body: "We will never ask for your credentials. Sign in securely via Steam." },
   { title: "Grab your mates and play", body: "Solo queue or party up and queue for one or more modes you want to play." },
-  { title: "Show your skill", body: "Join the server, and show off your skill to improve your rating." },
+  { title: "Show your skill", body: "Join the server and show off your skill to improve your rating." },
 ];
 
 // Three steps from landing to playing

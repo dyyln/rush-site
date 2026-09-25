@@ -190,7 +190,7 @@ export function ConnectPanel({
           id="stage-heading"
           eyebrow={`${modeLabel(mode)} · Server`}
           headline="Match live"
-          sub="Dropped out? Rejoin from the dock. The server stays the same for every map."
+          sub="Dropped out? Rejoin the server. It stays the same for every map."
           tone="go"
         />
       ) : (
@@ -200,7 +200,7 @@ export function ConnectPanel({
           headline={isRushMode(mode) || !map ? "Server ready" : `Server ready · ${mapName(mode, map)}`}
           sub={
             <>
-              Connect from the dock. Not joining in time forfeits the match and loses rating.
+              Connect to the server. Not joining in time forfeits the match and loses rating.
               {count && <span className="visually-hidden">. {count}</span>}
             </>
           }
