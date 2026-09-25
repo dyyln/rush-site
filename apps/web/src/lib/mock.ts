@@ -12,6 +12,7 @@ import {
   seriesRushRoomsFromVeto,
   tierForRating,
   type MatchMap,
+  type LiveMatch,
   type Mode,
   type PartyUpdatePayload,
   type VetoState,
@@ -1190,6 +1191,54 @@ export function setMockSignedIn(v: boolean) {
   } catch {
     // Storage can be blocked. The mock then stays signed in
   }
+}
+
+// Play's live list: the two live mock rooms, then made up matches that open as mock rooms of the same mode and map
+export function mockLiveMatches(limit: number, now = Date.now()): LiveMatch[] {
+  const fromDetail = (id: string): LiveMatch => {
+    const m = mockMatchDetail(id, now);
+    return {
+      id: m.id,
+      mode: m.mode,
+      mapId: m.mapId,
+      status: "live",
+      startedAt: m.startedAt,
+      teams: m.teams.map((t) => ({
+        name: t.displayName ?? t.name,
+        score: t.score,
+        players: t.players.map((p) => ({ steamId: p.steamId, displayName: p.displayName, avatarUrl: p.avatarUrl })),
+      })),
+    };
+  };
+  const rows = [fromDetail(MOCK_LIVE_RUSH_MATCH_ID), fromDetail(MOCK_LIVE_MATCH_ID)];
+  const specs: { mode: Mode; mapId: string; a: number; b: number; cup?: string }[] = [
+    { mode: "aim2v2", mapId: AIM_MAPS[1]!.id, a: 11, b: 7, cup: "Daily 2v2 Aim Cup" },
+    { mode: "rush3v3", mapId: RUSH_MAP.id, a: 2, b: 5 },
+    { mode: "aim1v1", mapId: AIM_MAPS[3]!.id, a: 12, b: 12 },
+  ];
+  specs.forEach((s, i) => {
+    const id = mockUuid(`live-${i}`);
+    MOCK_MATCH_HINTS.set(id, { mode: s.mode, mapId: s.mapId });
+    const size = teamSize(s.mode);
+    const team = (off: number, score: number, name: string) => ({
+      name,
+      score,
+      players: Array.from({ length: size }, (_, j) => {
+        const u = mockUser(i * 10 + off + j + 2);
+        return { steamId: u.steamId, displayName: u.displayName, avatarUrl: u.avatarUrl };
+      }),
+    });
+    rows.push({
+      id,
+      mode: s.mode,
+      mapId: s.mapId,
+      status: "live",
+      startedAt: new Date(now - (i + 2) * 4 * 60_000).toISOString(),
+      teams: [team(0, s.a, "Team A"), team(5, s.b, "Team B")],
+      ...(s.cup ? { tournament: { id: mockUuid(`live-cup-${i}`), name: s.cup } } : {}),
+    });
+  });
+  return rows.slice(0, limit);
 }
 
 // Runs last so every mock constant above is initialised

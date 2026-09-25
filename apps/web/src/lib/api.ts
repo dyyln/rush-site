@@ -1,4 +1,4 @@
-import { isMatchSlug, type Mode, type ModeStatsPayload, type PartyUpdatePayload, type QueueStatusPayload } from "@rushsite/shared";
+import { isMatchSlug, type LiveMatch, type LiveMatches, type Mode, type ModeStatsPayload, type PartyUpdatePayload, type QueueStatusPayload } from "@rushsite/shared";
 import { apiUrl, isMock } from "./env";
 import * as mock from "./mock";
 import { mockCall, mockDelay, mockMatchDetail, mockSignedIn, setMockSignedIn } from "./mock";
@@ -186,6 +186,12 @@ export const api = {
   async modeStats(): Promise<ModeStatsPayload> {
     if (isMock) return mocked(mockModeStats());
     return request("GET", "/stats/modes");
+  },
+
+  // Matches being played now, the highest rated first
+  async liveMatches(limit = 5): Promise<LiveMatch[]> {
+    if (isMock) return mocked(mock.mockLiveMatches(limit));
+    return (await request<LiveMatches>("GET", "/matches/live", { query: { limit } })).matches;
   },
 
   async match(id: string): Promise<MatchDetail> {

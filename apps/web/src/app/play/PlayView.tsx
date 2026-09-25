@@ -23,6 +23,7 @@ import { trustProgressLine, type TrustStatus } from "@/lib/trust";
 import { MODE_ART, MODE_COPY } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import { activeMatch, usePlay } from "@/lib/usePlay";
+import { LiveMatches } from "@/components/play/LiveMatches";
 import { mapPoolId } from "@/components/play/ModeMapPool";
 import { setGlobalParty, useGlobalPlay } from "@/components/play/playStore";
 import { modeBlockReason, partySizeOf, setSelectedModes, toggleSelectedMode, useSelectedModes } from "@/components/play/selectionStore";
@@ -185,6 +186,7 @@ export function PlayView() {
           )}
           <ModeAvailabilityHint status={service} />
           {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
+          {user && <LiveMatches />}
         </div>
 
         <aside className={cx("glass", styles.rail)} aria-label={user ? "Friends" : "How it works"}>
