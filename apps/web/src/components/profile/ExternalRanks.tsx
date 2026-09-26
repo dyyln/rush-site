@@ -91,7 +91,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
         )}
         {premier !== null && (
           <li>
-            <RankTile name="Premier" href={leetify?.url} title={`Premier CS Rating ${premier.toLocaleString("en-GB")}`}>
+            <RankTile name="Premier" href={leetify?.url} title={`Premier CS Rating ${premier.toLocaleString("en-GB")}${leetify ? ". View on Leetify" : ""}`}>
               <span className={styles.premier} style={{ "--band": premierColor(premier) } as React.CSSProperties}>
                 {premier.toLocaleString("en-GB")}
               </span>
@@ -100,7 +100,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
         )}
         {group && (
           <li>
-            <RankTile name="Wingman" href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}`}>
+            <RankTile name="Wingman" href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}${leetify ? ". View on Leetify" : ""}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`/ranks/wingman/${group}.webp`} alt="" width={80} height={33} />
             </RankTile>
@@ -108,15 +108,10 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
         )}
       </ul>
       {fromLeetify && (
-        <p className={styles.credit}>
-          <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer" className={styles.badge}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={94} height={40} />
-          </a>
-          <a href={leetify!.url} target="_blank" rel="noopener noreferrer">
-            View on Leetify
-          </a>
-        </p>
+        <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer" className={styles.badge}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={94} height={40} />
+        </a>
       )}
     </div>
   );
