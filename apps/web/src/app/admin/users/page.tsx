@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/Input";
 import { isMock } from "@/lib/env";
 import { adminApi, errorMessage } from "../_lib/client";
 import { ago, TRUST_LABEL, trustTone } from "../_lib/format";
+import { useLiveData } from "../_lib/live";
 import { mockAdmin } from "../_lib/mock";
 import type { UserSearchHit } from "../_lib/types";
 import { ManualBan } from "../_components/ManualBan";
-import { PageHeader } from "../_components/parts";
+import { ErrorPanel, PageHeader } from "../_components/parts";
 import styles from "../admin.module.css";
 
 // A SteamID64 or a steamcommunity.com/profiles/ URL goes straight to the user page
@@ -29,6 +30,8 @@ const isVanityUrl = (input: string) => /steamcommunity\.com\/id\//i.test(input);
 
 type Results = { q: string; users: UserSearchHit[] };
 
+const NEWEST = 20;
+
 export default function AdminUsersPage() {
   const router = useRouter();
   const [value, setValue] = useState("");
@@ -36,6 +39,7 @@ export default function AdminUsersPage() {
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Results | null>(null);
   const resultsRef = useRef<HTMLHeadingElement>(null);
+  const newest = useLiveData(() => adminApi.newestUsers(NEWEST), [], { kinds: ["user"], pollMs: 60_000 });
 
   async function submit() {
     const q = value.trim();
@@ -60,7 +64,13 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <PageHeader title="Users" description="Find a player by name, SteamID64 or Steam profile URL to see trust signals, ratings and history." />
+      <PageHeader
+        title="Users"
+        description="Find a player by name, SteamID64 or Steam profile URL to see trust signals, ratings and history."
+        updatedAt={results ? undefined : newest.updatedAt}
+        refreshing={results ? undefined : newest.refreshing}
+        onRefresh={results ? undefined : newest.reload}
+      />
       <Card>
         <form
           className={styles.formRow}
@@ -85,6 +95,19 @@ export default function AdminUsersPage() {
           <Button type="submit" loading={busy}>
             Search
           </Button>
+          {results && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setResults(null);
+                setValue("");
+                setError(undefined);
+              }}
+            >
+              Clear
+            </Button>
+          )}
         </form>
       </Card>
 
@@ -95,27 +118,27 @@ export default function AdminUsersPage() {
               ? `No players match "${results.q}"`
               : `${results.users.length}${results.users.length >= 20 ? "+" : ""} ${results.users.length === 1 ? "player matches" : "players match"} "${results.q}"`}
           </h2>
-          {results.users.length > 0 && (
-            <ul className={styles.hitList}>
-              {results.users.map((u) => (
-                <li key={u.steamId}>
-                  <Link href={`/admin/users/${u.steamId}`} className={styles.hit}>
-                    <Avatar name={u.displayName} src={u.avatarUrl} />
-                    <span className={styles.hitText}>
-                      <span className={styles.hitName}>{u.displayName}</span>
-                      <span className={`${styles.muted} mono`}>{u.steamId}</span>
-                    </span>
-                    <span className={styles.hitMeta}>
-                      {u.banned && <Badge tone="loss">Banned</Badge>}
-                      {u.trustLevel && <Badge tone={trustTone(u.trustLevel)}>{TRUST_LABEL[u.trustLevel] ?? u.trustLevel}</Badge>}
-                      <span className={styles.muted}>Seen {ago(u.lastLoginAt, Date.now())}</span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          {results.users.length > 0 && <UserHits users={results.users} show="seen" />}
           {results.users.length >= 20 && <p className={styles.muted}>Showing the first 20. Type more of the name to narrow it down.</p>}
+        </section>
+      )}
+
+      {!results && (
+        <section className={styles.section} aria-labelledby="newest-users">
+          <h2 id="newest-users" className={styles.sectionTitle}>
+            Newest players
+          </h2>
+          {newest.error && !newest.data ? (
+            <ErrorPanel error={newest.error} onRetry={newest.reload} what="the newest players" />
+          ) : !newest.data ? (
+            <p className={styles.muted} aria-busy="true">
+              Loading
+            </p>
+          ) : newest.data.length === 0 ? (
+            <p className={styles.muted}>No players have signed up yet.</p>
+          ) : (
+            <UserHits users={newest.data} show="joined" />
+          )}
         </section>
       )}
 
@@ -134,5 +157,34 @@ export default function AdminUsersPage() {
         </Card>
       )}
     </>
+  );
+}
+
+// Joined shows the sign up time first, for spotting new accounts
+function UserHits({ users, show }: { users: UserSearchHit[]; show: "joined" | "seen" }) {
+  const now = Date.now();
+  return (
+    <ul className={styles.hitList}>
+      {users.map((u) => (
+        <li key={u.steamId}>
+          <Link href={`/admin/users/${u.steamId}`} className={styles.hit}>
+            <Avatar name={u.displayName} src={u.avatarUrl} />
+            <span className={styles.hitText}>
+              <span className={styles.hitName}>{u.displayName}</span>
+              <span className={`${styles.muted} mono`}>{u.steamId}</span>
+            </span>
+            <span className={styles.hitMeta}>
+              {u.banned && <Badge tone="loss">Banned</Badge>}
+              {u.trustLevel && <Badge tone={trustTone(u.trustLevel)}>{TRUST_LABEL[u.trustLevel] ?? u.trustLevel}</Badge>}
+              {show === "joined" ? (
+                <span className={styles.muted}>Joined {ago(u.createdAt, now)}</span>
+              ) : (
+                <span className={styles.muted}>Seen {ago(u.lastLoginAt, now)}</span>
+              )}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

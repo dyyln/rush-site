@@ -459,6 +459,7 @@ export interface ActiveMatchRef {
 
 // One row of the admin name search
 export interface UserSearchHit extends UserCard {
+  createdAt: string
   lastLoginAt: string
   trustLevel: TrustLevel | null
   banned: boolean

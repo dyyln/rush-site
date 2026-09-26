@@ -138,6 +138,15 @@ describe("DrizzleAdminStore", () => {
     expect(await store.searchUsers("vexa", 1, NOW)).toHaveLength(1)
   })
 
+  it("lists the newest sign ups first", async () => {
+    await pg.exec(`insert into users (steam_id, display_name, created_at) values ('76561198000000014', 'fresh', now() + interval '1 day')`)
+    const [first, ...rest] = await store.newestUsers(10, NOW)
+    expect(first).toMatchObject({ steamId: "76561198000000014", displayName: "fresh", banned: false, trustLevel: null })
+    expect(Date.parse(first!.createdAt)).toBeGreaterThan(Date.now())
+    expect(rest.map((u) => u.steamId)).toEqual(expect.arrayContaining([A, B]))
+    expect(await store.newestUsers(1, NOW)).toHaveLength(1)
+  })
+
   it("finds the player's active match", async () => {
     expect(await store.activeMatchOf(A, ["live"])).toBeNull()
     await pg.exec(`insert into match_players (match_id, steam_id, team) values ('${M2}', '${A}', 0)`)

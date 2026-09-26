@@ -178,7 +178,7 @@ export type UserStateView = {
   match: { id: string; slug: string | null; mode: Mode; status: string; createdAt: string } | null;
 };
 
-export type UserSearchHit = UserCard & { lastLoginAt: string; trustLevel: TrustLevel | null; banned: boolean };
+export type UserSearchHit = UserCard & { createdAt: string; lastLoginAt: string; trustLevel: TrustLevel | null; banned: boolean };
 
 export type Health = { ok: boolean; latencyMs: number | null; error?: string };
 

@@ -506,9 +506,20 @@ describe("user search and state", () => {
     expect((await h.admin.get("/admin/users?q=vexa")).json().users[0].steamId).toBe(PLAYER)
     expect((await h.admin.get("/admin/users?q=nobody")).json().users).toEqual([])
     expect((await h.admin.get("/admin/users?q=v")).statusCode).toBe(400)
-    expect((await h.admin.get("/admin/users")).statusCode).toBe(400)
+    expect((await h.admin.get("/admin/users?q=")).json().users).toHaveLength(4)
     expect((await h.admin.get("/admin/users?q=vex&limit=500")).statusCode).toBe(400)
     expect((await h.admin.get("/admin/users?q=vex&limit=1")).json().users).toHaveLength(1)
+  })
+
+  it("lists the newest sign ups when there is no query", async () => {
+    h = await harness()
+    const fresh = userRecord("76561198000000005", "fresh")
+    fresh.user.createdAt = new Date(T0.getTime() + 60_000).toISOString()
+    h.store.users.set(fresh.user.steamId, fresh)
+    const res = await h.admin.get("/admin/users?limit=2")
+    expect(res.statusCode).toBe(200)
+    expect(res.json().users.map((u: { steamId: string }) => u.steamId)).toEqual(["76561198000000005", ADMIN])
+    expect(res.json().users[0]).toMatchObject({ displayName: "fresh", createdAt: fresh.user.createdAt })
   })
 
   it("shows queue and match state and admin names in the log", async () => {

@@ -60,6 +60,8 @@ export interface AdminStore {
   getUser(steamId: string, now: Date): Promise<UserRecord | null>
   // Name contains search, exact names first. A digit query also matches SteamID64 prefixes
   searchUsers(q: string, limit: number, now: Date): Promise<UserSearchHit[]>
+  // Most recent sign ups first
+  newestUsers(limit: number, now: Date): Promise<UserSearchHit[]>
   // Newest match in one of the statuses that the player is on
   activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null>
   // Ends every running cooldown now. Rows stay so the escalation ladder still counts them
@@ -73,6 +75,22 @@ export const iso = (v: Date | string | number | null | undefined): string | null
   v === null || v === undefined ? null : new Date(v).toISOString()
 
 const isoReq = (v: Date | string | number) => new Date(v).toISOString()
+
+type UserHitRow = Omit<UserSearchHit, "createdAt" | "lastLoginAt" | "trustLevel"> & {
+  createdAt: Date
+  lastLoginAt: Date
+  trustLevel: string | null
+}
+
+const toHit = (r: UserHitRow): UserSearchHit => ({
+  steamId: r.steamId,
+  displayName: r.displayName,
+  avatarUrl: r.avatarUrl,
+  createdAt: isoReq(r.createdAt),
+  lastLoginAt: isoReq(r.lastLoginAt),
+  trustLevel: (r.trustLevel as TrustLevel | null) ?? null,
+  banned: Boolean(r.banned),
+})
 
 export function fallbackCard(steamId: string): UserCard {
   return { steamId, displayName: steamId, avatarUrl: null }
@@ -346,17 +364,7 @@ export class DrizzleAdminStore implements AdminStore {
     const prefix = namePattern(q).replace(/^%/, "")
     const byName = sql`lower(${users.displayName}) like ${namePattern(q)}`
     const where = /^\d{3,17}$/.test(q) ? or(byName, sql`${users.steamId} like ${`${q}%`}`) : byName
-    const rows = await this.db
-      .select({
-        steamId: users.steamId,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-        lastLoginAt: users.lastLoginAt,
-        trustLevel: trustLevels.level,
-        banned: sql<boolean>`exists (select 1 from ${bans} where ${bans.steamId} = ${users.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > ${now.toISOString()}::timestamptz))`,
-      })
-      .from(users)
-      .leftJoin(trustLevels, eq(trustLevels.steamId, users.steamId))
+    const rows = await this.userHits(now)
       .where(where)
       .orderBy(
         sql`case when lower(${users.displayName}) = ${lower} or ${users.steamId} = ${q} then 0 when lower(${users.displayName}) like ${prefix} then 1 else 2 end`,
@@ -364,14 +372,28 @@ export class DrizzleAdminStore implements AdminStore {
         asc(users.steamId),
       )
       .limit(limit)
-    return rows.map((r) => ({
-      steamId: r.steamId,
-      displayName: r.displayName,
-      avatarUrl: r.avatarUrl,
-      lastLoginAt: isoReq(r.lastLoginAt),
-      trustLevel: (r.trustLevel as TrustLevel | null) ?? null,
-      banned: Boolean(r.banned),
-    }))
+    return rows.map(toHit)
+  }
+
+  async newestUsers(limit: number, now: Date): Promise<UserSearchHit[]> {
+    const rows = await this.userHits(now).orderBy(desc(users.createdAt), asc(users.steamId)).limit(limit)
+    return rows.map(toHit)
+  }
+
+  private userHits(now: Date) {
+    return this.db
+      .select({
+        steamId: users.steamId,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        createdAt: users.createdAt,
+        lastLoginAt: users.lastLoginAt,
+        trustLevel: trustLevels.level,
+        banned: sql<boolean>`exists (select 1 from ${bans} where ${bans.steamId} = ${users.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > ${now.toISOString()}::timestamptz))`,
+      })
+      .from(users)
+      .leftJoin(trustLevels, eq(trustLevels.steamId, users.steamId))
+      .$dynamic()
   }
 
   async activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null> {

@@ -270,6 +270,20 @@ function syncHosts() {
   }
 }
 
+// Mock sign ups are three hours apart, newest first
+function mockHit(u: ReturnType<typeof mockUser>, w: World): UserSearchHit {
+  const i = userIndexOf(u.steamId);
+  return {
+    steamId: u.steamId,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    createdAt: iso(Date.now() - (i + 1) * 3 * 3600_000),
+    lastLoginAt: iso(Date.now() - 3600_000),
+    trustLevel: w.trust.get(u.steamId) ?? u.trustLevel,
+    banned: (w.bans.get(u.steamId) ?? []).some((b) => b.active),
+  };
+}
+
 function getWorld(): World {
   return world ?? build();
 }
@@ -552,14 +566,14 @@ export const mockAdmin = {
     return Array.from({ length: USER_COUNT }, (_, i) => mockUser(i))
       .filter((u) => (lower.length < 3 ? u.displayName.toLowerCase().startsWith(lower) : u.displayName.toLowerCase().includes(lower)) || u.steamId.startsWith(lower))
       .slice(0, 20)
-      .map((u) => ({
-        steamId: u.steamId,
-        displayName: u.displayName,
-        avatarUrl: u.avatarUrl,
-        lastLoginAt: iso(Date.now() - 3600_000),
-        trustLevel: w.trust.get(u.steamId) ?? u.trustLevel,
-        banned: (w.bans.get(u.steamId) ?? []).some((b) => b.active),
-      }));
+      .map((u) => mockHit(u, w));
+  },
+
+  newestUsers(limit: number): UserSearchHit[] {
+    const w = getWorld();
+    return Array.from({ length: USER_COUNT }, (_, i) => mockUser(i))
+      .slice(0, limit)
+      .map((u) => mockHit(u, w));
   },
 
   clearCooldown(steamId: string): AuditEntry {

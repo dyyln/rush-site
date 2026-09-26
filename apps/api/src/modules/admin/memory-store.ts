@@ -89,14 +89,26 @@ export class MemoryAdminStore implements AdminStore {
       .filter((x) => x.n >= 0)
       .sort((a, b) => a.n - b.n || b.r.user.lastLoginAt.localeCompare(a.r.user.lastLoginAt) || a.r.user.steamId.localeCompare(b.r.user.steamId))
       .slice(0, limit)
-      .map(({ r }) => ({
-        steamId: r.user.steamId,
-        displayName: r.user.displayName,
-        avatarUrl: r.user.avatarUrl,
-        lastLoginAt: r.user.lastLoginAt,
-        trustLevel: r.trust?.level ?? null,
-        banned: r.bans.some((b) => !b.revokedAt && (!b.expiresAt || Date.parse(b.expiresAt) > now.getTime())),
-      }))
+      .map(({ r }) => this.hit(r, now))
+  }
+
+  async newestUsers(limit: number, now: Date): Promise<UserSearchHit[]> {
+    return [...this.users.values()]
+      .sort((a, b) => b.user.createdAt.localeCompare(a.user.createdAt) || a.user.steamId.localeCompare(b.user.steamId))
+      .slice(0, limit)
+      .map((r) => this.hit(r, now))
+  }
+
+  private hit(r: UserRecord, now: Date): UserSearchHit {
+    return {
+      steamId: r.user.steamId,
+      displayName: r.user.displayName,
+      avatarUrl: r.user.avatarUrl,
+      createdAt: r.user.createdAt,
+      lastLoginAt: r.user.lastLoginAt,
+      trustLevel: r.trust?.level ?? null,
+      banned: r.bans.some((b) => !b.revokedAt && (!b.expiresAt || Date.parse(b.expiresAt) > now.getTime())),
+    }
   }
 
   async activeMatchOf(steamId: string, statuses: string[]): Promise<ActiveMatchRef | null> {

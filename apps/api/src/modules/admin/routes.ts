@@ -44,7 +44,13 @@ const BanBody = z.object({
 })
 const TrustBody = z.object({ level: TrustLevelSchema })
 const SearchQuery = z.object({
-  q: z.string().trim().min(2, "Enter at least 2 characters").max(64),
+  // Empty lists the newest sign ups instead
+  q: z
+    .string()
+    .trim()
+    .max(64)
+    .refine((s) => s === "" || s.length >= 2, "Enter at least 2 characters")
+    .default(""),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 })
 
@@ -273,10 +279,10 @@ export function registerRoutes(
 
   app.get("/admin/hosts", async () => ({ hosts: (await hooks.getHosts()).map(hostView) }))
 
-  // Name search. Rate limited in lib/security.ts
+  // Name search, or the newest sign ups without a query. Rate limited in lib/security.ts
   app.get("/admin/users", async (req) => {
     const { q, limit } = parse(SearchQuery, req.query)
-    return { q, users: await store.searchUsers(q, limit, now()) }
+    return { q, users: q ? await store.searchUsers(q, limit, now()) : await store.newestUsers(limit, now()) }
   })
 
   app.get<{ Params: { steamId: string } }>("/admin/users/:steamId", async (req) => {

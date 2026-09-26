@@ -93,6 +93,11 @@ export const adminApi = {
     if (isMock) return mocked(() => mockAdmin.searchUsers(q));
     return (await api.get<{ users: UserSearchHit[] }>("/admin/users", { q })).users;
   },
+  // Most recent sign ups first
+  async newestUsers(limit: number): Promise<UserSearchHit[]> {
+    if (isMock) return mocked(() => mockAdmin.newestUsers(limit));
+    return (await api.get<{ users: UserSearchHit[] }>("/admin/users", { limit })).users;
+  },
 
   removeTicket(ticketId: string, reason?: string): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.removeTicket(ticketId, reason));
