@@ -109,8 +109,9 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
       </ul>
       {fromLeetify && (
         <p className={styles.credit}>
-          <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer">
-            Data provided by Leetify
+          <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer" className={styles.badge}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={94} height={40} />
           </a>
           <a href={leetify!.url} target="_blank" rel="noopener noreferrer">
             View on Leetify
