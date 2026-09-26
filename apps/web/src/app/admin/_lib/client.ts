@@ -22,6 +22,7 @@ import type {
   GsltAddResult,
   GsltPoolView,
   GsltView,
+  HostMetricsView,
   HostView,
   MatchDetailView,
   MatchSummaryView,
@@ -156,6 +157,10 @@ export const adminApi = {
   resolveProfile(q: string): Promise<ResolvedProfile> {
     if (isMock) return mocked(() => mockOps.resolve(q));
     return api.get("/admin/users/resolve", { q });
+  },
+  hostMetrics(hostId: string, range: MetricsRange): Promise<HostMetricsView> {
+    if (isMock) return mocked(() => mockOps.hostMetrics(hostId, range));
+    return api.get(`/admin/hosts/${hostId}/metrics`, { range });
   },
   metrics(range: MetricsRange): Promise<MetricsView> {
     if (isMock) return mocked(() => mockOps.metrics(range));

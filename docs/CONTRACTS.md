@@ -45,7 +45,7 @@ Tier bands live in `packages/shared/src/config/tiers.ts`. Brand name lives in `p
 
 ## Agent API (api -> agent, HTTP on the host, bearer token from env)
 
-- `GET /health` -> `{ ok, cs2Version, slots: { total, free }, updating: boolean }`
+- `GET /health` -> `{ ok, cs2Version, publicIp?, slots: { total, free }, updating: boolean, metrics?: HostMetrics }`
 - `POST /servers` body `StartServerRequest` -> `StartServerResponse`
 - `DELETE /servers/:matchId` -> 204
 - `GET /servers` -> running servers
@@ -81,6 +81,24 @@ type StartServerResponse = { matchId: string; ip: string; port: number; connect:
 ```
 
 Demo recording follows the admin setting `demo.recording` (a `feature_flags` row, missing means off), read on every allocation. The API sends `recordDemo: false` with no `demoUpload` or `demoUploads` when it is off, and presigns nothing. The request is otherwise unchanged when it is on, so `recordDemo` is never sent as true. A request or match.json without `recordDemo` records, so an older API works with a newer agent and plugin. Deploy the agent before or with the API: an older agent refuses a series without `demoUploads`.
+
+`publicIp` is the agent's `RUSHSITE_PUBLIC_IP`. `metrics` is read from /proc on Linux agents and left out elsewhere. Every number in it is optional and left out when it could not be read:
+
+```ts
+type HostMetrics = {
+  sampledAt: string            // ISO time of the read
+  cpuPct?: number              // whole machine busy percent, 0 to 100, from /proc/stat deltas between polls
+  cpus?: number
+  load?: [number, number, number]   // 1, 5 and 15 minute load averages
+  memUsedBytes?: number        // MemTotal minus MemAvailable
+  memTotalBytes?: number
+  diskUsedBytes?: number       // the filesystem holding the CS2 install
+  diskTotalBytes?: number
+  servers: { pid: number; port: number; matchId: string; cpuPct?: number; rssBytes?: number }[]   // cpuPct is percent of one core, like top
+}
+```
+
+The API keeps both optional, so an older agent validates and an older API ignores them. A malformed `metrics` or `publicIp` is dropped rather than failing the health check. The API stores `publicIp` on `hosts.public_ip`, the whole `metrics` block on `hosts.latest_metrics`, and one `host_metrics` row per host per sync with allocation, CPU, memory, load and disk, kept for 14 days. The per server list is not kept in history.
 
 If a CS2 process crashes, the agent POSTs `{ event: { type: "match_abandoned", reason: "server_crashed", missingSteamIds: [] } }` to the match's webhookUrl, signed with webhookSecret like the plugin does.
 

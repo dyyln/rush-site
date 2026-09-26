@@ -2,6 +2,7 @@ import type { FastifyRequest } from "fastify"
 import type { PgDatabase } from "drizzle-orm/pg-core"
 import type {
   AdminEventKind,
+  AgentHostMetrics,
   Announcement,
   ChatMuteStatus,
   ChatMuteView,
@@ -57,6 +58,8 @@ export interface HostSnapshot {
   slots: { total: number; free: number }
   lastSeenAt: Timestamp | null
   servers?: HostServerSnapshot[]
+  // Metrics block of the last health check. Null for older agents or while offline
+  metrics?: AgentHostMetrics | null
 }
 
 // A recent webhook received from a match plugin, or an error the api recorded.
@@ -315,6 +318,7 @@ export interface HostView {
   slots: { total: number; free: number; used: number }
   lastSeenAt: string | null
   servers: HostServerSnapshot[]
+  metrics: AgentHostMetrics | null
 }
 
 export interface EventView {

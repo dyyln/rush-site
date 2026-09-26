@@ -139,6 +139,7 @@ function hostView(h: Awaited<ReturnType<Hooks["getHosts"]>>[number]): HostView {
     slots: { total: h.slots.total, free: h.slots.free, used: Math.max(0, h.slots.total - h.slots.free) },
     lastSeenAt: iso(h.lastSeenAt),
     servers: h.servers ?? [],
+    metrics: h.metrics ?? null,
   }
 }
 

@@ -201,6 +201,7 @@ function build(): World {
       slots: { total: 16, free: 0, used: 0 },
       lastSeenAt: iso(now - 4000),
       servers: [],
+      metrics: null,
     },
     {
       id: "c0ffee00-0000-4000-8000-000000000002",
@@ -212,6 +213,7 @@ function build(): World {
       slots: { total: 16, free: 0, used: 0 },
       lastSeenAt: iso(now - 9000),
       servers: [],
+      metrics: null,
     },
     {
       id: "c0ffee00-0000-4000-8000-000000000003",
@@ -223,6 +225,7 @@ function build(): World {
       slots: { total: 0, free: 0, used: 0 },
       lastSeenAt: iso(now - 26 * 3600_000),
       servers: [],
+      metrics: null,
     },
   ];
   syncHosts();
@@ -269,7 +272,33 @@ function syncHosts() {
     if (h.updating) h.servers = [{ slotIndex: 3, port: 27018, status: "running", matchId: w.matches.find((m) => m.status === "live")?.id ?? null }];
     h.slots.used = h.servers.length;
     h.slots.free = h.updating ? 0 : h.slots.total - h.slots.used;
+    h.metrics = mockHostMetrics(h);
   }
+}
+
+const GB = 1024 ** 3;
+
+// An 8 thread box with 32 GB where each running server takes about one core and 4 GB
+function mockHostMetrics(h: HostView): HostView["metrics"] {
+  if (h.status === "offline") return null;
+  const n = h.servers.length;
+  return {
+    sampledAt: iso(Date.now() - 4000),
+    cpuPct: Math.min(100, 6 + n * 11.5),
+    cpus: 8,
+    load: [0.4 + n * 0.9, 0.3 + n * 0.85, 0.2 + n * 0.8],
+    memUsedBytes: (3 + n * 4.1) * GB,
+    memTotalBytes: 32 * GB,
+    diskUsedBytes: 71 * GB,
+    diskTotalBytes: 436 * GB,
+    servers: h.servers.map((s, i) => ({
+      pid: 40_000 + i * 17,
+      port: s.port ?? 27015 + s.slotIndex,
+      matchId: s.matchId ?? "",
+      cpuPct: 70 + ((i * 37) % 50),
+      rssBytes: (3.6 + ((i * 3) % 7) / 10) * GB,
+    })),
+  };
 }
 
 // Mock sign ups are three hours apart, newest first

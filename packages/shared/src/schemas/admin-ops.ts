@@ -109,3 +109,21 @@ export const MetricsViewSchema = z.object({
   matchesStepSec: z.number().int().positive(),
 })
 export type MetricsView = z.infer<typeof MetricsViewSchema>
+
+// GET /admin/hosts/:id/metrics. Each series is the mean per bucket, null where the host sent nothing
+export const HostMetricsViewSchema = z.object({
+  hostId: z.string(),
+  range: MetricsRangeSchema,
+  from: z.string(),
+  to: z.string(),
+  stepSec: z.number().int().positive(),
+  // Busy slots out of total, as a percent
+  allocPct: z.array(MetricPointSchema),
+  // Whole machine CPU busy percent
+  cpuPct: z.array(MetricPointSchema),
+  // Memory used out of total, as a percent
+  memPct: z.array(MetricPointSchema),
+  // 1 minute load average
+  load1: z.array(MetricPointSchema),
+})
+export type HostMetricsView = z.infer<typeof HostMetricsViewSchema>

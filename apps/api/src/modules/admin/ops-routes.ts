@@ -11,6 +11,9 @@ import {
 } from "@rushsite/shared"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import type { z } from "zod"
+import { eq } from "drizzle-orm"
+import { hosts } from "../../db/schema.js"
+import { hostMetricsView } from "./host-metrics.js"
 import { metricsView } from "./metrics.js"
 import { AdminError } from "./routes.js"
 import type { AdminStore } from "./store.js"
@@ -165,6 +168,15 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsDeps, adminOf: 
   app.get<{ Querystring: { range?: string } }>("/admin/metrics", async (req) => {
     const range = parse(MetricsRangeSchema, req.query.range ?? "1h")
     return opts.metrics ? opts.metrics(range, now()) : metricsView(opts.db, range, now())
+  })
+
+  // History for one host's charts. Long ranges come back as bucket means
+  app.get<{ Params: { id: string }; Querystring: { range?: string } }>("/admin/hosts/:id/metrics", async (req) => {
+    if (!UuidSchema.safeParse(req.params.id).success) throw new AdminError(404, "not_found", "Host not found")
+    const range = parse(MetricsRangeSchema, req.query.range ?? "1h")
+    const [host] = await opts.db.select({ id: hosts.id }).from(hosts).where(eq(hosts.id, req.params.id))
+    if (!host) throw new AdminError(404, "not_found", "Host not found")
+    return hostMetricsView(opts.db, host.id, range, now())
   })
 
   // Resolves a SteamID64 or profile URL for the manual ban form

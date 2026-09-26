@@ -26,6 +26,7 @@ import { registerStatsFeatures } from "./modules/stats/features.js"
 import { publishServiceStatus } from "./modules/stats/status.js"
 import { modeStats, registerStatsRoutes } from "./modules/stats/routes.js"
 import { sampleMetrics } from "./modules/admin/metrics.js"
+import { pruneHostMetrics } from "./modules/match/host-metrics.js"
 import { fetchWorkshopItem } from "./modules/maps/workshop.js"
 import { LocalHub, setAdminAccess, type Audience } from "./modules/ws/hub.js"
 import { registerWsRoutes } from "./modules/ws/routes.js"
@@ -187,6 +188,7 @@ export function adminOptions(ctx: AppContext) {
         slots: { total: h.slots.length, free: h.slots.filter((s) => s.status === "free").length },
         lastSeenAt: h.lastSeenAt,
         servers: h.slots.map((s) => ({ slotIndex: s.slotIndex, port: s.port, status: s.status, matchId: s.matchId })),
+        metrics: h.latestMetrics,
       }))
     },
     removeTicket: async (ticketId: string) => {
@@ -277,11 +279,12 @@ function startLoops(app: FastifyInstance, ctx: AppContext, metrics: LoopMetrics,
     // A pass can wait on a 15 s agent call, so the lock outlives it
     loop("match_alloc", ctx.env.ALLOCATION_TICK_INTERVAL_MS, () => ctx.flow.allocationTick(ctx.env.ALLOCATION_CONCURRENCY), 30_000)
     loop("hosts", 30_000, () => ctx.allocator.syncHosts(ctx.env.AGENT_URLS))
-    // Dashboard samples. Socket count is this instance only
+    // Dashboard samples. Socket count is this instance only. Also drops host history past retention
     loop("metric_samples", 60_000, async () => {
       const depth = Object.fromEntries(MODES.map((m) => [m, 0])) as Record<Mode, number>
       for (const t of await queueSnapshot(ctx)) for (const m of t.modes) depth[m] += t.steamIds.length
       await sampleMetrics(ctx.db, { at: new Date(ctx.now()), queueDepth: depth, activeSockets: hub.connectedSockets() })
+      await pruneHostMetrics(ctx.db, new Date(ctx.now()))
     })
     // Mode availability goes out only when it changes. Admin flag writes also send at once
     loop("service_status", 5000, () => publishServiceStatus(ctx))

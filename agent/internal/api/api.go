@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/rushsite/agent/internal/hostmetrics"
 	"github.com/rushsite/agent/internal/manager"
 	"github.com/rushsite/agent/internal/match"
 	"github.com/rushsite/agent/internal/update"
@@ -21,15 +22,22 @@ type Server struct {
 	Updates *update.Updater
 	Version func() string
 	Log     *slog.Logger
+	// Metrics is nil off Linux. Health then has no metrics block
+	Metrics *hostmetrics.Sampler
+	// PublicIP is RUSHSITE_PUBLIC_IP, reported on health so the API can show it
+	PublicIP string
 }
 
 // Health is the GET /health body.
 type Health struct {
 	OK         bool          `json:"ok"`
 	CS2Version string        `json:"cs2Version"`
+	PublicIP   string        `json:"publicIp,omitempty"`
 	Slots      SlotCount     `json:"slots"`
 	Updating   bool          `json:"updating"`
 	Update     update.Status `json:"update"`
+	// Machine and per server usage. Left out when the agent cannot read it
+	Metrics *hostmetrics.Snapshot `json:"metrics,omitempty"`
 }
 
 // SlotCount is the slots field of Health.
@@ -76,10 +84,24 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, Health{
 		OK:         true,
 		CS2Version: version,
+		PublicIP:   s.PublicIP,
 		Slots:      SlotCount{Total: total, Free: free},
 		Updating:   st.State != update.Idle,
 		Update:     st,
+		Metrics:    s.metrics(),
 	})
+}
+
+func (s *Server) metrics() *hostmetrics.Snapshot {
+	if s.Metrics == nil {
+		return nil
+	}
+	live := s.Servers.List(false)
+	refs := make([]hostmetrics.Ref, 0, len(live))
+	for _, i := range live {
+		refs = append(refs, hostmetrics.Ref{PID: i.PID, Port: i.Port, MatchID: i.MatchID})
+	}
+	return s.Metrics.Snapshot(refs)
 }
 
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {

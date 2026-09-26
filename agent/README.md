@@ -48,7 +48,7 @@ Every route needs `Authorization: Bearer <token>`. Errors look like `{ "error": 
 
 | Route | Result |
 |---|---|
-| `GET /health` | `{ ok, cs2Version, slots: { total, free }, updating, update: { state, lastCheck, lastUpdate, lastError, attempts, rushRooms, rushRoomsDetail } }` |
+| `GET /health` | `{ ok, cs2Version, publicIp, slots: { total, free }, updating, update: { state, lastCheck, lastUpdate, lastError, attempts, rushRooms, rushRoomsDetail }, metrics }`. `metrics` is Linux only, see below |
 | `POST /servers` | 201 `{ matchId, ip, port, connect }`. 400 `bad_request`, 409 `exists`, 503 `updating` or `no_free_slots`, 500 `start_failed` |
 | `DELETE /servers/:matchId` | 204 once the process is gone and the slot is free. Unknown ids also get 204 |
 | `GET /servers` | Array of `{ matchId, mode, mapId, port, tvPort, pid, connect, status, startedAt, logPath }`. `?include=exited` adds the last 50 ended servers with `status` `exited`, `crashed` or `stopped`, plus `endedAt` and `exitCode` |
@@ -61,6 +61,10 @@ Every route needs `Authorization: Bearer <token>`. Errors look like `{ "error": 
 - `extraArgs` entries must be a flag such as `+mapgroup` or a plain value
 
 `testdata/modes.json` is exported from shared with `pnpm -C packages/shared export:modes`. The Go tests render a launch line for every mode and map in it, and check that the agent ships exactly the cfgs shared names. A shared vitest fails when the file is stale.
+
+## Host metrics
+
+On Linux, `/health` carries a `metrics` block read by `internal/hostmetrics`: whole machine CPU % from `/proc/stat` deltas between polls, load averages, memory used (MemTotal minus MemAvailable), disk used on the CS2 dir's filesystem, and per running server its pid, port, match id, CPU % of one core and RSS from `/proc/<pid>`. Only the pids the agent manages are read. A poll less than a second after the last one repeats the previous CPU figure, and a pid seen for the first time reports its average since it started. Other platforms build and leave the block out. Numbers that cannot be read are left out, never sent as zero.
 
 ## Crash webhook
 

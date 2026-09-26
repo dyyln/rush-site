@@ -1,5 +1,5 @@
 // Mirrors the response shapes in apps/api/src/modules/admin/types.ts
-import type { AdminEventKind, Mode, TrustLevel, WorkshopItem } from "@rushsite/shared";
+import type { AdminEventKind, AgentHostMetrics, Mode, TrustLevel, WorkshopItem } from "@rushsite/shared";
 
 export type { AdminEventKind, Mode, TrustLevel };
 
@@ -73,6 +73,8 @@ export type HostView = {
   slots: { total: number; free: number; used: number };
   lastSeenAt: string | null;
   servers: { slotIndex: number; port: number | null; status: string; matchId: string | null }[];
+  // Metrics block of the last health check, with the per server table. Null for older agents or while offline
+  metrics: AgentHostMetrics | null;
 };
 
 export type EventView = {
@@ -239,6 +241,7 @@ export type OverviewView = {
 export type ActionResult = { ok: true; audit: AuditEntry };
 
 export type { Announcement, FeatureFlag, MetricPoint, MetricsRange, MetricsView } from "@rushsite/shared";
+export type { AgentHostMetrics, AgentServerMetrics, HostMetricsView } from "@rushsite/shared";
 export type { MapLoadout, PoolMap, PoolMode, PoolView, WorkshopItem } from "@rushsite/shared";
 
 export type WorkshopPreview = { item: WorkshopItem; suggestedId: string; existingId: string | null };

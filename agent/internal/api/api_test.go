@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/rushsite/agent/internal/hostmetrics"
 	"github.com/rushsite/agent/internal/manager"
 	"github.com/rushsite/agent/internal/match"
 	"github.com/rushsite/agent/internal/procrun"
@@ -23,6 +25,11 @@ const (
 
 func newAPI(t *testing.T) (*httptest.Server, *manager.Manager, *update.Updater) {
 	t.Helper()
+	return newAPIWith(t, nil)
+}
+
+func newAPIWith(t *testing.T, metrics *hostmetrics.Sampler) (*httptest.Server, *manager.Manager, *update.Updater) {
+	t.Helper()
 	root := t.TempDir()
 	m := manager.New(manager.Config{
 		CS2Dir:       filepath.Join(root, "cs2"),
@@ -33,7 +40,7 @@ func newAPI(t *testing.T) (*httptest.Server, *manager.Manager, *update.Updater) 
 		StopGrace:    time.Second,
 	}, match.DefaultModes(), &procrun.FakeRunner{}, slots.New(27015, 27016, nil), nil)
 	u := update.New(update.Config{CS2Dir: root}, nil, m, &procrun.FakeRunner{}, nil)
-	s := &Server{Token: token, Servers: m, Updates: u, Version: func() string { return "1.41.8.2" }}
+	s := &Server{Token: token, Servers: m, Updates: u, Version: func() string { return "1.41.8.2" }, Metrics: metrics, PublicIP: "198.51.100.4"}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts, m, u
@@ -138,6 +145,57 @@ func TestHealthAndLifecycle(t *testing.T) {
 	resp, _ = do(t, "DELETE", ts.URL+"/servers/not-a-uuid", bearer, "")
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad id delete %d", resp.StatusCode)
+	}
+}
+
+func TestHealthPublicIP(t *testing.T) {
+	bearer := "Bearer " + token
+	ts, m, u := newAPI(t)
+	_, h := do(t, "GET", ts.URL+"/health", bearer, "")
+	if h["publicIp"] != "198.51.100.4" {
+		t.Fatalf("publicIp %v", h["publicIp"])
+	}
+
+	// Unset means the field is left out, as older agents do
+	bare := httptest.NewServer((&Server{Token: token, Servers: m, Updates: u}).Handler())
+	t.Cleanup(bare.Close)
+	_, h = do(t, "GET", bare.URL+"/health", bearer, "")
+	if _, ok := h["publicIp"]; ok || h["ok"] != true {
+		t.Fatalf("health without public ip %v", h)
+	}
+}
+
+func TestHealthMetrics(t *testing.T) {
+	bearer := "Bearer " + token
+	ts, _, _ := newAPI(t)
+	_, h := do(t, "GET", ts.URL+"/health", bearer, "")
+	if _, ok := h["metrics"]; ok {
+		t.Fatalf("no sampler should mean no metrics block, got %v", h["metrics"])
+	}
+
+	proc := t.TempDir()
+	if err := os.WriteFile(filepath.Join(proc, "meminfo"), []byte("MemTotal: 1000 kB\nMemAvailable: 250 kB\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts, _, _ = newAPIWith(t, &hostmetrics.Sampler{Root: proc})
+	if resp, body := do(t, "POST", ts.URL+"/servers", bearer, startBody); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("start %d %v", resp.StatusCode, body)
+	}
+	_, h = do(t, "GET", ts.URL+"/health", bearer, "")
+	m, ok := h["metrics"].(map[string]any)
+	if !ok {
+		t.Fatalf("metrics missing in %v", h)
+	}
+	if m["memUsedBytes"] != 750.0*1024 || m["memTotalBytes"] != 1000.0*1024 {
+		t.Fatalf("memory %v", m)
+	}
+	servers := m["servers"].([]any)
+	if len(servers) != 1 {
+		t.Fatalf("servers %v", servers)
+	}
+	srv := servers[0].(map[string]any)
+	if srv["matchId"] != matchID || srv["port"] != 27015.0 || srv["pid"] != 1001.0 {
+		t.Fatalf("server %v", srv)
 	}
 }
 

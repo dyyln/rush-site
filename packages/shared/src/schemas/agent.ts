@@ -88,14 +88,49 @@ export const StartServerResponseSchema = z.object({
 })
 export type StartServerResponse = z.infer<typeof StartServerResponseSchema>
 
+const bytes = z.number().nonnegative()
+
+// One running CS2 process as the agent reads it from /proc
+export const AgentServerMetricsSchema = z.object({
+  pid: z.number().int().nonnegative(),
+  port: z.number().int(),
+  matchId: z.string(),
+  // Percent of one core, like top. Two full cores read 200
+  cpuPct: z.number().nonnegative().optional(),
+  rssBytes: bytes.optional(),
+})
+export type AgentServerMetrics = z.infer<typeof AgentServerMetricsSchema>
+
+// Machine usage from GET /health. Every number is left out when the agent could not read it
+export const AgentHostMetricsSchema = z.object({
+  sampledAt: z.string(),
+  // Whole machine busy percent, 0 to 100 across every core
+  cpuPct: z.number().min(0).max(100).optional(),
+  cpus: z.number().int().positive().optional(),
+  // 1, 5 and 15 minute load averages
+  load: z.array(z.number().nonnegative()).length(3).optional(),
+  // Used is total minus MemAvailable
+  memUsedBytes: bytes.optional(),
+  memTotalBytes: bytes.optional(),
+  // The filesystem holding the CS2 install
+  diskUsedBytes: bytes.optional(),
+  diskTotalBytes: bytes.optional(),
+  servers: z.array(AgentServerMetricsSchema).default([]),
+})
+export type AgentHostMetrics = z.infer<typeof AgentHostMetricsSchema>
+
 export const AgentHealthSchema = z.object({
   ok: z.boolean(),
   cs2Version: z.string(),
+  // RUSHSITE_PUBLIC_IP. Absent from older agents. A bad value is dropped rather than failing the check
+  publicIp: z.string().min(1).max(64).optional().catch(undefined),
   slots: z.object({
     total: z.number().int().nonnegative(),
     free: z.number().int().nonnegative(),
   }),
   updating: z.boolean(),
+  // Absent from older agents and off Linux. A malformed block is dropped so the host still counts as up
+  metrics: AgentHostMetricsSchema.optional().catch(undefined),
 })
 export type AgentHealth = z.infer<typeof AgentHealthSchema>
 

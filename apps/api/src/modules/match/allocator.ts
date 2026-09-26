@@ -15,6 +15,7 @@ import type { FastifyBaseLogger } from "fastify"
 import type { Db } from "../../db/client.js"
 import { gsltTokens, hosts, serverSlots, type TeamRosterJson } from "../../db/schema.js"
 import { AgentError, type AgentApi } from "./agent.js"
+import { recordHostMetrics } from "./host-metrics.js"
 import type { DemoStorage } from "./storage.js"
 
 // AGENT_URLS entries are a url or region=url. Region defaults to eu
@@ -169,6 +170,7 @@ export class Allocator {
       try {
         const h = await this.agent.health(url)
         const status = h.updating ? "updating" : h.ok ? "online" : "offline"
+        const seenAt = new Date()
         await this.db
           .update(hosts)
           .set({
@@ -176,9 +178,16 @@ export class Allocator {
             cs2Version: h.cs2Version,
             totalSlots: h.slots.total,
             freeSlots: h.slots.free,
-            lastSeenAt: new Date(),
+            lastSeenAt: seenAt,
+            latestMetrics: h.metrics ?? null,
+            // Older agents send no IP. Keep what is stored then
+            ...(h.publicIp ? { publicIp: h.publicIp } : {}),
           })
           .where(eq(hosts.id, host!.id))
+        // History is best effort. A failed write must not mark the host offline
+        await recordHostMetrics(this.db, host!.id, seenAt, h).catch((err) =>
+          this.log.warn({ err, agent: url }, "host metrics write failed"),
+        )
         if (h.slots.total > 0) {
           await this.db
             .insert(serverSlots)
@@ -187,7 +196,7 @@ export class Allocator {
         }
       } catch (err) {
         this.log.warn({ err, agent: url }, "agent health check failed")
-        await this.db.update(hosts).set({ status: "offline" }).where(eq(hosts.id, host!.id))
+        await this.db.update(hosts).set({ status: "offline", latestMetrics: null }).where(eq(hosts.id, host!.id))
       }
     }
   }

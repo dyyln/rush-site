@@ -2,7 +2,18 @@
 import { MODES, queueOpenFlag, type Mode } from "@rushsite/shared";
 import { MOCK_ME, mockSteamId, rng } from "@/lib/mock";
 import { MockNotFound } from "./mock";
-import type { Announcement, AuditAction, AuditEntry, DemoRecordingView, FeatureFlag, MetricPoint, MetricsRange, MetricsView, ResolvedProfile } from "./types";
+import type {
+  Announcement,
+  AuditAction,
+  AuditEntry,
+  DemoRecordingView,
+  FeatureFlag,
+  HostMetricsView,
+  MetricPoint,
+  MetricsRange,
+  MetricsView,
+  ResolvedProfile,
+} from "./types";
 
 const iso = (ms: number) => new Date(ms).toISOString();
 let seq = 0;
@@ -119,6 +130,26 @@ export const mockOps = {
       activeSockets: wave(from, to, cfg.step, 3, 40, 220, gap),
       matchesFound: bars,
       matchesStepSec: cfg.mStep / 1000,
+    };
+  },
+  hostMetrics(hostId: string, range: MetricsRange): HostMetricsView {
+    const cfg = RANGES[range];
+    const to = Math.floor(Date.now() / cfg.step) * cfg.step + cfg.step;
+    const from = to - cfg.span;
+    const seed = Number.parseInt(hostId.slice(-2), 16) || 1;
+    // The offline mock host has no history
+    const off = hostId.endsWith("3");
+    const pct = (points: MetricPoint[]) => points.map((p) => ({ t: p.t, v: off || p.v === null ? null : Math.min(100, p.v) }));
+    return {
+      hostId,
+      range,
+      from: iso(from),
+      to: iso(to),
+      stepSec: cfg.step / 1000,
+      allocPct: pct(wave(from, to, cfg.step, seed, 10, 80)),
+      cpuPct: pct(wave(from, to, cfg.step, seed + 1, 8, 60)),
+      memPct: pct(wave(from, to, cfg.step, seed + 2, 30, 35)),
+      load1: pct(wave(from, to, cfg.step, seed + 3, 0.5, 6)),
     };
   },
   resolve(q: string): ResolvedProfile {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/rushsite/agent/internal/api"
 	"github.com/rushsite/agent/internal/config"
+	"github.com/rushsite/agent/internal/hostmetrics"
 	"github.com/rushsite/agent/internal/manager"
 	"github.com/rushsite/agent/internal/match"
 	"github.com/rushsite/agent/internal/procrun"
@@ -98,11 +99,13 @@ func run(log *slog.Logger) error {
 	srv := &http.Server{
 		Addr: cfg.ListenAddr,
 		Handler: (&api.Server{
-			Token:   cfg.Token,
-			Servers: mgr,
-			Updates: upd,
-			Version: func() string { return update.InstalledVersion(cfg.CS2Dir) },
-			Log:     log,
+			Token:    cfg.Token,
+			Servers:  mgr,
+			Updates:  upd,
+			Version:  func() string { return update.InstalledVersion(cfg.CS2Dir) },
+			Log:      log,
+			Metrics:  hostmetrics.New(cfg.CS2Dir),
+			PublicIP: cfg.PublicIP,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

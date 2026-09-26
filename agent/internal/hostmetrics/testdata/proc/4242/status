@@ -1,0 +1,9 @@
+Name:	cs2
+Umask:	0022
+State:	S (sleeping)
+Pid:	4242
+VmPeak:	 7340032 kB
+VmSize:	 7168000 kB
+VmRSS:	 4194304 kB
+RssAnon:	 3000000 kB
+Threads:	64

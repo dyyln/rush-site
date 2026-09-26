@@ -14,6 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
+import type { AgentHostMetrics } from "@rushsite/shared"
 
 // Tournament tables are owned by the tournaments module and re-exported here so migrations include them
 export { adminAudit, admins, metricSamples } from "../modules/admin/schema.js"
@@ -413,8 +414,33 @@ export const hosts = pgTable("hosts", {
   totalSlots: integer("total_slots").notNull().default(0),
   freeSlots: integer("free_slots").notNull().default(0),
   lastSeenAt: ts("last_seen_at"),
+  // The metrics block of the last health check, with the per server breakdown. Null for older agents
+  latestMetrics: jsonb("latest_metrics").$type<AgentHostMetrics>(),
   createdAt: createdAt(),
 })
+
+// One row per host per health sync. Only machine totals are kept, the per server breakdown lives in hosts.latest_metrics.
+// Rows older than HOST_METRICS_RETENTION_MS are deleted
+export const hostMetrics = pgTable(
+  "host_metrics",
+  {
+    hostId: uuid("host_id")
+      .notNull()
+      .references(() => hosts.id, { onDelete: "cascade" }),
+    sampledAt: ts("sampled_at").notNull(),
+    slotsTotal: integer("slots_total").notNull(),
+    slotsBusy: integer("slots_busy").notNull(),
+    // Busy slots out of total as a percent. Null when the host has no slots
+    allocPct: doublePrecision("alloc_pct"),
+    cpuPct: doublePrecision("cpu_pct"),
+    load1: doublePrecision("load1"),
+    memUsedBytes: bigint("mem_used_bytes", { mode: "number" }),
+    memTotalBytes: bigint("mem_total_bytes", { mode: "number" }),
+    diskUsedBytes: bigint("disk_used_bytes", { mode: "number" }),
+    diskTotalBytes: bigint("disk_total_bytes", { mode: "number" }),
+  },
+  (t) => [primaryKey({ columns: [t.hostId, t.sampledAt] }), index("host_metrics_sampled_idx").on(t.sampledAt)],
+)
 
 export const serverSlots = pgTable(
   "server_slots",

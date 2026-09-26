@@ -17,6 +17,8 @@ type Props = {
   format?: (v: number) => string;
   height?: number;
   refreshing?: boolean;
+  // Fixed top of the y axis, such as 100 for percentages. Scales to the data when left out
+  max?: number;
 };
 
 const PAD = { top: 8, right: 12, bottom: 22, left: 40 };
@@ -36,7 +38,7 @@ function pathOf(points: ChartPoint[], x: (i: number) => number, y: (v: number) =
   return d;
 }
 
-export function TimeSeriesChart({ title, sub, series, stepSec, format = compact, height = 200, refreshing }: Props) {
+export function TimeSeriesChart({ title, sub, series, stepSec, format = compact, height = 200, refreshing, max: fixedMax }: Props) {
   const { ref, width } = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const tableId = useId();
@@ -44,7 +46,7 @@ export function TimeSeriesChart({ title, sub, series, stepSec, format = compact,
   const innerW = Math.max(10, width - PAD.left - PAD.right);
   const innerH = height - PAD.top - PAD.bottom;
   const values = series.flatMap((s) => s.points.map((p) => p.v).filter((v): v is number => v !== null));
-  const max = niceMax(Math.max(0, ...values));
+  const max = fixedMax ?? niceMax(Math.max(0, ...values));
   const x = (i: number) => PAD.left + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW);
   const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
   const span = n > 1 ? series[0]!.points[n - 1]!.t - series[0]!.points[0]!.t : 0;
