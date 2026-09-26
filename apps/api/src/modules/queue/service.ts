@@ -1,3 +1,4 @@
+import type { ActivityService } from "../activity/service.js"
 import {
   ACTIVE_MATCH_STATUSES,
   MODES,
@@ -44,7 +45,12 @@ export type LiveTicket = {
   minTrust?: TrustLevel
   // Each player's trust level when the ticket was queued or requeued
   trust?: Record<string, TrustLevel>
+  // Start of the current wait. A requeue keeps enqueuedAt for the queue position but restarts this
+  waitingSince?: number
 }
+
+// Seconds the ticket has waited since it last entered the queue
+const waitedSec = (t: LiveTicket, now: number) => Math.max(0, (now - (t.waitingSince ?? t.enqueuedAt)) / 1000)
 
 const trustRank = (level: TrustLevel | undefined) => TRUST_LEVELS.indexOf(level ?? "new")
 export function lowestTrust(levels: TrustLevel[]): TrustLevel {
@@ -124,6 +130,8 @@ export class QueueService {
   private aggregateStale = false
   private aggregateInFlight: Promise<QueueAggregate> | null = null
 
+  private activity: ActivityService | null = null
+
   constructor(
     private readonly db: Db,
     private readonly redis: Redis,
@@ -138,6 +146,10 @@ export class QueueService {
     parties.onChange(async (partyId) => {
       await this.cancelParty(partyId, "party_changed")
     })
+  }
+
+  setActivity(activity: ActivityService | null): void {
+    this.activity = activity
   }
 
   // Runs after any queue change for these players. Presence uses it
@@ -320,9 +332,11 @@ export class QueueService {
       enqueuedAt,
       minTrust: floor,
       trust,
+      waitingSince: enqueuedAt,
     }
     await this.putLive(ticket)
     await this.assertRoster(ticket)
+    this.activity?.record(ticket.steamIds, { kind: "queue_join", mode: soleMode(wanted), ref: ticket.id, detail: wanted.join(",") })
     await this.notifyParty(ticket.steamIds)
     return ticket
   }
@@ -335,6 +349,7 @@ export class QueueService {
     if (members.length === ticket.steamIds.length && ticket.steamIds.every((id) => members.includes(id))) return
     await this.dropLive(ticket)
     await this.cancelTicket(ticket.id, "party_changed", true)
+    this.recordLeave(ticket, "party_changed")
     await this.notifyParty([...new Set([...ticket.steamIds, ...members])])
     throw conflict("party_changed", "the party changed while joining the queue")
   }
@@ -469,11 +484,23 @@ export class QueueService {
     const ticket = await this.ticketForParty(partyId)
     if (!ticket) return
     await this.dropLive(ticket)
-    await this.db
+    const cancelled = await this.db
       .update(queueTickets)
       .set({ status: "cancelled", cancelReason: reason, updatedAt: new Date(this.now()) })
       .where(and(eq(queueTickets.id, ticket.id), eq(queueTickets.status, "waiting")))
+      .returning({ id: queueTickets.id })
+    if (cancelled.length > 0) this.recordLeave(ticket, reason)
     await this.notifyParty(ticket.steamIds, extra)
+  }
+
+  private recordLeave(ticket: LiveTicket, reason: string): void {
+    this.activity?.record(ticket.steamIds, {
+      kind: "queue_leave",
+      mode: soleMode(ticket.modes),
+      ref: ticket.id,
+      detail: reason,
+      value: waitedSec(ticket, this.now()),
+    })
   }
 
   async waiting(mode: Mode): Promise<LiveTicket[]> {
@@ -516,7 +543,10 @@ export class QueueService {
       }
       throw err
     }
-    for (const t of await this.loadTickets(ticketIds)) await this.dropLive(t)
+    for (const t of await this.loadTickets(ticketIds)) {
+      this.activity?.record(t.steamIds, { kind: "queue_matched", mode, ref: t.id, detail: matchId, value: waitedSec(t, this.now()) })
+      await this.dropLive(t)
+    }
     return { ok: true }
   }
 
@@ -548,6 +578,7 @@ export class QueueService {
       enqueuedAt: row.enqueuedAt.getTime(),
       minTrust,
       trust,
+      waitingSince: this.now(),
     }
     try {
       await this.db
@@ -562,6 +593,7 @@ export class QueueService {
       return
     }
     await this.putLive(ticket)
+    this.activity?.record(ticket.steamIds, { kind: "queue_join", mode: soleMode(ticket.modes), ref: ticket.id, detail: "requeue" })
     await this.notifyParty(ticket.steamIds)
   }
 
@@ -698,6 +730,11 @@ export class QueueService {
 }
 
 class ClaimLost extends Error {}
+
+// The mode when the ticket is in exactly one queue
+function soleMode(modes: Mode[]): Mode | null {
+  return modes.length === 1 ? modes[0]! : null
+}
 
 function isUniqueViolation(err: unknown): boolean {
   for (let e = err as { code?: string; cause?: unknown } | undefined; e; e = e.cause as typeof e) {

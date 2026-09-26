@@ -108,6 +108,8 @@ export interface TournamentsPluginOptions {
   cancelMatch?(matchId: string, reason: string): Promise<unknown>
   // False when an admin closed the mode through its queue flag
   modeGate?(mode: Mode): Promise<boolean>
+  // Sign ups and withdrawals for activity stats. Optional in tests
+  onActivity?(steamIds: string[], kind: "cup_signup" | "cup_withdraw", tournamentId: string, mode: Mode): void
   // Defaults to true. Tests turn it off.
   scheduler?: boolean
   schedulerIntervalMs?: number

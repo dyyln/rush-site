@@ -4,6 +4,7 @@ import { BRAND_NAME } from "@rushsite/shared";
 import { Backdrop } from "@/components/layout/Backdrop";
 import { Dock } from "@/components/layout/Dock";
 import { TopBar } from "@/components/layout/TopBar";
+import { PageTracker } from "@/components/activity/PageTracker";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { ChallengeInbox } from "@/components/challenges/ChallengeInbox";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -64,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <ChallengeInbox />
             <InviteInbox />
             <NotifyListener />
+            <PageTracker />
             <main id="main">{children}</main>
             <Dock />
             <ChatSidebar />

@@ -35,6 +35,7 @@ describe("tournament subscriptions", () => {
   const ctx = {
     isAdmin: () => false,
     presence: { heartbeat: async () => {} },
+    activity: { connected: () => {}, seen: () => {} },
     snapshots: { read: async () => ({}) },
   } as unknown as AppContext
   let n = 0

@@ -23,6 +23,7 @@ import { ago, scoreLine, shortId, stamp, TRUST_LABEL, trustTone } from "../../_l
 import { useLiveData, useNow } from "../../_lib/live";
 import type { AuditEntry, UserDetailView } from "../../_lib/types";
 import { CancelMatchDialog } from "../../_components/CancelMatchDialog";
+import { ActivityCard } from "./ActivityCard";
 import { ConfirmDialog, ErrorPanel, MatchStatus, PageHeader } from "../../_components/parts";
 import styles from "../../admin.module.css";
 
@@ -135,6 +136,8 @@ export default function AdminUserPage() {
               rowKey={(m) => m.id}
               empty="No matches."
             />
+
+            <ActivityCard steamId={steamId} now={now} />
           </div>
 
           <div className={styles.col}>

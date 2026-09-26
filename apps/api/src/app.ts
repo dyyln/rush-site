@@ -135,6 +135,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
         },
         scheduler: !opts.env.DISABLE_LOOPS,
         modeGate: (mode: Mode) => ctx.flags.queueOpen(mode),
+        onActivity: (steamIds: string[], kind: "cup_signup" | "cup_withdraw", tournamentId: string, mode: Mode) =>
+          ctx.activity.record(steamIds, { kind, mode, ref: tournamentId }),
       })
     }
   }

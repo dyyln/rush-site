@@ -176,6 +176,13 @@
       "when": 1790276481417,
       "tag": "0024_rush2v2_test_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790424033745,
+      "tag": "0025_activity_stats",
+      "breakpoints": true
     }
   ]
 }

@@ -80,3 +80,45 @@ export function scoreLine(score: Record<string, number> | null): string {
 }
 
 export const TRUST_LABEL: Record<string, string> = { new: "New", verified: "Verified", trusted: "Trusted" };
+
+// Long durations as hours, one decimal under ten hours
+export const hours = (sec: number) => `${(sec / 3600).toFixed(sec >= 36_000 ? 0 : 1)} h`;
+
+export const ACTIVITY_LABEL: Record<string, string> = {
+  session_start: "Came online",
+  page_view: "Viewed a page",
+  queue_join: "Joined the queue",
+  queue_leave: "Left the queue",
+  queue_matched: "Match found in queue",
+  match_found: "Match found",
+  match_accept: "Accepted a match",
+  match_decline: "Declined a match",
+  match_missed: "Missed the accept",
+  match_start: "Match started",
+  match_end: "Match ended",
+  cup_signup: "Signed up for a cup",
+  cup_withdraw: "Withdrew from a cup",
+};
+
+const DETAIL_LABEL: Record<string, string> = {
+  left: "left",
+  mode_closed: "mode closed",
+  party_changed: "party changed",
+  requeue: "put back in queue",
+  win: "win",
+  loss: "loss",
+  forfeit: "forfeit",
+  abandoned: "abandoned",
+  cancelled: "cancelled",
+  queue: "from queue",
+  tournament: "cup match",
+  challenge: "challenge",
+};
+
+// The extra detail worth showing next to an action, or null
+export function activityDetail(kind: string | null, detail: string | null): string | null {
+  if (!detail) return null;
+  if (kind === "queue_matched") return null;
+  if (kind === "queue_join" && detail !== "requeue") return detail.split(",").join(", ");
+  return DETAIL_LABEL[detail] ?? detail;
+}

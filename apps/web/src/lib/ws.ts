@@ -26,6 +26,8 @@ export class RealtimeClient extends Emitter implements Realtime {
   // Called when the api closes the socket because the session ended
   onSessionEnded: (() => void) | null = null;
   private readonly subscriptions = new Map<string, Subscription>();
+  // The current page, sent again after every reconnect
+  private page: ClientPayload<"page_view"> | null = null;
   state: ConnectionState = "closed";
 
   constructor(private readonly url: string) {
@@ -54,6 +56,7 @@ export class RealtimeClient extends Emitter implements Realtime {
     ws.onopen = () => {
       this.attempt = 0;
       for (const sub of this.subscriptions.values()) this.write(sub.type, sub.payload);
+      if (this.page) this.write("page_view", this.page);
       this.setState("open");
     };
     ws.onmessage = (ev) => this.handleMessage(ev.data);
@@ -92,6 +95,10 @@ export class RealtimeClient extends Emitter implements Realtime {
 
   // Remembers subscribe_* messages so they survive a reconnect. unsubscribe_* forgets them
   private track(type: string, payload: unknown) {
+    if (type === "page_view") {
+      this.page = payload as ClientPayload<"page_view">;
+      return;
+    }
     const m = /^(un)?subscribe_(.+)$/.exec(type);
     if (!m) return;
     const key = `${m[2]}:${JSON.stringify(payload)}`;

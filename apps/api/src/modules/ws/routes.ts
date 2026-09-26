@@ -35,6 +35,9 @@ export async function handleClientMessage(ctx: AppContext, steamId: string, msg:
     case "queue_leave":
       await ctx.queue.leave(steamId, msg.payload.modes)
       return
+    case "page_view":
+      ctx.activity.pageView(steamId, msg.payload.path)
+      return
     // Subscriptions are handled on the socket itself
     case "subscribe_match":
     case "unsubscribe_match":
@@ -76,8 +79,10 @@ export function attachSocket(
   socket.on("pong", () => {
     alive = true
     heartbeat()
+    ctx.activity.seen(steamId)
   })
   heartbeat()
+  ctx.activity.connected(steamId)
   const ping = setInterval(() => {
     if (!alive) {
       socket.terminate()
@@ -149,6 +154,7 @@ export function attachSocket(
   socket.on("close", () => {
     clearInterval(ping)
     hub.remove(steamId, socket)
+    ctx.activity.seen(steamId, true)
   })
 
   // Initial snapshot so a reconnecting client catches up

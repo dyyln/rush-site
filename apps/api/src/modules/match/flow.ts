@@ -1,3 +1,4 @@
+import type { ActivityService } from "../activity/service.js"
 import { randomUUID } from "node:crypto"
 import {
   ACTIVE_MATCH_STATUSES,
@@ -131,6 +132,7 @@ export type FlowDeps = {
   allocator: Allocator
   log: FastifyBaseLogger
   events?: EventLog
+  activity?: ActivityService
   // Live aim map pool. Defaults to the shared config
   maps?: MapPoolReader
   // Ends matches whose server is gone or that ran too long
@@ -277,6 +279,7 @@ export class MatchFlow {
     const total = rosters.reduce((s, r) => s + r.steamIds.length, 0)
     this.sendMatchFound(rosters.flatMap((r) => r.steamIds), { matchId, slug, mode, acceptDeadline: deadline, accepted: 0, required: total, acceptedSteamIds: [] })
     this.d.events?.emit("match", { event: "match_found", matchId, mode, teams: rosters })
+    this.d.activity?.record(rosters.flatMap((r) => r.steamIds), { kind: "match_found", mode, ref: matchId, detail: "queue" })
     await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { ok: true, matchId }
   }
@@ -340,6 +343,7 @@ export class MatchFlow {
       throw err
     }
     await this.afterPostAccept(matchId, next)
+    this.d.activity?.record(params.teams.flatMap((t) => t.steamIds), { kind: "match_found", mode: params.mode, ref: matchId, detail: "tournament" })
     await this.playersChanged(params.teams.flatMap((t) => t.steamIds))
     return { matchId }
   }
@@ -376,6 +380,7 @@ export class MatchFlow {
       return this.enterPostAccept(tx, m!)
     })
     this.d.events?.emit("match", { event: "match_found", matchId, mode: params.mode, teams: rosters, source: "challenge" })
+    this.d.activity?.record(rosters.flatMap((r) => r.steamIds), { kind: "match_found", mode: params.mode, ref: matchId, detail: "challenge" })
     await this.afterPostAccept(matchId, next)
     await this.playersChanged(rosters.flatMap((r) => r.steamIds))
     return { matchId }
@@ -401,8 +406,11 @@ export class MatchFlow {
       }
       const outcome = resolveAccept(players, timedOut)
       const post = await this.applyAcceptOutcome(tx, m, outcome)
-      return { m, outcome, post }
+      return { m, outcome, post, answered: !timedOut }
     })
+    if (result.answered) {
+      this.d.activity?.record([steamId], { kind: accept ? "match_accept" : "match_decline", mode: result.m.mode, ref: matchId })
+    }
     await this.afterAccept(result.m, result.outcome, result.post)
   }
 
@@ -438,6 +446,7 @@ export class MatchFlow {
       return
     }
     const reason = outcome.reason === "declined" ? "decline" : "accept_timeout"
+    if (outcome.reason !== "declined") this.d.activity?.record(outcome.penalize, { kind: "match_missed", mode: m.mode, ref: m.id })
     this.sendCancelled(m, `accept_${outcome.reason}`)
     await this.sendMatchUpdate(m.id)
     for (const id of outcome.penalize) await this.d.cooldowns.issue(id, reason, m.id)
@@ -840,10 +849,12 @@ export class MatchFlow {
       }
       case "match_started": {
         if (isSeries(m)) await this.startSeriesMap(m, event.mapNumber ?? 1)
-        await db
+        const started = await db
           .update(matches)
           .set({ status: "live", startedAt: new Date(this.now()) })
           .where(and(eq(matches.id, matchId), inArray(matches.status, ["starting", "ready"])))
+          .returning({ id: matches.id })
+        if (started.length > 0) this.d.activity?.record(this.allSteamIds(m), { kind: "match_start", mode: m.mode, ref: matchId })
         await this.sendMatchUpdate(matchId)
         return
       }

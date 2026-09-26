@@ -431,6 +431,9 @@ export const UnsubscribeTournamentPayloadSchema = z.object({ tournamentId: UuidS
 // Asks the server to replay party, queue and match state on a socket that is already open
 export const ResyncPayloadSchema = z.object({})
 export type ResyncPayload = z.infer<typeof ResyncPayloadSchema>
+// The page the player is on, for activity stats
+export const PageViewPayloadSchema = z.object({ path: z.string().max(200) })
+export type PageViewPayload = z.infer<typeof PageViewPayloadSchema>
 export type UnsubscribeTournamentPayload = z.infer<typeof UnsubscribeTournamentPayloadSchema>
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
@@ -443,6 +446,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   msg("subscribe_tournament", SubscribeTournamentPayloadSchema),
   msg("unsubscribe_tournament", UnsubscribeTournamentPayloadSchema),
   msg("resync", ResyncPayloadSchema),
+  msg("page_view", PageViewPayloadSchema),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 export type ClientMessageType = ClientMessage["type"]

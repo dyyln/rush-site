@@ -24,6 +24,7 @@ export { userSettings } from "../modules/queue/schema.js"
 export { friendRequests, friendships, partyInvites } from "../modules/friends/schema.js"
 export { chatMessages, chatMutes } from "../modules/chat/schema.js"
 export { mapPool } from "../modules/maps/schema.js"
+export { activityEvents, userActivity } from "../modules/activity/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()

@@ -101,6 +101,7 @@ export interface ServiceDeps {
   cancelMatch?(matchId: string, reason: string): Promise<unknown>
   // False when an admin closed the mode. The scheduler then neither creates nor starts cups in it
   modeGate?(mode: Mode): Promise<boolean>
+  onActivity?(steamIds: string[], kind: "cup_signup" | "cup_withdraw", tournamentId: string, mode: Mode): void
 }
 
 const DEFAULT_RATING = 1500
@@ -313,12 +314,13 @@ export class TournamentService {
       }
       return s.insertEntry({ tournamentId, captainSteamId: steamId, steamIds: members, teamName: teamName ?? null })
     })
+    this.d.onActivity?.(entry.steamIds, "cup_signup", tournamentId, t.mode)
     await this.announce(tournamentId, "entries_changed")
     return toEntryView(entry, await this.playerInfo(entry.steamIds, t.mode))
   }
 
   async withdraw(tournamentId: string, steamId: string): Promise<void> {
-    await this.d.store.locked(tournamentId, async (s) => {
+    const gone = await this.d.store.locked(tournamentId, async (s) => {
       const t = await s.getTournament(tournamentId)
       if (!t) throw new TournamentError(404, "not_found", "Tournament not found")
       if (t.status !== "open") {
@@ -328,7 +330,9 @@ export class TournamentService {
       const entry = entries.find((e) => !e.disqualifiedAt && e.steamIds.includes(steamId))
       if (!entry) throw new TournamentError(404, "not_entered", "Not entered")
       await s.deleteEntries([entry.id])
+      return { steamIds: entry.steamIds, mode: t.mode }
     })
+    this.d.onActivity?.(gone.steamIds, "cup_withdraw", tournamentId, gone.mode)
     await this.announce(tournamentId, "entries_changed")
   }
 

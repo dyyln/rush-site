@@ -34,6 +34,7 @@ const tournamentsPlugin: FastifyPluginAsync<
     getProfiles: opts.getProfiles,
     cancelMatch: opts.cancelMatch,
     modeGate: opts.modeGate,
+    onActivity: opts.onActivity,
   })
 
   opts.onMapResult?.(async (result) => {

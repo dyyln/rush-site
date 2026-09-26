@@ -232,3 +232,62 @@ export type AdminCandidateView = {
   signedIn: boolean;
   admin: "super" | "admin" | null;
 };
+
+// Activity stats. Mirrors apps/api/src/modules/activity/stats.ts
+export type ActivityWindow = {
+  activePlayers: number;
+  newPlayers: number;
+  queueJoins: number;
+  queueSeconds: number;
+  matchesFound: number;
+  matchesPlayed: number;
+  cupSignups: number;
+  pageViews: number;
+  avgWaitSec: number | null;
+};
+export type ActivityRetention = { eligible: number; returned: number };
+export type ActivityOverview = {
+  generatedAt: string;
+  inactiveDays: number;
+  totals: {
+    players: number;
+    sessions: number;
+    pageViews: number;
+    queueJoins: number;
+    queueSeconds: number;
+    matchesFound: number;
+    matchesPlayed: number;
+    cupSignups: number;
+  };
+  windows: { "24h": ActivityWindow; "7d": ActivityWindow; "30d": ActivityWindow };
+  modes30d: { mode: string; queueJoins: number; matchesFound: number; matchesPlayed: number; avgWaitSec: number | null }[];
+  daily: { day: string; activePlayers: number; newPlayers: number; queueJoins: number; matchesFound: number }[];
+  cohorts: { week: string; players: number; retention: { d1: ActivityRetention; d7: ActivityRetention; d30: ActivityRetention } }[];
+  inactivePlayers: number;
+  lastActions: { action: string | null; detail: string | null; players: number }[];
+};
+export type ActivityEvent = { kind: string; mode: string | null; ref: string | null; detail: string | null; value: number | null; at: string };
+export type UserActivityView = {
+  totals: {
+    sessions: number;
+    pageViews: number;
+    queueJoins: number;
+    queueSeconds: number;
+    matchesFound: number;
+    matchesAccepted: number;
+    matchesDeclined: number;
+    matchesMissed: number;
+    matchesPlayed: number;
+    matchesWon: number;
+    cupSignups: number;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    lastAction: string | null;
+    lastActionDetail: string | null;
+    lastActionMode: string | null;
+    lastActionAt: string | null;
+    lastPage: string | null;
+  } | null;
+  avgWaitSec: number | null;
+  events: ActivityEvent[];
+};

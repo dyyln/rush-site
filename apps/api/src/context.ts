@@ -5,6 +5,7 @@ import type { Redis } from "ioredis"
 import type { Db } from "./db/client.js"
 import { disabledModes, type Env } from "./env.js"
 import { AdminRegistry } from "./lib/admins.js"
+import { ActivityService } from "./modules/activity/service.js"
 import type { Rng } from "./lib/clock.js"
 import { EventLog } from "./lib/event-log.js"
 import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
@@ -58,6 +59,7 @@ export type AppContext = {
   flow: MatchFlow
   storage: DemoStorage
   presence: PresenceService
+  activity: ActivityService
   friends: FriendsService
   snapshots: SnapshotStore
   flags: FlagService
@@ -160,7 +162,10 @@ export function buildContext(deps: ContextDeps): AppContext {
       intervalSec: env.WATCHDOG_INTERVAL_SEC,
     },
   })
+  const activity = new ActivityService(db, log, now)
+  queue.setActivity(activity)
   const flow = new MatchFlow({
+    activity,
     db,
     redis,
     notifier,
@@ -190,6 +195,7 @@ export function buildContext(deps: ContextDeps): AppContext {
   flow.onPlayersChanged((ids) => presence.refresh(ids))
   flow.onMatchChanged((m) => presence.matchChanged(m))
   flow.onResult(async (r) => presence.refresh((await flow.playersOf(r.matchId)).map((p) => p.steamId)))
+  flow.onResult(async (r) => activity.onMatchResult(r))
   const banGate = new BanGate(db, redis, now)
   const disconnectUser = (steamId: string, reason: string) => disconnectUsers(notifier, [steamId], reason)
   const flags = new FlagService(db, now)
@@ -222,6 +228,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     flow,
     storage,
     presence,
+    activity,
     friends,
     snapshots,
     flags,

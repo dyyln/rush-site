@@ -6,7 +6,10 @@ import { MockNotFound, mockAdmin } from "./mock";
 import { mockOps } from "./ops-mock";
 import { mockMaps } from "./maps-mock";
 import { mockAdmins } from "./admins-mock";
+import { mockActivity } from "./activity-mock";
 import type {
+  ActivityOverview,
+  UserActivityView,
   ActionResult,
   AdminCandidateView,
   AdminListView,
@@ -92,6 +95,14 @@ export const adminApi = {
   async searchUsers(q: string): Promise<UserSearchHit[]> {
     if (isMock) return mocked(() => mockAdmin.searchUsers(q));
     return (await api.get<{ users: UserSearchHit[] }>("/admin/users", { q })).users;
+  },
+  activity(): Promise<ActivityOverview> {
+    if (isMock) return mocked(() => mockActivity.overview());
+    return api.get("/admin/activity");
+  },
+  userActivity(steamId: string): Promise<UserActivityView> {
+    if (isMock) return mocked(() => mockActivity.user(steamId));
+    return api.get(`/admin/users/${steamId}/activity`);
   },
   // Most recent sign ups first
   async newestUsers(limit: number): Promise<UserSearchHit[]> {

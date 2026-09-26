@@ -19,6 +19,7 @@ const NAV = [
   { href: "/admin/tournaments", label: "Tournaments" },
   { href: "/admin/hosts", label: "Hosts" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/activity", label: "Activity" },
   { href: "/admin/review", label: "Review" },
   { href: "/admin/events", label: "Events" },
   { href: "/admin/maps", label: "Maps" },
