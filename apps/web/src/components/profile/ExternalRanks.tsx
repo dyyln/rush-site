@@ -42,26 +42,22 @@ function premierColor(rating: number): string {
 
 type TileProps = { href?: string | null; title: string; children: React.ReactNode; sub?: string };
 
-// One rank icon. The title names the source. Only the icon links out
+// One rank icon. The title names the source. The whole tile links out
 function RankTile({ href, title, children, sub }: TileProps) {
-  const icon = (
-    <>
+  const body = (
+    <span className={styles.icon}>
       {children}
       {sub && <span className={styles.sub}>{sub}</span>}
-    </>
+    </span>
   );
-  return (
-    <div className={styles.tile}>
-      {href ? (
-        <a className={styles.icon} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
-          {icon}
-        </a>
-      ) : (
-        <span className={styles.icon} title={title} role="img" aria-label={title}>
-          {icon}
-        </span>
-      )}
-    </div>
+  return href ? (
+    <a className={styles.tile} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
+      {body}
+    </a>
+  ) : (
+    <span className={styles.tile} title={title} role="img" aria-label={title}>
+      {body}
+    </span>
   );
 }
 
