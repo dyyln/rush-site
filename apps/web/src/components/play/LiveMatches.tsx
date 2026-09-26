@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { isRushMode, type LiveMatch } from "@rushsite/shared";
+import { SiteTotals } from "@/components/stats/SiteTotals";
 import { cx } from "@/components/ui/cx";
 import { api } from "@/lib/api";
 import { mapName, MODE_COPY } from "@/lib/modes";
@@ -30,10 +31,13 @@ export function LiveMatches() {
 
   return (
     <section className={cx("glass", styles.panel)} aria-labelledby="live-matches">
-      <h2 id="live-matches" className={styles.head}>
-        <span className={styles.dot} aria-hidden="true" />
-        Live matches
-      </h2>
+      <div className={styles.top}>
+        <h2 id="live-matches" className={styles.head}>
+          <span className={styles.dot} aria-hidden="true" />
+          Live matches
+        </h2>
+        <SiteTotals variant="inline" />
+      </div>
       {rows === null ? (
         <p className={styles.note}>{data.status === "error" ? "Live matches are unavailable right now." : "Loading"}</p>
       ) : rows.length === 0 ? (

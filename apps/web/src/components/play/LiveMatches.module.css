@@ -4,6 +4,15 @@
   padding: 0 var(--space-3) var(--space-3);
 }
 
+/* Title on the left, site totals on the right */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-4);
+}
+
 .head {
   display: flex;
   align-items: center;

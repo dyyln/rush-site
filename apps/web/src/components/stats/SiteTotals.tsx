@@ -9,7 +9,7 @@ import styles from "./SiteTotals.module.css";
 const fmt = (n: number) => n.toLocaleString("en-GB");
 
 // Players and matches played. Hidden until loaded, and on error, so nothing jumps
-export function SiteTotals({ className, variant = "hero" }: { className?: string; variant?: "hero" | "strip" }) {
+export function SiteTotals({ className, variant = "hero" }: { className?: string; variant?: "hero" | "strip" | "inline" }) {
   const data = useAsync(() => statsApi.totals(), []);
   useVisibleInterval(data.reload, 60_000, true);
   const t = data.data;

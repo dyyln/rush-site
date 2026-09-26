@@ -179,7 +179,7 @@ export function PlayView() {
             </details>
           )}
 
-          <SiteTotals variant="strip" />
+          {!user && <SiteTotals variant="strip" />}
 
           {cooldown && play.queue.cooldownUntil && <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />}
           {user && !isLeader && (
