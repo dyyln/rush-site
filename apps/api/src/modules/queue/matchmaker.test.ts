@@ -113,6 +113,42 @@ describe("findMatches 3v3", () => {
   })
 })
 
+describe("findMatches with a queue too small for two matches", () => {
+  const opts = { mode: "aim2v2" as const, teamSize: 2, now: NOW }
+
+  it("matches a high duo against two solos after the sole match wait", () => {
+    const duo = t(2, 2000, 41)
+    const s1 = t(1, 1300, 41)
+    const s2 = t(1, 1300, 41)
+    const out = findMatches([duo, s1, s2], opts)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.mixed).toBe(true)
+  })
+
+  it("waits for the normal rules before the sole match wait", () => {
+    expect(findMatches([t(2, 2000, 30), t(2, 1300, 30)], opts)).toHaveLength(0)
+  })
+
+  it("keeps the normal rules once a second match is possible", () => {
+    const pool = [t(2, 2000, 45), t(2, 1300, 45), t(2, 1310, 45), t(1, 1900, 45), t(1, 1900, 45)]
+    const out = findMatches(pool, opts)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.means.map(Math.round).sort()).toEqual([1300, 1310])
+  })
+
+  it("never relaxes a trust floor", () => {
+    const duo = { ...t(2, 2000, 300), minTrust: 1, trust: 1 }
+    expect(findMatches([duo, { ...t(1, 1300, 300), trust: 0 }, { ...t(1, 1300, 300), trust: 0 }], opts)).toHaveLength(0)
+  })
+
+  it("counts each region on its own", () => {
+    const eu = [t(2, 2000, 41, "eu"), t(2, 1300, 41, "eu")]
+    const na = [t(2, 1500, 41, "na"), t(2, 1500, 41, "na"), t(2, 1500, 41, "na"), t(2, 1500, 41, "na")]
+    const out = findMatches([...eu, ...na], opts)
+    expect(out.filter((p) => p.teams[0][0]!.region === "eu")).toHaveLength(1)
+  })
+})
+
 describe("findMatches at scale", () => {
   function seeded(seed: number): () => number {
     return () => {

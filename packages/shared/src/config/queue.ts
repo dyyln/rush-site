@@ -33,6 +33,10 @@ export function maxRatingDiffAfter(waitSec: number): number | null {
   return current.maxRatingDiff
 }
 
+// When a region's queue for a mode is too small to form two matches, a ticket that has waited this long
+// matches at any rating gap and across party buckets. Trust floors still apply
+export const SOLE_MATCH_AFTER_SEC = 40
+
 export type PartyBucketRule = {
   mode: Mode
   // Party sizes that can queue for this mode

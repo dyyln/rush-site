@@ -1,4 +1,4 @@
-import { canMixBuckets, maxRatingDiffAfter, partyBucket, type Mode } from "@rushsite/shared"
+import { canMixBuckets, maxRatingDiffAfter, partyBucket, SOLE_MATCH_AFTER_SEC, type Mode } from "@rushsite/shared"
 
 export type MmTicket = {
   id: string
@@ -27,6 +27,8 @@ export type MatchmakerOptions = {
   maxCandidates?: number
   windowFor?: (waitSec: number) => number | null
   canMix?: (waitSec: number) => boolean
+  // Wait after which a queue too small for two matches ignores the rating window and party buckets
+  soleMatchAfterSec?: number
 }
 
 // Individual players may sit further from the anchor than the team gap allows
@@ -167,14 +169,20 @@ export function findMatches(tickets: MmTicket[], opts: MatchmakerOptions): Propo
     else byRegion.set(t.region, [t])
   }
   const indexes = new Map([...byRegion].map(([region, ts]) => [region, new RatingIndex(ts)]))
+  // Regions without enough players for a second match. Waiting there for a closer opponent gains nothing
+  const soleAfter = opts.soleMatchAfterSec ?? SOLE_MATCH_AFTER_SEC
+  const small = new Set(
+    [...byRegion].filter(([, ts]) => ts.reduce((s, t) => s + t.size, 0) < 4 * opts.teamSize).map(([region]) => region),
+  )
   const used = new Set<string>()
   const proposals: Proposal[] = []
-  const mayMix = (t: MmTicket) => canMix(waitSec(t, opts.now))
 
   for (const anchor of sorted) {
     if (used.has(anchor.id)) continue
     const index = indexes.get(anchor.region)!
-    const window = windowFor(waitSec(anchor, opts.now)) ?? Number.POSITIVE_INFINITY
+    const sole = small.has(anchor.region) && waitSec(anchor, opts.now) >= soleAfter
+    const mayMix = (t: MmTicket) => sole || canMix(waitSec(t, opts.now))
+    const window = sole ? Number.POSITIVE_INFINITY : (windowFor(waitSec(anchor, opts.now)) ?? Number.POSITIVE_INFINITY)
     // Tickets that cannot share a match with the anchor are skipped so they do not crowd out usable ones
     const candidates = index
       .nearest(anchor, maxCandidates, window * CANDIDATE_SPREAD, (t) => trustCompatible(anchor, t))
