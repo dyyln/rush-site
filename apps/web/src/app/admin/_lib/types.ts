@@ -109,7 +109,36 @@ export type AuditAction =
   | "map.add"
   | "map.update"
   | "map.reorder"
-  | "map.remove";
+  | "map.remove"
+  | "gslt.add"
+  | "gslt.update"
+  | "gslt.remove";
+
+export type GsltStatus = "free" | "in_use" | "invalid";
+
+// The token is masked by the api
+export type GsltView = {
+  id: string;
+  token: string;
+  memo: string | null;
+  status: GsltStatus;
+  matchId: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+export type GsltPoolView = {
+  tokens: GsltView[];
+  counts: { total: number; free: number; inUse: number; invalid: number };
+};
+
+export type GsltAddResult = {
+  added: number;
+  skipped: number;
+  invalidLines: number[];
+  tokens: GsltView[];
+  audit: AuditEntry;
+};
 
 export type AuditEntry = {
   id: string;

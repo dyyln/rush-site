@@ -362,6 +362,22 @@ export type AuditAction =
   | "map.update"
   | "map.reorder"
   | "map.remove"
+  | "gslt.add"
+  | "gslt.update"
+  | "gslt.remove"
+
+export type GsltStatus = "free" | "in_use" | "invalid"
+
+// A pool token. The token itself is masked and never leaves the api in full
+export interface GsltView {
+  id: string
+  token: string
+  memo: string | null
+  status: GsltStatus
+  matchId: string | null
+  lastUsedAt: string | null
+  createdAt: string
+}
 
 export interface AdminView {
   steamId: string

@@ -7,6 +7,7 @@ import { mockOps } from "./ops-mock";
 import { mockMaps } from "./maps-mock";
 import { mockAdmins } from "./admins-mock";
 import { mockActivity } from "./activity-mock";
+import { mockGslt } from "./gslt-mock";
 import type {
   ActivityOverview,
   AdminDiscordView,
@@ -17,6 +18,9 @@ import type {
   AdminView,
   BuildInfo,
   EventView,
+  GsltAddResult,
+  GsltPoolView,
+  GsltView,
   HostView,
   MatchDetailView,
   MatchSummaryView,
@@ -208,6 +212,23 @@ export const adminApi = {
   removeMap(id: string): Promise<{ ok: true; audit: AuditEntry }> {
     if (isMock) return mocked(() => mockMaps.remove(id));
     return api.del(`/admin/maps/${encodeURIComponent(id)}`);
+  },
+
+  gslt(): Promise<GsltPoolView> {
+    if (isMock) return mocked(() => mockGslt.list());
+    return api.get("/admin/gslt");
+  },
+  addGslt(text: string, memo?: string): Promise<GsltAddResult> {
+    if (isMock) return mocked(() => mockGslt.add(text, memo));
+    return api.post("/admin/gslt", memo ? { text, memo } : { text });
+  },
+  updateGslt(id: string, memo: string | null): Promise<{ token: GsltView; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockGslt.update(id, memo));
+    return api.patch(`/admin/gslt/${encodeURIComponent(id)}`, { memo });
+  },
+  removeGslt(id: string): Promise<{ ok: true; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockGslt.remove(id));
+    return api.del(`/admin/gslt/${encodeURIComponent(id)}`);
   },
 
   admins(): Promise<AdminListView> {

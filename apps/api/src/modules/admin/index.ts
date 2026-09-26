@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify"
 import { registerActivityRoutes } from "./activity-routes.js"
 import { registerDiscordAdminRoutes } from "./discord-routes.js"
+import { registerGsltRoutes } from "./gslt-routes.js"
 import { registerAdminsRoutes } from "./admins-routes.js"
 import { registerChatModerationRoutes } from "./chat-routes.js"
 import { registerMapsRoutes } from "./maps-routes.js"
@@ -52,6 +53,7 @@ const adminPlugin: FastifyPluginAsync<AdminPluginOptions & AdminPluginInternals>
   registerAdminsRoutes(app, { store, opts }, adminOf)
   registerChatModerationRoutes(app, { store, opts, now }, adminOf)
   registerMapsRoutes(app, { store, opts }, adminOf)
+  registerGsltRoutes(app, { store, opts }, adminOf)
   registerActivityRoutes(app, { opts, now })
   registerDiscordAdminRoutes(app, { store, opts }, adminOf)
 }

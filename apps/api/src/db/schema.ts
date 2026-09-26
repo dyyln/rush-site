@@ -433,6 +433,8 @@ export const serverSlots = pgTable(
 export const gsltTokens = pgTable("gslt_tokens", {
   id: id(),
   token: text("token").notNull().unique(),
+  // The memo set on Steam's manage page
+  memo: text("memo"),
   status: gsltStatusEnum("status").notNull().default("free"),
   matchId: uuid("match_id"),
   lastUsedAt: ts("last_used_at"),

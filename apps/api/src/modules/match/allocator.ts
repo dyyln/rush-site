@@ -142,6 +142,7 @@ export class Allocator {
     return null
   }
 
+  // Adds tokens from GSLT_TOKENS that are not stored yet. Existing rows keep their status and memo
   async seedGslt(tokens: string[]): Promise<void> {
     if (tokens.length === 0) return
     await this.db
@@ -301,12 +302,10 @@ export class Allocator {
     // Waiting only helps when a Hetzner slot can free up. With no online Hetzner slots at all go straight to surge
     const hetznerSlots = this.surge ? (await this.hetzner.capacity()).total : 0
     if (this.surge && (hetznerSlots === 0 || waitedMs >= this.opts.surgeWaitSec * 1000)) {
-      // DatHost servers run without a token, so a dry pool does not block surge capacity
-      const token = await this.db.transaction((tx) => this.reserveGslt(tx as unknown as Db, p.matchId))
-      if (!token) this.log.warn({ matchId: p.matchId }, "no free GSLT, starting surge server without a token")
+      // DatHost servers run without a GSLT. The pool is kept for Hetzner slots
       const { demo, demos } = await this.presign(p)
       try {
-        const response = await this.surge.start(this.buildRequest(p, token?.token ?? "", demo, demos))
+        const response = await this.surge.start(this.buildRequest(p, "", demo, demos))
         this.log.info({ matchId: p.matchId, driver: this.surge.name }, "match allocated on surge capacity")
         return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, demo, ...(demos ? { demos } : {}) }
       } catch (err) {

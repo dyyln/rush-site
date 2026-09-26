@@ -1,0 +1,1 @@
+ALTER TABLE "gslt_tokens" ADD COLUMN "memo" text;

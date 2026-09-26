@@ -10,6 +10,7 @@ import { useLiveData, useNow } from "../_lib/live";
 import type { HostView } from "../_lib/types";
 import { ErrorPanel, Meter, PageHeader } from "../_components/parts";
 import styles from "../admin.module.css";
+import { GsltPool } from "./GsltPool";
 
 export default function AdminHostsPage() {
   const live = useLiveData(() => adminApi.hosts(), [], { kinds: ["host", "match"], pollMs: 15_000 });
@@ -43,6 +44,7 @@ export default function AdminHostsPage() {
           ))}
         </div>
       )}
+      <GsltPool hosts={hosts} />
     </>
   );
 }

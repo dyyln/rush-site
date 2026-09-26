@@ -49,6 +49,7 @@ export const EnvSchema = z.object({
   RUSHSITE_AGENT_TOKEN: z.string().min(1).default("change-me-dev-agent-token"),
   // Comma separated agent urls. Prefix one with region= to place it, for example eu=http://10.0.0.2:8080
   AGENT_URLS: csv,
+  // Optional seed for the GSLT pool. Missing tokens are added on start. The admin page manages the pool
   GSLT_TOKENS: csv,
 
   // DatHost surge capacity. Disabled without an account email
