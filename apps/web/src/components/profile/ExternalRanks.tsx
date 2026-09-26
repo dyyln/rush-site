@@ -44,19 +44,24 @@ type TileProps = { name: string; href?: string | null; title: string; children: 
 
 // The source name centred above its rank icon. Only the icon links out
 function RankTile({ name, href, title, children, sub }: TileProps) {
+  const icon = (
+    <>
+      {children}
+      {sub && <span className={styles.sub}>{sub}</span>}
+    </>
+  );
   return (
     <div className={styles.tile}>
       <span className={styles.name}>{name}</span>
       {href ? (
         <a className={styles.icon} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
-          {children}
+          {icon}
         </a>
       ) : (
         <span className={styles.icon} title={title} role="img" aria-label={title}>
-          {children}
+          {icon}
         </span>
       )}
-      <span className={styles.sub}>{sub ?? ""}</span>
     </div>
   );
 }
@@ -84,7 +89,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
               sub={faceit?.elo ? String(faceit.elo) : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/faceit/${level}.svg`} alt="" width={34} height={34} />
+              <img src={`/ranks/faceit/${level}.svg`} alt="" width={24} height={24} />
             </RankTile>
           </li>
         )}
@@ -101,7 +106,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
           <li>
             <RankTile name="Wingman" href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}${leetify ? ". View on Leetify" : ""}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/wingman/${group}.webp`} alt="" width={76} height={31} />
+              <img src={`/ranks/wingman/${group}.webp`} alt="" width={56} height={23} />
             </RankTile>
           </li>
         )}
@@ -109,7 +114,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
       {fromLeetify && (
         <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer" className={styles.badge}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={179} height={76} />
+          <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={113} height={48} />
         </a>
       )}
     </div>
