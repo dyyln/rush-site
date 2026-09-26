@@ -3,7 +3,7 @@
 `rush_001.js` is Valve's Rush script from `pak01_dir.vpk` (`maps/scripts/rush_001.js`) plus one marked block, `rushsite: room veto`, and one line at the top of `RandomizeRooms`. Everything else is Valve's code, unchanged. `valve/rush_001.js` is the untouched copy. Diff the two to see our change.
 
 - Source: SteamDB GameTracking-CS2, `game/csgo/pak01_dir/maps/scripts/rush_001.js`
-- Valve revision: CS2 1.41.8.3, build 2000915 (GameTracking commit d45f52d, 23 Sep 2026)
+- Valve revision: CS2 1.41.8.5, build 2000918 (GameTracking commit 3fc98e7, 25 Sep 2026)
 
 On every CS2 update that touches `rush_001.js`, fetch the new file into `valve/`, carry the marked block across, rebuild and redeploy. A stale override would run an old copy of Valve's rules.
 
@@ -18,6 +18,15 @@ On every CS2 update that touches `rush_001.js`, fetch the new file into `valve/`
 - It also keeps the `RunScriptInput rushsite_room_<slot>_<id>` and `rushsite_rooms_apply` inputs. They work only if something can fire entity inputs, for example CounterStrikeSharp `AcceptInput`. `ent_fire` from the console cannot.
 - It answers every set with a server command the match plugin registers: `rushsite_rooms_applied <7 ids in play>` or `rushsite_rooms_rejected <bad_set|too_late> <ids>`. Without the plugin the server just prints `Unknown command`.
 - It logs `rushsite: room veto script loaded` when it loads.
+
+## Build (any OS)
+
+A compiled cs_script is Valve's Source 2 resource with the script text, CRLF line endings, as its DATA block. `build_vjs.py` takes Valve's `rush_001.vjs_c` out of `pak01`, keeps its header and RED2 block, and swaps in our script. Fed Valve's own script it reproduces Valve's file byte for byte. Run both steps against the same `pak01`, for example on the Hetzner box:
+
+```
+python3 build_vjs.py rush_001.js dist/rush_001.vjs_c --valve-pak /srv/cs2/game/csgo/pak01_dir.vpk
+python3 pack_vpk.py dist/rushsite_rooms.vpk dist/rush_001.vjs_c --valve-pak /srv/cs2/game/csgo/pak01_dir.vpk
+```
 
 ## Build (Windows, CS2 Workshop Tools)
 
