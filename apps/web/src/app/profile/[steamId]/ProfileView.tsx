@@ -84,22 +84,8 @@ function ProfileBody({ profile }: { profile: Profile }) {
         <img className={styles.heroArt} src={profile.backgroundUrl ?? MODE_ART[best]} alt="" />
         <div className={styles.heroShade} />
         <div className={styles.heroMain}>
-          <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
-          <div className={styles.heroText}>
-            <div className={styles.nameRow}>
-              <h1 className={styles.name}>{profile.user.displayName}</h1>
-              <a
-                className={styles.steam}
-                href={`https://steamcommunity.com/profiles/${profile.user.steamId}`}
-                target="_blank"
-                rel="noreferrer"
-                title="Steam profile"
-              >
-                <SteamLogo />
-                <span className="visually-hidden">{profile.user.displayName} on Steam (opens in a new tab)</span>
-              </a>
-            </div>
-            <ExternalRanks steamId={profile.user.steamId} />
+          <div className={styles.heroAvatar}>
+            <Avatar name={profile.user.displayName} src={profile.user.avatarUrl} size="lg" />
             {!own && (
               <div className={styles.heroActions}>
                 <FriendButton target={profile.user} iconClassName={styles.iconAction} />
@@ -128,6 +114,22 @@ function ProfileBody({ profile }: { profile: Profile }) {
                 />
               </div>
             )}
+          </div>
+          <div className={styles.heroText}>
+            <div className={styles.nameRow}>
+              <h1 className={styles.name}>{profile.user.displayName}</h1>
+              <a
+                className={styles.steam}
+                href={`https://steamcommunity.com/profiles/${profile.user.steamId}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Steam profile"
+              >
+                <SteamLogo />
+                <span className="visually-hidden">{profile.user.displayName} on Steam (opens in a new tab)</span>
+              </a>
+            </div>
+            <ExternalRanks steamId={profile.user.steamId} />
           </div>
           {profile.badges.length > 0 && (
             <div className={styles.heroSide}>

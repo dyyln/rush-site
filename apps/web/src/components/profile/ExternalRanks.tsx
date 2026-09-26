@@ -42,23 +42,22 @@ function premierColor(rating: number): string {
 
 type TileProps = { name: string; href?: string | null; title: string; children: React.ReactNode; sub?: string };
 
-// The source name centred above its rank icon
+// The source name centred above its rank icon. Only the icon links out
 function RankTile({ name, href, title, children, sub }: TileProps) {
-  const body = (
-    <>
+  return (
+    <div className={styles.tile}>
       <span className={styles.name}>{name}</span>
-      <span className={styles.icon}>{children}</span>
-      {sub && <span className={styles.sub}>{sub}</span>}
-    </>
-  );
-  return href ? (
-    <a className={styles.tile} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
-      {body}
-    </a>
-  ) : (
-    <span className={styles.tile} title={title} aria-label={title} role="img">
-      {body}
-    </span>
+      {href ? (
+        <a className={styles.icon} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
+          {children}
+        </a>
+      ) : (
+        <span className={styles.icon} title={title} role="img" aria-label={title}>
+          {children}
+        </span>
+      )}
+      <span className={styles.sub}>{sub ?? ""}</span>
+    </div>
   );
 }
 
@@ -85,7 +84,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
               sub={faceit?.elo ? String(faceit.elo) : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/faceit/${level}.svg`} alt="" width={36} height={36} />
+              <img src={`/ranks/faceit/${level}.svg`} alt="" width={34} height={34} />
             </RankTile>
           </li>
         )}
@@ -102,7 +101,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
           <li>
             <RankTile name="Wingman" href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}${leetify ? ". View on Leetify" : ""}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/wingman/${group}.webp`} alt="" width={80} height={33} />
+              <img src={`/ranks/wingman/${group}.webp`} alt="" width={76} height={31} />
             </RankTile>
           </li>
         )}
@@ -110,7 +109,7 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
       {fromLeetify && (
         <a href="https://leetify.com/" target="_blank" rel="noopener noreferrer" className={styles.badge}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={94} height={40} />
+          <img src="/ranks/leetify-badge.png" alt="Data provided by Leetify" width={179} height={76} />
         </a>
       )}
     </div>
