@@ -98,10 +98,13 @@ export const ACTIVITY_LABEL: Record<string, string> = {
   match_end: "Match ended",
   cup_signup: "Signed up for a cup",
   cup_withdraw: "Withdrew from a cup",
+  discord_link: "Linked Discord",
+  discord_unlink: "Unlinked Discord",
 };
 
 const DETAIL_LABEL: Record<string, string> = {
   left: "left",
+  joined: "added to the server",
   mode_closed: "mode closed",
   party_changed: "party changed",
   requeue: "put back in queue",

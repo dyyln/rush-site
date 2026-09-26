@@ -18,6 +18,13 @@ x-api-env: &api-env
   API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3001}
   STEAM_API_KEY: ${STEAM_API_KEY:-}
   FACEIT_API_KEY: ${FACEIT_API_KEY:-}
+  # Discord linking, off until every id is set
+  DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+  DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+  DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+  DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+  DISCORD_LINKED_ROLE_ID: ${DISCORD_LINKED_ROLE_ID:-}
+  DISCORD_INVITE_URL: ${DISCORD_INVITE_URL:-}
   RUSHSITE_AGENT_TOKEN: ${RUSHSITE_AGENT_TOKEN:?set RUSHSITE_AGENT_TOKEN in .env}
   # Unset means the local agent. Set it empty on a box with no game servers
   AGENT_URLS: ${AGENT_URLS-http://host.docker.internal:8080}

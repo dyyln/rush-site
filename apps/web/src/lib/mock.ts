@@ -22,6 +22,7 @@ import { MOCK_TRUST } from "./trust";
 import type {
   Bracket,
   BracketMatch,
+  DiscordStatus,
   EntryView,
   Leaderboard,
   LeaderboardRow,
@@ -1243,3 +1244,28 @@ export function mockLiveMatches(limit: number, now = Date.now()): LiveMatch[] {
 
 // Runs last so every mock constant above is initialised
 MOCK_TOURNAMENTS.forEach(enrichMockSummary);
+
+let mockDiscordLinked = false;
+
+// Linked after the mock link round trip, until unlinked
+export function mockDiscord(linked?: boolean): DiscordStatus {
+  if (linked !== undefined) mockDiscordLinked = linked;
+  else if (typeof window !== "undefined" && window.location.search.includes("discord=joined")) mockDiscordLinked = true;
+  return {
+    enabled: true,
+    inviteUrl: "https://discord.gg/example",
+    link: mockDiscordLinked
+      ? {
+          discordId: "700000000000000001",
+          username: "mockplayer",
+          globalName: "Mock Player",
+          avatarUrl: null,
+          discordCreatedAt: "2020-04-01T00:00:00.000Z",
+          linkedAt: new Date().toISOString(),
+          roleGranted: true,
+          syncedAt: new Date().toISOString(),
+          syncError: null,
+        }
+      : null,
+  };
+}

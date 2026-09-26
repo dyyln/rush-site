@@ -65,6 +65,16 @@ export const EnvSchema = z.object({
   S3_SECRET_ACCESS_KEY: optionalString,
   S3_FORCE_PATH_STYLE: bool.default(true),
 
+  // Discord linking. Off unless the app, bot, server and role are all set
+  DISCORD_CLIENT_ID: optionalString,
+  DISCORD_CLIENT_SECRET: optionalString,
+  DISCORD_BOT_TOKEN: optionalString,
+  DISCORD_GUILD_ID: optionalString,
+  // Role that opens the server's channels. The bot's own role must sit above it
+  DISCORD_LINKED_ROLE_ID: optionalString,
+  // Public invite shown on the site
+  DISCORD_INVITE_URL: optionalString,
+
   // Steam ids with admin rights, comma separated
   ADMIN_STEAM_IDS: csv,
 

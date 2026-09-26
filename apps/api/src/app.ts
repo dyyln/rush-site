@@ -11,6 +11,7 @@ import { registerSecurity } from "./lib/security.js"
 import { registerAuthRoutes } from "./modules/auth/routes.js"
 import challengesPlugin from "./modules/challenges/index.js"
 import { registerChatRoutes } from "./modules/chat/routes.js"
+import { registerDiscordRoutes } from "./modules/discord/routes.js"
 import { registerFlagRoutes } from "./modules/flags/routes.js"
 import friendsPlugin from "./modules/friends/index.js"
 import { createSurgeDriver } from "./modules/match/dathost.js"
@@ -107,6 +108,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<App> {
   registerWsRoutes(app, ctx, hub)
   registerFlagRoutes(app, ctx)
   registerChatRoutes(app, ctx)
+  registerDiscordRoutes(app, ctx)
   await app.register(challengesPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
   await app.register(friendsPlugin, { ctx, scheduler: !opts.env.DISABLE_LOOPS })
   await app.register(reviewPlugin, { ctx })
@@ -170,6 +172,7 @@ export function adminOptions(ctx: AppContext) {
         profileUrl: p.profileurl ?? null,
       })),
     onAdminChanged: (steamId: string, isAdmin: boolean) => setAdminAccess(ctx.notifier, steamId, isAdmin),
+    discord: ctx.discord,
     authenticate: ctx.auth,
     getQueueSnapshot: () => queueSnapshot(ctx),
     getHosts: async () => {

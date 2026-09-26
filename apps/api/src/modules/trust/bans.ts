@@ -28,6 +28,8 @@ export class BanService {
     private readonly rollbackWindowDays: number,
     private readonly gate?: BanGate,
     private readonly disconnect?: (steamId: string, reason: string) => void,
+    // Runs after a ban or unban, for example to take the Discord role
+    private readonly onChange?: (steamId: string) => void,
   ) {}
 
   async ban(steamId: string, reason: string, opts: BanOptions = {}): Promise<{ banId: string; rollback: RollbackSummary | null }> {
@@ -52,6 +54,7 @@ export class BanService {
     if (party) await this.queue.cancelParty(party.partyId, "banned")
     const summary = rollback ? await this.ratings.rollbackCheater(steamId, from) : null
     await this.trust.recompute(steamId)
+    this.onChange?.(steamId)
     return { banId: row!.id, rollback: summary }
   }
 
@@ -63,6 +66,7 @@ export class BanService {
       .returning({ id: bans.id })
     await this.gate?.clear(steamId)
     await this.trust.recompute(steamId)
+    this.onChange?.(steamId)
     return rows.length
   }
 

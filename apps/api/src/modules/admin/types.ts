@@ -178,7 +178,29 @@ export interface AdminPluginOptions {
   fetchWorkshop?(workshopId: string): Promise<WorkshopItem>
   // Pushes a fresh queue status to the player, for example after a cooldown was cleared
   notifyQueueStatus?(steamId: string): Promise<void>
+  // Discord link routes answer 404 without it
+  discord?: DiscordLike
   now?: () => Date
+}
+
+export interface DiscordLinkAdminView {
+  discordId: string
+  username: string
+  globalName: string | null
+  avatarUrl: string | null
+  discordCreatedAt: string
+  linkedAt: string
+  roleGranted: boolean
+  syncedAt: string | null
+  syncError: string | null
+}
+
+// DiscordService in src/modules/discord/service.ts satisfies it.
+export interface DiscordLike {
+  readonly enabled: boolean
+  linkOf(steamId: string): Promise<DiscordLinkAdminView | null>
+  unlink(steamId: string): Promise<boolean>
+  sync(steamId: string): Promise<DiscordLinkAdminView | null>
 }
 
 export interface AdminRow {
@@ -322,6 +344,8 @@ export type AuditAction =
   | "user.unban"
   | "user.trust"
   | "user.cooldown_clear"
+  | "user.discord_unlink"
+  | "user.discord_sync"
   | "flag.set"
   | "flag.delete"
   | "announcement.create"

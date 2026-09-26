@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/ui/Card";
 import { NotifyPanel } from "@/components/notify/NotifyPanel";
+import { DiscordPanel } from "./DiscordPanel";
 import { DisplayPanel } from "./DisplayPanel";
 import styles from "./settings.module.css";
 
@@ -12,9 +13,10 @@ export default function SettingsPage() {
       <header className="page-header">
         <div>
           <h1>Settings</h1>
-          <p>Saved in this browser only.</p>
+          <p>Display and notification choices are saved in this browser only.</p>
         </div>
       </header>
+      <DiscordPanel />
       <Card title="Display">
         <DisplayPanel />
       </Card>

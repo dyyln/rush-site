@@ -108,6 +108,7 @@ export type HarnessOptions = {
   fetch?: typeof fetch
   plugins?: { tournaments?: boolean; admin?: boolean }
   surgeDriver?: import("@rushsite/shared").ServerDriver | null
+  discordApi?: import("../src/modules/discord/client.js").DiscordApi | null
 }
 
 const offline = (async () => {
@@ -137,6 +138,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     faceit: null,
     fetch: opts.fetch ?? offline,
     surgeDriver: opts.surgeDriver ?? null,
+    discordApi: opts.discordApi ?? null,
   })
   return { ctx, db, redis, notifier, agent, clock, env, close }
 }
@@ -161,6 +163,7 @@ export async function createAppHarness(opts: HarnessOptions = {}) {
     faceit: null,
     fetch: opts.fetch ?? offline,
     surgeDriver: opts.surgeDriver ?? null,
+    discordApi: opts.discordApi ?? null,
     logger: false,
     plugins: opts.plugins ?? { tournaments: false, admin: false },
   })

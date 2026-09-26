@@ -91,6 +91,8 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const sid = await ctx.sessions.create(steamId)
     setSessionCookie(reply, sid, { secure, domain: env.COOKIE_DOMAIN, maxAgeSec: env.SESSION_TTL_DAYS * 86400 })
     void ctx.trust.onLogin(steamId).catch((err) => req.log.error({ err, steamId }, "trust refresh failed"))
+    // Puts the role back after a timed ban ran out
+    ctx.discord.syncQuietly(steamId)
     void ctx.friends.syncSteam(steamId).catch((err) => req.log.warn({ err, steamId }, "steam friends auto-link failed"))
     return reply.redirect(`${web}${login.redirect}`, 302)
   })

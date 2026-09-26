@@ -7,6 +7,7 @@ import { mockModeStats } from "./ws-mock";
 import { challengeApi } from "@/components/challenges/api";
 import { friendsApi } from "@/components/friends/api";
 import type {
+  DiscordStatus,
   Leaderboard,
   MatchDetail,
   MatchHistoryPage,
@@ -263,6 +264,26 @@ export const api = {
     async withdraw(id: string): Promise<void> {
       if (isMock) return mockDelay();
       await request("DELETE", `/tournaments/${id}/enter`);
+    },
+  },
+
+  discord: {
+    // Plain navigation. The api sends the player to Discord and back to settings
+    linkUrl(): string {
+      if (isMock) return "/settings?discord=joined#discord";
+      return buildUrl("/auth/discord");
+    },
+    status(): Promise<DiscordStatus> {
+      if (isMock) return mocked(mock.mockDiscord());
+      return request("GET", "/discord/me");
+    },
+    unlink(): Promise<DiscordStatus> {
+      if (isMock) return mocked(mock.mockDiscord(false));
+      return request("POST", "/discord/unlink");
+    },
+    sync(): Promise<DiscordStatus> {
+      if (isMock) return mocked(mock.mockDiscord());
+      return request("POST", "/discord/sync");
     },
   },
 };

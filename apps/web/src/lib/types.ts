@@ -168,3 +168,18 @@ export type MatchExtras = Partial<SharedMatchExtras> & {
   // steamIds the signed-in viewer already reported in this match
   viewerReported?: string[];
 };
+
+export type DiscordLink = {
+  discordId: string;
+  username: string;
+  globalName: string | null;
+  avatarUrl: string | null;
+  discordCreatedAt: string;
+  linkedAt: string;
+  // False when the bot could not give the Linked role, for example after leaving the server
+  roleGranted: boolean;
+  syncedAt: string | null;
+  syncError: string | null;
+};
+
+export type DiscordStatus = { enabled: boolean; inviteUrl: string | null; link: DiscordLink | null };

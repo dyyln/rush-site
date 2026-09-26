@@ -11,6 +11,9 @@ import { EventLog } from "./lib/event-log.js"
 import { SnapshotStore, withSnapshots } from "./lib/snapshots.js"
 import { makeAuthenticator, SessionStore, type Authenticator } from "./modules/auth/session.js"
 import { ChatService, slowModeSeconds } from "./modules/chat/service.js"
+import { DiscordRestApi, type DiscordApi } from "./modules/discord/client.js"
+import { discordRedirectUri } from "./modules/discord/routes.js"
+import { DiscordService } from "./modules/discord/service.js"
 import { SteamWebApi, type FetchFn } from "./modules/auth/steam.js"
 import { UsersService } from "./modules/auth/users.js"
 import { AnnouncementService, FlagService } from "./modules/flags/service.js"
@@ -60,6 +63,7 @@ export type AppContext = {
   storage: DemoStorage
   presence: PresenceService
   activity: ActivityService
+  discord: DiscordService
   friends: FriendsService
   snapshots: SnapshotStore
   flags: FlagService
@@ -81,6 +85,24 @@ export type ContextDeps = {
   storage?: DemoStorage
   faceit?: FaceitLookup | null
   surgeDriver?: ServerDriver | null
+  // Null turns Discord off. Unset builds the REST client from env
+  discordApi?: DiscordApi | null
+}
+
+function discordApiFrom(env: Env, fetchFn: FetchFn): DiscordApi | null {
+  const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_LINKED_ROLE_ID } = env
+  if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET || !DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID || !DISCORD_LINKED_ROLE_ID) return null
+  return new DiscordRestApi(
+    {
+      clientId: DISCORD_CLIENT_ID,
+      clientSecret: DISCORD_CLIENT_SECRET,
+      botToken: DISCORD_BOT_TOKEN,
+      guildId: DISCORD_GUILD_ID,
+      roleId: DISCORD_LINKED_ROLE_ID,
+      redirectUri: discordRedirectUri(env.API_PUBLIC_URL),
+    },
+    fetchFn,
+  )
 }
 
 export function buildContext(deps: ContextDeps): AppContext {
@@ -200,7 +222,19 @@ export function buildContext(deps: ContextDeps): AppContext {
   const disconnectUser = (steamId: string, reason: string) => disconnectUsers(notifier, [steamId], reason)
   const flags = new FlagService(db, now)
   queue.setModeGate((mode) => flags.queueOpen(mode))
-  const bans = new BanService(db, ratings, trust, queue, parties, sessions, now, env.ROLLBACK_WINDOW_DAYS, banGate, disconnectUser)
+  const discordApi = deps.discordApi !== undefined ? deps.discordApi : discordApiFrom(env, fetchFn)
+  const discord = new DiscordService({
+    db,
+    api: discordApi,
+    inviteUrl: env.DISCORD_INVITE_URL ?? null,
+    isBanned: async (id) => (await banGate.lookup(id)) !== null,
+    activity,
+    log,
+    now,
+  })
+  const bans = new BanService(db, ratings, trust, queue, parties, sessions, now, env.ROLLBACK_WINDOW_DAYS, banGate, disconnectUser, (id) =>
+    discord.syncQuietly(id),
+  )
   return {
     env,
     db,
@@ -229,6 +263,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     storage,
     presence,
     activity,
+    discord,
     friends,
     snapshots,
     flags,

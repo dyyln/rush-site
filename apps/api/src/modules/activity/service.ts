@@ -20,6 +20,8 @@ export const ACTIVITY_KINDS = [
   "match_end",
   "cup_signup",
   "cup_withdraw",
+  "discord_link",
+  "discord_unlink",
 ] as const
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number]
 

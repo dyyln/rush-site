@@ -41,6 +41,9 @@ const MINUTE = 60_000
 export const RATE_RULES: Record<string, Rule> = {
   "GET /auth/steam": { max: 20, timeWindow: MINUTE, key: "ip" },
   "GET /auth/steam/callback": { max: 20, timeWindow: MINUTE, key: "ip" },
+  "GET /auth/discord": { max: 10, timeWindow: MINUTE },
+  "GET /auth/discord/callback": { max: 10, timeWindow: MINUTE, key: "ip" },
+  "POST /discord/sync": { max: 6, timeWindow: MINUTE },
   "GET /ws": { max: 30, timeWindow: MINUTE },
   "POST /queue/join": { max: 30, timeWindow: MINUTE },
   "POST /queue/leave": { max: 30, timeWindow: MINUTE },

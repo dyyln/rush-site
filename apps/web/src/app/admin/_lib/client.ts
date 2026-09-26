@@ -9,6 +9,7 @@ import { mockAdmins } from "./admins-mock";
 import { mockActivity } from "./activity-mock";
 import type {
   ActivityOverview,
+  AdminDiscordView,
   UserActivityView,
   ActionResult,
   AdminCandidateView,
@@ -129,6 +130,18 @@ export const adminApi = {
   setTrust(steamId: string, level: TrustLevel): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.setTrust(steamId, level));
     return api.post(`/admin/users/${steamId}/trust`, { level });
+  },
+  discord(steamId: string): Promise<AdminDiscordView> {
+    if (isMock) return mocked(() => mockAdmin.discord(steamId));
+    return api.get(`/admin/users/${steamId}/discord`);
+  },
+  discordUnlink(steamId: string): Promise<ActionResult> {
+    if (isMock) return action(() => mockAdmin.discordUnlink(steamId));
+    return api.post(`/admin/users/${steamId}/discord/unlink`, {});
+  },
+  discordSync(steamId: string): Promise<ActionResult> {
+    if (isMock) return action(() => mockAdmin.discordSync(steamId));
+    return api.post(`/admin/users/${steamId}/discord/sync`, {});
   },
   clearCooldown(steamId: string): Promise<ActionResult> {
     if (isMock) return action(() => mockAdmin.clearCooldown(steamId));

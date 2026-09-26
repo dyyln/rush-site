@@ -24,6 +24,7 @@ import { useLiveData, useNow } from "../../_lib/live";
 import type { AuditEntry, UserDetailView } from "../../_lib/types";
 import { CancelMatchDialog } from "../../_components/CancelMatchDialog";
 import { ActivityCard } from "./ActivityCard";
+import { DiscordCard } from "./DiscordCard";
 import { ConfirmDialog, ErrorPanel, MatchStatus, PageHeader } from "../../_components/parts";
 import styles from "../../admin.module.css";
 
@@ -220,6 +221,8 @@ export default function AdminUserPage() {
                 </dd>
               </dl>
             </Card>
+
+            <DiscordCard steamId={steamId} name={u.user.displayName} now={now} />
 
             <Card title="Bans">
               {u.bans.length === 0 ? (
@@ -443,7 +446,11 @@ function AuditLine({ entry: a, now }: { entry: AuditEntry; now: number }) {
                   ? `Chat message blocked by the filter (${p.code}): ${p.body}`
                   : a.action === "user.cooldown_clear"
                     ? "Queue cooldown cleared"
-                    : a.action;
+                    : a.action === "user.discord_unlink"
+                      ? `Discord unlinked: @${p.username}`
+                      : a.action === "user.discord_sync"
+                        ? `Discord role synced${p.roleGranted ? "" : `, not granted${p.error ? ` (${p.error})` : ""}`}`
+                        : a.action;
   return (
     <span className="stack" style={{ gap: 0 }}>
       <span>{what}</span>

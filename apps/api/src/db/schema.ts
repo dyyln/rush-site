@@ -25,6 +25,7 @@ export { friendRequests, friendships, partyInvites } from "../modules/friends/sc
 export { chatMessages, chatMutes } from "../modules/chat/schema.js"
 export { mapPool } from "../modules/maps/schema.js"
 export { activityEvents, userActivity } from "../modules/activity/schema.js"
+export { discordLinks } from "../modules/discord/schema.js"
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const createdAt = () => ts("created_at").notNull().defaultNow()

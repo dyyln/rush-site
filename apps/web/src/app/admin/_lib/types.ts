@@ -93,6 +93,8 @@ export type AuditAction =
   | "user.unban"
   | "user.trust"
   | "user.cooldown_clear"
+  | "user.discord_unlink"
+  | "user.discord_sync"
   | "flag.set"
   | "flag.delete"
   | "announcement.create"
@@ -291,3 +293,6 @@ export type UserActivityView = {
   avgWaitSec: number | null;
   events: ActivityEvent[];
 };
+
+export type { DiscordLink } from "@/lib/types";
+export type AdminDiscordView = { enabled: boolean; link: import("@/lib/types").DiscordLink | null };

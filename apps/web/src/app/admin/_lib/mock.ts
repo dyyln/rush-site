@@ -4,6 +4,7 @@ import { MOCK_ME, mockSteamId, mockUser, rng } from "@/lib/mock";
 import type {
   AdminEventKind,
   AuditAction,
+  AdminDiscordView,
   AuditEntry,
   BanView,
   EventView,
@@ -54,6 +55,7 @@ type World = {
   used: Set<number>;
   // Players whose cooldown an admin cleared
   cleared?: Set<string>;
+  discordUnlinked?: Set<string>;
 };
 
 let world: World | null = null;
@@ -574,6 +576,41 @@ export const mockAdmin = {
     return Array.from({ length: USER_COUNT }, (_, i) => mockUser(i))
       .slice(0, limit)
       .map((u) => mockHit(u, w));
+  },
+
+  // Every third mock player has Discord linked
+  discord(steamId: string): AdminDiscordView {
+    const w = getWorld();
+    const linked = userIndexOf(steamId) % 3 === 0 && !w.discordUnlinked?.has(steamId);
+    return {
+      enabled: true,
+      link: linked
+        ? {
+            discordId: `70000000000${steamId.slice(-7)}`,
+            username: `player${steamId.slice(-4)}`,
+            globalName: null,
+            avatarUrl: null,
+            discordCreatedAt: "2021-03-14T10:00:00.000Z",
+            linkedAt: "2026-09-20T18:30:00.000Z",
+            roleGranted: userIndexOf(steamId) % 2 === 0,
+            syncedAt: "2026-09-20T18:30:00.000Z",
+            syncError: userIndexOf(steamId) % 2 === 0 ? null : "not_in_server",
+          }
+        : null,
+    };
+  },
+
+  discordUnlink(steamId: string): AuditEntry {
+    const d = mockAdmin.discord(steamId);
+    if (!d.link) throw new Error("No Discord account is linked");
+    (getWorld().discordUnlinked ??= new Set()).add(steamId);
+    return audit("user.discord_unlink", steamId, { discordId: d.link.discordId, username: d.link.username });
+  },
+
+  discordSync(steamId: string): AuditEntry {
+    const d = mockAdmin.discord(steamId);
+    if (!d.link) throw new Error("No Discord account is linked");
+    return audit("user.discord_sync", steamId, { roleGranted: d.link.roleGranted, error: d.link.syncError });
   },
 
   clearCooldown(steamId: string): AuditEntry {
