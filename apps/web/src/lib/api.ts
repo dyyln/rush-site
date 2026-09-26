@@ -8,6 +8,7 @@ import { challengeApi } from "@/components/challenges/api";
 import { friendsApi } from "@/components/friends/api";
 import type {
   DiscordStatus,
+  ExternalRanks,
   Leaderboard,
   MatchDetail,
   MatchHistoryPage,
@@ -214,6 +215,11 @@ export const api = {
   async profile(steamId: string): Promise<Profile> {
     if (isMock) return mocked(/^\d{17}$/.test(steamId) ? mock.mockProfile(steamId) : null, "Player not found");
     return request("GET", `/users/${steamId}/profile`);
+  },
+
+  userRanks(steamId: string): Promise<ExternalRanks> {
+    if (isMock) return mocked(mock.mockExternalRanks(steamId));
+    return request("GET", `/users/${steamId}/ranks`);
   },
 
   async userMatches(steamId: string, opts: { mode?: Mode; cursor?: string; limit?: number } = {}): Promise<MatchHistoryPage> {

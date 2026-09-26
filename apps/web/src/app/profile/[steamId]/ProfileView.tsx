@@ -14,6 +14,7 @@ import { RatingChart } from "@/components/ui/RatingChart";
 import { ProfileNudge } from "@/components/profile/ProfileNudge";
 import { BestMaps } from "@/components/profile/BestMaps";
 import { CupBadges } from "@/components/profile/CupBadges";
+import { ExternalRanks } from "@/components/profile/ExternalRanks";
 import { BadgeEmblem, cadenceFromName } from "@/components/profile/BadgeEmblem";
 import { FormDots } from "@/components/ui/FormDots";
 import { PageTabs, type PageTab } from "@/components/ui/PageTabs";
@@ -98,6 +99,7 @@ function ProfileBody({ profile }: { profile: Profile }) {
                 <span className="visually-hidden">{profile.user.displayName} on Steam (opens in a new tab)</span>
               </a>
             </div>
+            <ExternalRanks steamId={profile.user.steamId} />
             {!own && (
               <div className={styles.heroActions}>
                 <FriendButton target={profile.user} iconClassName={styles.iconAction} />

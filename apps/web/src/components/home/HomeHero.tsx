@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { SignInLink } from "@/components/ui/SignInLink";
+import { SiteTotals } from "@/components/stats/SiteTotals";
 import { useServiceStatus } from "@/components/stats/useServiceStatus";
 import { MODE_COPY } from "@/lib/modes";
 import { RUSH_SCENES } from "@/lib/scenes";
@@ -42,6 +43,7 @@ export function HomeHero() {
           Sign in with Steam
         </SignInLink>
       </div>
+      <SiteTotals />
     </section>
   );
 }

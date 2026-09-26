@@ -374,3 +374,15 @@
     background: rgb(8 7 12 / 0.75);
   }
 }
+/* Tiles for the rated modes link to their mode page */
+a.mode {
+  text-decoration: none;
+}
+a.mode:hover,
+a.mode:focus-visible {
+  border-color: var(--color-accent);
+}
+a.mode:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

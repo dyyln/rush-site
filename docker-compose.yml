@@ -18,6 +18,7 @@ x-api-env: &api-env
   API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3001}
   STEAM_API_KEY: ${STEAM_API_KEY:-}
   FACEIT_API_KEY: ${FACEIT_API_KEY:-}
+  LEETIFY_API_KEY: ${LEETIFY_API_KEY:-}
   # Discord linking, off until every id is set
   DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
   DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}

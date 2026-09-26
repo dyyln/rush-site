@@ -1,5 +1,7 @@
 import { MODES, RANKED_MODES, isRushMode, isTestMode, type Mode } from "@rushsite/shared";
+import Link from "next/link";
 import { MODE_ART, MODE_COPY } from "@/lib/modes";
+import { modePath } from "@/lib/seo";
 import styles from "./home.module.css";
 
 // The three rated modes as picture tiles, Rush first, then the unrated test modes in a smaller row
@@ -36,8 +38,9 @@ export function HomeModes() {
 
 function ModeTile({ mode, small = false }: { mode: Mode; small?: boolean }) {
   const copy = MODE_COPY[mode];
-  return (
-    <div className={styles.mode} data-small={small || undefined}>
+  const href = modePath(mode);
+  const body = (
+    <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className={styles.modeArt} src={MODE_ART[mode]} alt="" />
       <span className={styles.modeShade} />
@@ -47,6 +50,15 @@ function ModeTile({ mode, small = false }: { mode: Mode; small?: boolean }) {
           <span className={styles.modeFormat}>{copy.format}</span> {copy.name}
         </span>
       </span>
+    </>
+  );
+  return href ? (
+    <Link href={href} className={styles.mode} data-small={small || undefined}>
+      {body}
+    </Link>
+  ) : (
+    <div className={styles.mode} data-small={small || undefined}>
+      {body}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import type { AppContext } from "../../context.js"
 import { badges, bans, matchKills, matchPlayers, matches, ratingEvents, ratings, tournaments, users } from "../../db/schema.js"
 import { badRequest, notFound } from "../../lib/errors.js"
 import { matchHistory } from "./history.js"
+import { ExternalRanksService } from "./external-ranks.js"
 import { globalRank, namePattern } from "./rank.js"
 
 const SteamIdParam = z.string().regex(/^\d{17}$/)
@@ -31,6 +32,11 @@ const HISTORY_POINTS = 200
 const RECENT_MATCHES = 20
 
 export const notBanned = sql`not exists (select 1 from ${bans} where ${bans.steamId} = ${ratings.steamId} and ${bans.revokedAt} is null and (${bans.expiresAt} is null or ${bans.expiresAt} > now()))`
+
+const TOTALS_KEY = "stats:totals"
+
+// Registered players and matches played to the end
+export type SiteTotals = { players: number; matches: number }
 
 export async function modeStats(ctx: AppContext): Promise<ModeStatsPayload> {
   const rows = await ctx.db
@@ -72,6 +78,18 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
   })
 
   app.get("/stats/modes", async () => modeStats(ctx))
+
+  // Site wide counts for the home and play pages. Cached briefly since every guest asks
+  app.get("/stats/totals", async (_req, reply) => {
+    reply.header("cache-control", "public, max-age=60")
+    const hit = await ctx.redis.get(TOTALS_KEY)
+    if (hit) return JSON.parse(hit) as SiteTotals
+    const [p] = await ctx.db.select({ n: sql<number>`count(*)::int` }).from(users)
+    const [m] = await ctx.db.select({ n: sql<number>`count(*)::int` }).from(matches).where(eq(matches.status, "finished"))
+    const totals: SiteTotals = { players: p?.n ?? 0, matches: m?.n ?? 0 }
+    await ctx.redis.set(TOTALS_KEY, JSON.stringify(totals), "EX", 60)
+    return totals
+  })
 
   // Global per mode. Players need the minimum match count to place
   app.get("/leaderboard/:mode", async (req) => {
@@ -120,6 +138,17 @@ export function registerStatsRoutes(app: FastifyInstance, ctx: AppContext): void
         wins: r.wins,
       })),
     }
+  })
+
+  // FACEIT, Premier and Wingman ranks. Separate from the profile so a slow Leetify never holds it up
+  const external = new ExternalRanksService(ctx.db, ctx.redis, ctx.fetch, ctx.log, ctx.env.LEETIFY_API_KEY, ctx.faceit)
+  app.get("/users/:steamId/ranks", async (req, reply) => {
+    const id = SteamIdParam.safeParse((req.params as { steamId: string }).steamId)
+    if (!id.success) throw notFound("user_not_found")
+    const [user] = await ctx.db.select({ steamId: users.steamId }).from(users).where(eq(users.steamId, id.data))
+    if (!user) throw notFound("user_not_found")
+    reply.header("cache-control", "public, max-age=600")
+    return external.get(id.data)
   })
 
   app.get("/users/:steamId/profile", async (req) => {

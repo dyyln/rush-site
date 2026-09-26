@@ -22,7 +22,14 @@ export function visibleStatus(s: ServiceStatus): ServiceStatus {
   return { ...s, modes: s.modes.filter((m) => m.reason !== "disabled") };
 }
 
+// Registered players and matches played to the end
+export type SiteTotals = { players: number; matches: number };
+
 export const statsApi = {
+  async totals(): Promise<SiteTotals> {
+    if (isMock) return mockCall(() => ({ players: 1284, matches: 5317 }), 200);
+    return api.get<SiteTotals>("/stats/totals");
+  },
   async status(): Promise<ServiceStatus> {
     return visibleStatus(isMock ? await mockCall(mockStatus, 200) : await api.get<ServiceStatus>("/status"));
   },

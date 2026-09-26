@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteTotals } from "@/components/stats/SiteTotals";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, TIERS, trustAtLeast, type Mode } from "@rushsite/shared";
@@ -177,6 +178,8 @@ export function PlayView() {
               </fieldset>
             </details>
           )}
+
+          <SiteTotals variant="strip" />
 
           {cooldown && play.queue.cooldownUntil && <CooldownLine until={play.queue.cooldownUntil} cooldown={play.queue.cooldown} />}
           {user && !isLeader && (

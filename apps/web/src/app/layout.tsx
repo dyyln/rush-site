@@ -3,6 +3,7 @@ import { Chakra_Petch, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { BRAND_NAME } from "@rushsite/shared";
 import { Backdrop } from "@/components/layout/Backdrop";
 import { Dock } from "@/components/layout/Dock";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { TopBar } from "@/components/layout/TopBar";
 import { PageTracker } from "@/components/activity/PageTracker";
 import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
@@ -67,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <NotifyListener />
             <PageTracker />
             <main id="main">{children}</main>
+            <SiteFooter />
             <Dock />
             <ChatSidebar />
           </ToastProvider>

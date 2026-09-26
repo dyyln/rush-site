@@ -65,6 +65,8 @@ export const RATE_RULES: Record<string, Rule> = {
   "GET /leaderboard/:mode/distribution": { max: 60, timeWindow: MINUTE },
   "GET /users/:steamId/profile": { max: 60, timeWindow: MINUTE },
   "GET /users/:steamId/matches": { max: 60, timeWindow: MINUTE },
+  // Each miss costs a Leetify call
+  "GET /users/:steamId/ranks": { max: 30, timeWindow: MINUTE },
   // Admin name search runs a contains scan over users
   "GET /admin/users": { max: 30, timeWindow: MINUTE },
   // Guests poll history. The chat service also limits posts per user

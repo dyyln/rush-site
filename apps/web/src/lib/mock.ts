@@ -23,6 +23,7 @@ import type {
   Bracket,
   BracketMatch,
   DiscordStatus,
+  ExternalRanks,
   EntryView,
   Leaderboard,
   LeaderboardRow,
@@ -1267,5 +1268,17 @@ export function mockDiscord(linked?: boolean): DiscordStatus {
           syncError: null,
         }
       : null,
+  };
+}
+
+// Varies by player so the profile shows full, partial and empty rows
+export function mockExternalRanks(steamId: string): ExternalRanks {
+  const n = Number(steamId.slice(-2)) || 0;
+  if (n % 4 === 3) return { faceit: null, premier: null, wingman: null, leetify: null };
+  return {
+    faceit: n % 4 === 2 ? null : { level: 1 + (n % 10), elo: 800 + n * 25, nickname: `mock${n}` },
+    premier: n % 3 === 0 ? null : 4000 + n * 280,
+    wingman: 1 + (n % 18),
+    leetify: { url: `https://leetify.com/app/profile/${steamId}` },
   };
 }

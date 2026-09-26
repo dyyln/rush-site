@@ -63,6 +63,8 @@ export type AppContext = {
   storage: DemoStorage
   presence: PresenceService
   activity: ActivityService
+  // Undefined without FACEIT_API_KEY
+  faceit: FaceitLookup | undefined
   discord: DiscordService
   friends: FriendsService
   snapshots: SnapshotStore
@@ -263,6 +265,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     storage,
     presence,
     activity,
+    faceit,
     discord,
     friends,
     snapshots,

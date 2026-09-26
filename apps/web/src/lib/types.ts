@@ -183,3 +183,12 @@ export type DiscordLink = {
 };
 
 export type DiscordStatus = { enabled: boolean; inviteUrl: string | null; link: DiscordLink | null };
+
+// FACEIT from our own lookup, Premier and Wingman from Leetify
+export type ExternalRanks = {
+  faceit: { level: number | null; elo: number | null; nickname: string | null } | null;
+  premier: number | null;
+  // 1 is Silver I, 18 is Global Elite
+  wingman: number | null;
+  leetify: { url: string } | null;
+};
