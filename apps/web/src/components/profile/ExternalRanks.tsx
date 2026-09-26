@@ -40,10 +40,10 @@ function premierColor(rating: number): string {
   return [...PREMIER_BANDS].reverse().find((b) => rating >= b.min)!.color;
 }
 
-type TileProps = { name: string; href?: string | null; title: string; children: React.ReactNode; sub?: string };
+type TileProps = { href?: string | null; title: string; children: React.ReactNode; sub?: string };
 
-// The source name centred above its rank icon. Only the icon links out
-function RankTile({ name, href, title, children, sub }: TileProps) {
+// One rank icon. The title names the source. Only the icon links out
+function RankTile({ href, title, children, sub }: TileProps) {
   const icon = (
     <>
       {children}
@@ -52,7 +52,6 @@ function RankTile({ name, href, title, children, sub }: TileProps) {
   );
   return (
     <div className={styles.tile}>
-      <span className={styles.name}>{name}</span>
       {href ? (
         <a className={styles.icon} href={href} target="_blank" rel="noopener noreferrer" title={title} aria-label={title}>
           {icon}
@@ -83,19 +82,18 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
         {level && (
           <li>
             <RankTile
-              name="FACEIT"
               href={faceitUrl ?? leetify?.url}
               title={`FACEIT level ${level}${faceit?.elo ? `, ${faceit.elo} Elo` : ""}`}
               sub={faceit?.elo ? String(faceit.elo) : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/faceit/${level}.svg`} alt="" width={24} height={24} />
+              <img src={`/ranks/faceit/${level}.svg`} alt="" width={32} height={32} />
             </RankTile>
           </li>
         )}
         {premier !== null && (
           <li>
-            <RankTile name="Premier" href={leetify?.url} title={`Premier CS Rating ${premier.toLocaleString("en-GB")}${leetify ? ". View on Leetify" : ""}`}>
+            <RankTile href={leetify?.url} title={`Premier CS Rating ${premier.toLocaleString("en-GB")}${leetify ? ". View on Leetify" : ""}`}>
               <span className={styles.premier} style={{ "--band": premierColor(premier) } as React.CSSProperties}>
                 {premier.toLocaleString("en-GB")}
               </span>
@@ -104,9 +102,9 @@ export function ExternalRanks({ steamId }: { steamId: string }) {
         )}
         {group && (
           <li>
-            <RankTile name="Wingman" href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}${leetify ? ". View on Leetify" : ""}`}>
+            <RankTile href={leetify?.url} title={`Wingman rank ${WINGMAN[group - 1]}${leetify ? ". View on Leetify" : ""}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/ranks/wingman/${group}.webp`} alt="" width={56} height={23} />
+              <img src={`/ranks/wingman/${group}.webp`} alt="" width={80} height={33} />
             </RankTile>
           </li>
         )}
