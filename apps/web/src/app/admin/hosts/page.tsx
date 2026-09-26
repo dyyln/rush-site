@@ -10,6 +10,7 @@ import { useLiveData, useNow } from "../_lib/live";
 import type { HostView } from "../_lib/types";
 import { ErrorPanel, Meter, PageHeader } from "../_components/parts";
 import styles from "../admin.module.css";
+import { DemoRecording } from "./DemoRecording";
 import { GsltPool } from "./GsltPool";
 
 export default function AdminHostsPage() {
@@ -44,6 +45,7 @@ export default function AdminHostsPage() {
           ))}
         </div>
       )}
+      <DemoRecording />
       <GsltPool hosts={hosts} />
     </>
   );

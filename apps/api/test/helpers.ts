@@ -1,5 +1,5 @@
 import { PGlite } from "@electric-sql/pglite"
-import type { AgentHealth, StartServerRequest, StartServerResponse } from "@rushsite/shared"
+import { DEMO_RECORDING_FLAG, type AgentHealth, type StartServerRequest, type StartServerResponse } from "@rushsite/shared"
 import { drizzle } from "drizzle-orm/pglite"
 import { migrate } from "drizzle-orm/pglite/migrator"
 import type { Redis } from "ioredis"
@@ -109,6 +109,8 @@ export type HarnessOptions = {
   plugins?: { tournaments?: boolean; admin?: boolean }
   surgeDriver?: import("@rushsite/shared").ServerDriver | null
   discordApi?: import("../src/modules/discord/client.js").DiscordApi | null
+  // Turns the admin demo recording setting on. It is off by default like in production
+  demoRecording?: boolean
 }
 
 const offline = (async () => {
@@ -140,6 +142,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     surgeDriver: opts.surgeDriver ?? null,
     discordApi: opts.discordApi ?? null,
   })
+  if (opts.demoRecording) await ctx.flags.set(DEMO_RECORDING_FLAG, true, null, null)
   return { ctx, db, redis, notifier, agent, clock, env, close }
 }
 
@@ -168,6 +171,7 @@ export async function createAppHarness(opts: HarnessOptions = {}) {
     plugins: opts.plugins ?? { tournaments: false, admin: false },
   })
   await app.ready()
+  if (opts.demoRecording) await ctx.flags.set(DEMO_RECORDING_FLAG, true, null, null)
   return {
     app,
     ctx,

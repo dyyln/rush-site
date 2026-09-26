@@ -1,3 +1,4 @@
+import { DEMO_RECORDING_FLAG } from "@rushsite/shared"
 import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, createTestDb, makeUsers, startDuel, withServers } from "../../../test/helpers.js"
@@ -60,6 +61,8 @@ describe("match extras over HTTP", () => {
     h.notifier.clear()
     h.ctx.storage = disabled
     await withServers({ ctx: h.ctx, env: h.ctx.env })
+    // These cases check demo rows, so recording is on. The table truncate above removed the flag
+    await h.ctx.flags.set(DEMO_RECORDING_FLAG, true, null, null)
   })
 
   async function post(matchId: string, event: unknown) {

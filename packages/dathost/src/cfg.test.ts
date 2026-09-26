@@ -39,7 +39,7 @@ describe("match.json", () => {
     }
     const json = PluginMatchConfigSchema.parse(buildMatchJson(req))
     expect(json.series?.maps.map((m) => m.id)).toEqual(maps.map((m) => m.id))
-    expect(json.series?.demoUploads[2]!.key).toBe("k_m3.dem")
+    expect(json.series?.demoUploads?.[2]!.key).toBe("k_m3.dem")
     const { series: _s, ...single } = req
     expect(buildMatchJson(single)).not.toHaveProperty("series")
   })
@@ -71,6 +71,34 @@ describe("match.json", () => {
     const bare = buildMatchJson(plain)
     expect(bare).not.toHaveProperty("brand")
     expect(bare).not.toHaveProperty("slug")
+  })
+  it("writes recordDemo false with a blank upload when recording is off", () => {
+    const maps = getModeConfig("aim1v1").maps.slice(0, 3)
+    const base = {
+      matchId: "5f0c7a3e-1b2c-4d5e-8f90-1234567890ab",
+      mode: "aim1v1" as const,
+      map: maps[0]!,
+      gslt: "",
+      password: "abc123",
+      allowedSteamIds: ["76561198000000001", "76561198000000002"],
+      teams: [
+        { name: "A", steamIds: ["76561198000000001"] },
+        { name: "B", steamIds: ["76561198000000002"] },
+      ],
+      webhookUrl: "https://api.test/webhooks/match/x",
+      webhookSecret: "s".repeat(32),
+      cs2: resolveLaunch("aim1v1", maps[0]!),
+    }
+    const off: StartServerRequest = { ...base, recordDemo: false, series: { bestOf: 3, maps, startMapNumber: 1, wins: { A: 0, B: 0 } } }
+    const json = PluginMatchConfigSchema.parse(buildMatchJson(off))
+    expect(json.recordDemo).toBe(false)
+    expect(json.demoUpload).toEqual({ bucket: "", key: "", presignedPutUrl: "" })
+    expect(json.series).not.toHaveProperty("demoUploads")
+
+    const on: StartServerRequest = { ...base, demoUpload: { bucket: "b", key: "k.dem", presignedPutUrl: "https://s3.test/1" } }
+    const onJson = buildMatchJson(on)
+    expect(onJson).not.toHaveProperty("recordDemo")
+    expect(onJson.demoUpload.presignedPutUrl).toBe("https://s3.test/1")
   })
 })
 

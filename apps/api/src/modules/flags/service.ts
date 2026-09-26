@@ -1,4 +1,4 @@
-import { MODES, queueOpenFlag, type Announcement, type AnnouncementLevel, type FeatureFlag, type Mode } from "@rushsite/shared"
+import { DEMO_RECORDING_FLAG, MODES, queueOpenFlag, type Announcement, type AnnouncementLevel, type FeatureFlag, type Mode } from "@rushsite/shared"
 import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm"
 import type { Db } from "../../db/client.js"
 import { announcements, featureFlags } from "./schema.js"
@@ -9,6 +9,8 @@ type AnnouncementRow = typeof announcements.$inferSelect
 function flagView(r: FlagRow): FeatureFlag {
   return { key: r.key, enabled: r.enabled, value: r.value ?? null, updatedBy: r.updatedBy, updatedAt: r.updatedAt.toISOString() }
 }
+
+const SERVER_FLAGS = new Set([DEMO_RECORDING_FLAG])
 
 // Reads are served from a short in-process cache so queue joins do not hit Postgres.
 // Writes on this instance clear it at once, other instances catch up within the ttl.
@@ -53,11 +55,16 @@ export class FlagService {
     return (await this.all()).get(key) ?? null
   }
 
-  // Enabled flags only, for GET /flags
+  // Enabled flags only, for GET /flags. Server side settings are left out
   async publicFlags(): Promise<Record<string, unknown>> {
     const out: Record<string, unknown> = {}
-    for (const f of (await this.all()).values()) if (f.enabled) out[f.key] = f.value ?? true
+    for (const f of (await this.all()).values()) if (f.enabled && !SERVER_FLAGS.has(f.key)) out[f.key] = f.value ?? true
     return out
+  }
+
+  // Off unless an admin switched it on. Read on every server allocation
+  async demoRecording(): Promise<boolean> {
+    return (await this.get(DEMO_RECORDING_FLAG))?.enabled ?? false
   }
 
   async queueOpen(mode: Mode): Promise<boolean> {

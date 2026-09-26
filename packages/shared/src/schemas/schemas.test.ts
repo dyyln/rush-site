@@ -59,6 +59,16 @@ describe("schemas", () => {
     expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, workshopId: "123" } })).toThrow()
     expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, execCfg: "../x.cfg" } })).toThrow()
     expect(() => StartServerRequestSchema.parse({ ...req, cs2: { ...req.cs2, extraArgs: ["+map de_dust2"] } })).toThrow()
+
+    // demoUpload may only be left out with recordDemo false
+    const { demoUpload: _d, ...noDemo } = req
+    expect(StartServerRequestSchema.safeParse(noDemo).success).toBe(false)
+    expect(StartServerRequestSchema.safeParse({ ...noDemo, recordDemo: true }).success).toBe(false)
+    expect(StartServerRequestSchema.parse({ ...noDemo, recordDemo: false }).recordDemo).toBe(false)
+    const maps = [req.map, req.map, req.map]
+    const series = { bestOf: 3, maps, startMapNumber: 1, wins: {} }
+    expect(StartServerRequestSchema.safeParse({ ...req, series }).success).toBe(false)
+    expect(StartServerRequestSchema.safeParse({ ...noDemo, recordDemo: false, series }).success).toBe(true)
   })
 
   it("parses match events", () => {

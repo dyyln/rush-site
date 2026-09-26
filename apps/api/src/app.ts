@@ -210,6 +210,7 @@ export function adminOptions(ctx: AppContext) {
     onQueueFlagChanged: () => publishServiceStatus(ctx),
     resolveVanity: (vanity: string) => resolveVanity(ctx, vanity),
     mapPool: ctx.maps,
+    demoStorageConfigured: ctx.storage.enabled,
     notifyQueueStatus: (steamId: string) => ctx.queue.notifyParty([steamId]),
     fetchWorkshop: (workshopId: string) =>
       fetchWorkshopItem(ctx.fetch, workshopId, async (id) => (await ctx.steam.playerSummaries([id]))[0]?.personaname ?? null),

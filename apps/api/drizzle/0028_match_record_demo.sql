@@ -1,0 +1,1 @@
+ALTER TABLE "matches" ADD COLUMN "record_demo" boolean DEFAULT true NOT NULL;

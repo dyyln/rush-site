@@ -17,6 +17,7 @@ import type {
   AdminListView,
   AdminView,
   BuildInfo,
+  DemoRecordingView,
   EventView,
   GsltAddResult,
   GsltPoolView,
@@ -229,6 +230,15 @@ export const adminApi = {
   removeGslt(id: string): Promise<{ ok: true; audit: AuditEntry }> {
     if (isMock) return mocked(() => mockGslt.remove(id));
     return api.del(`/admin/gslt/${encodeURIComponent(id)}`);
+  },
+
+  demoRecording(): Promise<DemoRecordingView> {
+    if (isMock) return mocked(() => mockOps.demoRecording());
+    return api.get("/admin/demo-recording");
+  },
+  setDemoRecording(enabled: boolean): Promise<{ setting: DemoRecordingView; audit: AuditEntry }> {
+    if (isMock) return mocked(() => mockOps.setDemoRecording(enabled));
+    return api.put("/admin/demo-recording", { enabled });
   },
 
   admins(): Promise<AdminListView> {

@@ -61,7 +61,8 @@ type StartServerRequest = {
   teams: { name: string; steamIds: string[]; displayName?: string; side?: "ct" | "t" }[]   // side is optional, teams[0] defaults to CT and teams[1] to T, the plugin refuses two teams on one side
   webhookUrl: string           // api endpoint the plugin posts to
   webhookSecret: string
-  demoUpload: { bucket: string; key: string; presignedPutUrl: string }
+  recordDemo?: boolean         // false: no tv_record and no upload on any map. Absent means record, as older APIs send
+  demoUpload?: { bucket: string; key: string; presignedPutUrl: string }   // required unless recordDemo is false, left out when it is
   cs2: { gameType: number; gameMode: number; execCfg: string; extraArgs?: string[]; workshopId?: string; mapName?: string }
   // Required. Built by resolveLaunch(mode, map) from MODE_CONFIGS, with exactly one of workshopId or mapName matching map.
   // This is the only launch table. The agent refuses (400) an execCfg it does not ship, and DatHost maps from the same block
@@ -74,10 +75,12 @@ type SeriesConfig = {
   maps: MapEntry[]             // full ordered list, length bestOf, each with workshopId or mapName
   startMapNumber: number       // counting from 1. Above 1 only when a series resumes after a crash
   wins: Record<string, number> // maps each team name already won before startMapNumber, normally zeros
-  demoUploads: DemoUpload[]    // one per map, index mapNumber - 1
+  demoUploads?: DemoUpload[]   // one per map, index mapNumber - 1. Required unless recordDemo is false, left out when it is
 }
 type StartServerResponse = { matchId: string; ip: string; port: number; connect: string }
 ```
+
+Demo recording follows the admin setting `demo.recording` (a `feature_flags` row, missing means off), read on every allocation. The API sends `recordDemo: false` with no `demoUpload` or `demoUploads` when it is off, and presigns nothing. The request is otherwise unchanged when it is on, so `recordDemo` is never sent as true. A request or match.json without `recordDemo` records, so an older API works with a newer agent and plugin. Deploy the agent before or with the API: an older agent refuses a series without `demoUploads`.
 
 If a CS2 process crashes, the agent POSTs `{ event: { type: "match_abandoned", reason: "server_crashed", missingSteamIds: [] } }` to the match's webhookUrl, signed with webhookSecret like the plugin does.
 
@@ -112,7 +115,8 @@ type SeriesMapResult = { mapNumber: number; mapId: string; winnerTeam: string; s
 `mapNumber` counts from 1 and is left out on single map matches. `kill` also takes an optional `mapNumber`. Scores have no upper bound. A tied aim map, and every series map, goes to overtime so a map can end 16-14. Rush follows Valve's rules.
 
 The plugin reads its match config from `match.json` written by the agent next to the server cfg:
-`{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, demoUpload, winCondition, series?, rushRooms?, brand?, slug? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series`, `rushRooms`, `brand` and `slug` are the StartServerRequest fields, copied as is. Both the Go agent and the DatHost driver write these.
+`{ matchId, mode, map, allowedSteamIds, teams, password, webhookUrl, webhookSecret, recordDemo?, demoUpload, winCondition, series?, rushRooms?, brand?, slug? }`. `map` is the MapEntry the server starts on (the plugin reads its loadout). `series`, `rushRooms`, `brand` and `slug` are the StartServerRequest fields, copied as is. Both the Go agent and the DatHost driver write these.
+With recording off both writers put `recordDemo: false` and a blank `demoUpload` (`{ bucket: "", key: "", presignedPutUrl: "" }`) in match.json and leave out `series.demoUploads`. The blank upload keeps older plugins, which require the field, starting the match. The plugin then skips `tv_record`, `tv_stoprecord` and the upload on every map, still sets `tv_delay` so series map changes stay short, logs `demo recording is off for this match` once and never sends `demo_uploaded`. `map_end` and `match_end` report `demoUploaded: false`. The API stores no `demos` rows for such a match (`matches.record_demo` is false), skips the DatHost demo fetch and stops the server 15 seconds after the end instead of waiting `DEMO_WAIT_SEC` for an upload.
 `brand.name` is the chat prefix (`[DuelRush]` when absent). At match end, and at series end, the plugin prints the final score and `<brand.siteUrl>/matches/<slug or matchId>`, waits `rushsite_match_end_kick_delay` seconds (default 10) and then kicks everyone with the score in the kick reason. An invalid or missing `siteUrl` only drops the link. Team `displayName` is used in chat, otherwise `Team <name>`.
 `rushRooms` is written by the API after the room veto as 7 ids castle to castle (401 first, 301 last). The plugin also accepts the 5 ids for slots 1 to 5, and a `series.maps[n].rushRooms` wins over the top level one. `series.maps[n].ctTeam` is the team name that plays CT on that map, and the other team plays T. It wins over `teams[].side`, and a value that names no team is ignored with a warning. Slot 3 must be a start room (101 to 104) and slots 1, 2, 4 and 5 mid rooms (201 to 212). See `docs/RUSH-ROOM-VETO.md` and the plugin README.
 In Rush the plugin holds warmup until every player is on their team's side, redirects wrong joins, and kicks after 3 refusals. It writes `match_state.json` beside match.json so a hot reload with the same matchId resumes without a second `server_ready`.
@@ -175,6 +179,8 @@ The api trust module owns the numeric trust scale and passes weights via `signal
 
 Access: session steamId must be in `ADMIN_STEAM_IDS` (comma separated env). Non-admins get 404, not 403.
 REST under `/admin`: `GET /admin/overview`, `GET /admin/queue`, `GET /admin/matches?status=`, `GET /admin/matches/:id`, `GET /admin/hosts`, `GET /admin/users/:steamId`, `GET /admin/events?limit=` (recent webhooks and errors), `POST /admin/queue/:ticketId/remove`, `POST /admin/matches/:id/cancel`, `POST /admin/users/:steamId/ban`, `POST /admin/users/:steamId/unban`, `POST /admin/users/:steamId/trust`, `POST /admin/users/:steamId/cooldown/clear` (ends running cooldowns, 409 `no_cooldown` when none). `GET /admin/users?q=` is a name search (2 to 64 characters, contains match from 3, digits also match SteamID64 prefixes, max 20 rows, 30 per minute). `GET /admin/users/:steamId` also returns `state: { queue, match }` and `adminName` on audit rows.
+
+Demo recording: `GET /admin/demo-recording` -> `{ enabled, s3Configured, updatedBy, updatedAt }` and `PUT /admin/demo-recording { enabled }` -> `{ setting, audit }`, audited as `demo_recording.set`. `s3Configured` is a boolean only, never the endpoint or keys. The setting is the `demo.recording` feature flag, off when missing, and `GET /flags` leaves it out. The toggle sits on the admin Hosts page.
 
 Match history: `GET /users/:steamId/matches?limit=&mode=&cursor=` returns `{ matches, nextCursor }`, newest first by (created_at, id). The cursor is opaque. The profile returns the first 20 as `recentMatches` with `recentMatchesCursor`. Rows carry `slug`, and a series has `bestOf`, the played `maps` and scores in maps won.
 WS: admins additionally receive `admin_event` messages `{ kind: queue|match|host|webhook|error|user, payload }` for live refresh. Unban does not restore rolled-back ratings.

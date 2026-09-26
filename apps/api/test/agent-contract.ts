@@ -77,7 +77,8 @@ function validateSeriesLikeAgent(req: StartServerRequest): void {
   const s = req.series
   if (!s) return
   if (s.bestOf < 2 || s.bestOf > 7) bad("series.bestOf must be 2 to 7")
-  if (s.maps.length !== s.bestOf || s.demoUploads.length !== s.bestOf) bad("series needs bestOf maps and demoUploads")
+  if (s.maps.length !== s.bestOf) bad("series needs bestOf maps and demoUploads")
+  if (req.recordDemo !== false && s.demoUploads?.length !== s.bestOf) bad("series needs bestOf maps and demoUploads")
   if (s.startMapNumber < 1 || s.startMapNumber > s.bestOf) bad("series.startMapNumber is out of range")
   s.maps.forEach((m, i) => {
     if (!m.id) bad(`series map ${i + 1} has no id`)

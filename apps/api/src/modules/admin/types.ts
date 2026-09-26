@@ -180,6 +180,8 @@ export interface AdminPluginOptions {
   notifyQueueStatus?(steamId: string): Promise<void>
   // Discord link routes answer 404 without it
   discord?: DiscordLike
+  // True when S3 demo storage is configured. Shown next to the demo recording setting
+  demoStorageConfigured?: boolean
   now?: () => Date
 }
 
@@ -365,6 +367,7 @@ export type AuditAction =
   | "gslt.add"
   | "gslt.update"
   | "gslt.remove"
+  | "demo_recording.set"
 
 export type GsltStatus = "free" | "in_use" | "invalid"
 

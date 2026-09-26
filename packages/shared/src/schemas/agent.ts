@@ -19,6 +19,11 @@ export const DemoUploadSchema = z.object({
 })
 export type DemoUpload = z.infer<typeof DemoUploadSchema>
 
+// Written into match.json in place of demoUpload when recording is off.
+// Older plugins require the field and accept an empty upload url
+export const BLANK_DEMO_UPLOAD = { bucket: "", key: "", presignedPutUrl: "" } as const
+const BlankDemoUploadSchema = z.object({ bucket: z.literal(""), key: z.literal(""), presignedPutUrl: z.literal("") })
+
 // A best-of series played on one server. Absent for single map matches
 export const SeriesConfigSchema = z
   .object({
@@ -29,10 +34,10 @@ export const SeriesConfigSchema = z
     startMapNumber: z.number().int().positive(),
     // Maps each team already won before startMapNumber, keyed by team name
     wins: z.record(z.string(), z.number().int().nonnegative()),
-    // One upload per map, index is mapNumber - 1
-    demoUploads: z.array(DemoUploadSchema).min(2),
+    // One upload per map, index is mapNumber - 1. Left out when recordDemo is false
+    demoUploads: z.array(DemoUploadSchema).min(2).optional(),
   })
-  .refine((s) => s.maps.length === s.bestOf && s.demoUploads.length === s.bestOf, "maps and demoUploads need bestOf entries")
+  .refine((s) => s.maps.length === s.bestOf && (!s.demoUploads || s.demoUploads.length === s.bestOf), "maps and demoUploads need bestOf entries")
   .refine((s) => s.startMapNumber <= s.bestOf, "startMapNumber is past the last map")
 export type SeriesConfig = z.infer<typeof SeriesConfigSchema>
 
@@ -46,27 +51,33 @@ export const MatchBrandSchema = z.object({
 })
 export type MatchBrand = z.infer<typeof MatchBrandSchema>
 
-export const StartServerRequestSchema = z.object({
-  matchId: UuidSchema,
-  mode: ModeSchema,
-  map: MapEntrySchema,
-  gslt: z.string(),   // empty on DatHost when the pool is dry, the Hetzner agent refuses an empty token
-  password: z.string().min(1),
-  allowedSteamIds: z.array(SteamId64Schema).min(1),
-  teams: z.array(TeamRosterSchema).length(2),
-  webhookUrl: z.url(),
-  webhookSecret: z.string().min(16),
-  demoUpload: DemoUploadSchema,
-  // Built by resolveLaunch from the mode config and map. Drivers launch from this block only
-  cs2: Cs2StartSchema,
-  // map, cs2 and demoUpload describe the map at series.startMapNumber
-  series: SeriesConfigSchema.optional(),
-  // Rush room ids from the room veto, T castle first. Passed through to match.json
-  rushRooms: RushRoomsSchema.optional(),
-  // Passed through to match.json for the chat prefix and the match link at siteUrl/matches/<slug>
-  brand: MatchBrandSchema.optional(),
-  slug: MatchSlugSchema.optional(),
-})
+export const StartServerRequestSchema = z
+  .object({
+    matchId: UuidSchema,
+    mode: ModeSchema,
+    map: MapEntrySchema,
+    gslt: z.string(), // empty on DatHost when the pool is dry, the Hetzner agent refuses an empty token
+    password: z.string().min(1),
+    allowedSteamIds: z.array(SteamId64Schema).min(1),
+    teams: z.array(TeamRosterSchema).length(2),
+    webhookUrl: z.url(),
+    webhookSecret: z.string().min(16),
+    // False turns off tv_record and the upload for every map. Absent means record, for older senders
+    recordDemo: z.boolean().optional(),
+    // Required unless recordDemo is false
+    demoUpload: DemoUploadSchema.optional(),
+    // Built by resolveLaunch from the mode config and map. Drivers launch from this block only
+    cs2: Cs2StartSchema,
+    // map, cs2 and demoUpload describe the map at series.startMapNumber
+    series: SeriesConfigSchema.optional(),
+    // Rush room ids from the room veto, T castle first. Passed through to match.json
+    rushRooms: RushRoomsSchema.optional(),
+    // Passed through to match.json for the chat prefix and the match link at siteUrl/matches/<slug>
+    brand: MatchBrandSchema.optional(),
+    slug: MatchSlugSchema.optional(),
+  })
+  .refine((r) => r.recordDemo === false || !!r.demoUpload, "demoUpload is required when recording")
+  .refine((r) => r.recordDemo === false || !r.series || !!r.series.demoUploads, "series.demoUploads is required when recording")
 export type StartServerRequest = z.infer<typeof StartServerRequestSchema>
 
 export const StartServerResponseSchema = z.object({
@@ -99,7 +110,10 @@ export const PluginMatchConfigSchema = z.object({
   password: z.string().min(1),
   webhookUrl: z.url(),
   webhookSecret: z.string().min(16),
-  demoUpload: DemoUploadSchema,
+  // False means no demo is recorded or uploaded. Absent means record
+  recordDemo: z.boolean().optional(),
+  // Blank when recordDemo is false
+  demoUpload: z.union([DemoUploadSchema, BlankDemoUploadSchema]),
   winCondition: WinConditionSchema,
   series: SeriesConfigSchema.optional(),
   // The plugin ignores this until the server can load chosen rooms

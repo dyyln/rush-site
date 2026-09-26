@@ -151,7 +151,14 @@ func ModeCfg(p Params) ([]byte, error) {
 }
 
 // PluginJSON renders match.json for the plugin.
+// With recording off the upload targets are dropped and recordDemo false is written.
 func PluginJSON(p Params) ([]byte, error) {
+	series := p.Req.Series
+	if !p.Req.RecordsDemo() && series != nil {
+		s := *series
+		s.DemoUploads = nil
+		series = &s
+	}
 	pc := PluginConfig{
 		MatchID:         p.Req.MatchID,
 		Mode:            p.Req.Mode,
@@ -163,10 +170,15 @@ func PluginJSON(p Params) ([]byte, error) {
 		WebhookSecret:   p.Req.WebhookSecret,
 		DemoUpload:      p.Req.DemoUpload,
 		WinCondition:    p.Spec.WinCondition,
-		Series:          p.Req.Series,
+		Series:          series,
 		RushRooms:       p.Req.RushRooms,
 		Brand:           p.Req.Brand,
 		Slug:            p.Req.Slug,
+	}
+	if !p.Req.RecordsDemo() {
+		off := false
+		pc.RecordDemo = &off
+		pc.DemoUpload = DemoUpload{}
 	}
 	return json.MarshalIndent(pc, "", "  ")
 }

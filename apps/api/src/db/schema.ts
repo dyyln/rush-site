@@ -220,6 +220,8 @@ export const matches = pgTable(
     endedAt: ts("ended_at"),
     // Set once the server is stopped and the slot and GSLT are free again
     serverReleasedAt: ts("server_released_at"),
+    // Whether the server was told to record a demo. Set on allocation from the admin setting
+    recordDemo: boolean("record_demo").notNull().default(true),
     cancelReason: text("cancel_reason"),
     ratingApplied: boolean("rating_applied").notNull().default(false),
     createdAt: createdAt(),

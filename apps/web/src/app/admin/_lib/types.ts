@@ -112,7 +112,16 @@ export type AuditAction =
   | "map.remove"
   | "gslt.add"
   | "gslt.update"
-  | "gslt.remove";
+  | "gslt.remove"
+  | "demo_recording.set";
+
+// s3Configured is a yes or no from the api. It never names the endpoint or keys
+export type DemoRecordingView = {
+  enabled: boolean;
+  s3Configured: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
+};
 
 export type GsltStatus = "free" | "in_use" | "invalid";
 

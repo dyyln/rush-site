@@ -2,7 +2,7 @@
 import { MODES, queueOpenFlag, type Mode } from "@rushsite/shared";
 import { MOCK_ME, mockSteamId, rng } from "@/lib/mock";
 import { MockNotFound } from "./mock";
-import type { Announcement, AuditAction, AuditEntry, FeatureFlag, MetricPoint, MetricsRange, MetricsView, ResolvedProfile } from "./types";
+import type { Announcement, AuditAction, AuditEntry, DemoRecordingView, FeatureFlag, MetricPoint, MetricsRange, MetricsView, ResolvedProfile } from "./types";
 
 const iso = (ms: number) => new Date(ms).toISOString();
 let seq = 0;
@@ -48,7 +48,17 @@ function wave(from: number, to: number, step: number, seed: number, base: number
   return out;
 }
 
+let demoRecording: DemoRecordingView = { enabled: false, s3Configured: false, updatedBy: null, updatedAt: null };
+
 export const mockOps = {
+  demoRecording(): DemoRecordingView {
+    return demoRecording;
+  },
+  setDemoRecording(enabled: boolean) {
+    const before = demoRecording.enabled;
+    demoRecording = { ...demoRecording, enabled, updatedBy: MOCK_ME.steamId, updatedAt: iso(Date.now()) };
+    return { setting: demoRecording, audit: audit("demo_recording.set", "demo.recording", { enabled, before }) };
+  },
   flags(): FeatureFlag[] {
     return [...flags.values()].sort((a, b) => a.key.localeCompare(b.key));
   },

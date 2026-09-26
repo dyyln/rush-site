@@ -58,7 +58,9 @@ export type AllocationResult =
       driverRef: string | null
       hostId: string | null
       response: StartServerResponse
-      demo: DemoUpload
+      // False when the demo recording setting was off. demo and demos are then absent
+      recordDemo: boolean
+      demo?: DemoUpload
       // Series only. One upload per map, index is mapNumber - 1
       demos?: DemoUpload[]
     }
@@ -115,7 +117,11 @@ export type AllocatorOptions = {
   surgeWaitSec: number
   // Chat prefix and web root for the match link, sent to the plugin in match.json
   brand?: MatchBrand
+  // The admin demo recording setting, read on every allocation
+  recordDemos: () => Promise<boolean>
 }
+
+type DemoPlan = { recordDemo: boolean; demo?: DemoUpload; demos?: DemoUpload[] }
 
 // Hetzner is base load. DatHost is surge capacity used only after a match waited SURGE_WAIT_SEC for a slot
 export class Allocator {
@@ -239,15 +245,17 @@ export class Allocator {
     return { hostId: slot.hostId, agentUrl: slot.agentUrl, slotId: slot.slotId, gsltId: token.id, gslt: token.token }
   }
 
-  // One presigned upload per map for a series, otherwise a single upload
-  private async presign(p: StartParams): Promise<{ demo: DemoUpload; demos?: DemoUpload[] }> {
-    if (!p.series) return { demo: await this.storage.presignUpload(p.matchId) }
+  // One presigned upload per map for a series, otherwise a single upload. Nothing when recording is off
+  private async presign(p: StartParams): Promise<DemoPlan> {
+    if (!(await this.opts.recordDemos())) return { recordDemo: false }
+    if (!p.series) return { recordDemo: true, demo: await this.storage.presignUpload(p.matchId) }
     const demos: DemoUpload[] = []
     for (let n = 1; n <= p.series.bestOf; n++) demos.push(await this.storage.presignUpload(p.matchId, n))
-    return { demo: demos[p.series.startMapNumber - 1]!, demos }
+    return { recordDemo: true, demo: demos[p.series.startMapNumber - 1]!, demos }
   }
 
-  buildRequest(p: StartParams, gslt: string, demoUpload: DemoUpload, demoUploads?: DemoUpload[]): StartServerRequest {
+  // A null demoUpload turns recording off for the match
+  buildRequest(p: StartParams, gslt: string, demoUpload: DemoUpload | null, demoUploads?: DemoUpload[]): StartServerRequest {
     return {
       matchId: p.matchId,
       mode: p.mode,
@@ -258,19 +266,19 @@ export class Allocator {
       teams: p.teams.map((t) => ({ name: t.name, steamIds: [...t.steamIds], ...(t.displayName ? { displayName: t.displayName } : {}) })),
       webhookUrl: `${this.opts.webhookBaseUrl.replace(/\/+$/, "")}/webhooks/match/${p.matchId}`,
       webhookSecret: p.webhookSecret,
-      demoUpload,
+      ...(demoUpload ? { demoUpload } : { recordDemo: false }),
       cs2: resolveLaunch(p.mode, p.map),
       ...(p.rushRooms ? { rushRooms: [...p.rushRooms] } : {}),
       ...(this.opts.brand ? { brand: { ...this.opts.brand } } : {}),
       ...(p.slug && isMatchSlug(p.slug) ? { slug: p.slug } : {}),
-      ...(p.series && demoUploads
+      ...(p.series && (demoUploads || !demoUpload)
         ? {
             series: {
               bestOf: p.series.bestOf,
               maps: p.series.maps,
               startMapNumber: p.series.startMapNumber,
               wins: { ...p.series.wins },
-              demoUploads,
+              ...(demoUploads ? { demoUploads } : {}),
             },
           }
         : {}),
@@ -282,14 +290,14 @@ export class Allocator {
     for (let attempt = 0; attempt < MAX_HOST_TRIES; attempt++) {
       const res = (await this.reservationFor(p.matchId)) ?? (await this.reserve(p.matchId))
       if (!res) break
-      const { demo, demos } = await this.presign(p)
+      const plan = await this.presign(p)
       try {
-        const response = await this.hetzner.start(this.buildRequest(p, res.gslt, demo, demos))
+        const response = await this.hetzner.start(this.buildRequest(p, res.gslt, plan.demo ?? null, plan.demos))
         await this.db
           .update(serverSlots)
           .set({ status: "running", port: response.port, updatedAt: new Date() })
           .where(eq(serverSlots.id, res.slotId))
-        return { kind: "started", driver: "hetzner", driverRef: res.hostId, hostId: res.hostId, response, demo, ...(demos ? { demos } : {}) }
+        return { kind: "started", driver: "hetzner", driverRef: res.hostId, hostId: res.hostId, response, ...plan }
       } catch (err) {
         // A busy or updating host is taken out until the next health sync and the next host is tried
         const busy = err instanceof AgentError && err.status === 503
@@ -303,11 +311,11 @@ export class Allocator {
     const hetznerSlots = this.surge ? (await this.hetzner.capacity()).total : 0
     if (this.surge && (hetznerSlots === 0 || waitedMs >= this.opts.surgeWaitSec * 1000)) {
       // DatHost servers run without a GSLT. The pool is kept for Hetzner slots
-      const { demo, demos } = await this.presign(p)
+      const plan = await this.presign(p)
       try {
-        const response = await this.surge.start(this.buildRequest(p, "", demo, demos))
+        const response = await this.surge.start(this.buildRequest(p, "", plan.demo ?? null, plan.demos))
         this.log.info({ matchId: p.matchId, driver: this.surge.name }, "match allocated on surge capacity")
-        return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, demo, ...(demos ? { demos } : {}) }
+        return { kind: "started", driver: this.surge.name, driverRef: null, hostId: null, response, ...plan }
       } catch (err) {
         await this.release(p.matchId, this.surge.name, false)
         throw err
