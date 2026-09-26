@@ -190,6 +190,13 @@
       "when": 1790441080467,
       "tag": "0026_discord_links",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790446477315,
+      "tag": "0027_challenge_map",
+      "breakpoints": true
     }
   ]
 }

@@ -221,8 +221,8 @@ Client sends `resync {}` to get the party, queue and match phase replayed on a s
 Rules for this batch: each owner adds new files under its own folders. Edits to shared web files (SiteHeader, tokens.css, api.ts, ws.ts, types.ts, mock.ts, ws-mock.ts) and to apps/api/src/app.ts and env.ts must be small and additive, never restructuring. New schemas go in packages/shared/src/schemas/<feature>.ts with one export line added to the barrel, and a ws.ts message added only by the owner named below.
 
 ### Challenges (owner: challenges) — features 2 rematch, 3 direct challenge links
-Tables: `challenges` (id, mode, created_by, target_steam_id nullable, rematch_of_match_id nullable, code unique, status open|accepted|declined|expired|cancelled, expires_at, match_id nullable).
-REST: `POST /challenges { mode, targetSteamId?, rematchOfMatchId? }` -> `{ challenge, url }`; `GET /challenges/:code`; `POST /challenges/:code/accept` (creates a match that skips queue and accept, runs veto for aim, allocates); `POST /challenges/:code/decline`; `GET /challenges/mine`.
+Tables: `challenges` (id, mode, created_by, target_steam_id nullable, rematch_of_match_id nullable, map_id nullable, code unique, status open|accepted|declined|expired|cancelled, expires_at, match_id nullable).
+REST: `POST /challenges { mode, targetSteamId?, rematchOfMatchId?, mapId? }` -> `{ challenge, url }` (no target makes an open link anyone may accept, `mapId` from the mode's live pool skips the veto, asking again with the same target or open link, mode and map returns the open one); `GET /challenges/:code`; `GET /challenges/:code/preview` (public, for link previews, no steam or match ids); `POST /challenges/:code/accept` (creates a match that skips queue and accept, runs veto for aim, allocates); `POST /challenges/:code/decline`; `GET /challenges/mine`.
 WS (challenges owner adds): `challenge_update { challenge }` to creator and target.
 Web: `/challenge/[code]` page, "Rematch" button on the finished match page and result toast, "Challenge" on profiles and party friends list.
 

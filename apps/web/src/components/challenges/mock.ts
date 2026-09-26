@@ -1,5 +1,5 @@
 // In-memory challenge flows for mock mode. Opponents answer on their own after a short wait
-import { CHALLENGE_TTL_SEC, MODES, type Challenge, type ChallengePlayer, type CreateChallengeBody, type CreateChallengeResponse } from "@rushsite/shared";
+import { AIM_MAPS, CHALLENGE_TTL_SEC, MODES, type Challenge, type ChallengeMap, type ChallengePlayer, type CreateChallengeBody, type CreateChallengeResponse } from "@rushsite/shared";
 import { MOCK_ME, mockUser, mockUserBySteamId, mockUuid } from "@/lib/mock";
 import { mockRealtime as rt } from "@/lib/ws";
 
@@ -11,6 +11,11 @@ const player = (u: { steamId: string; displayName: string; avatarUrl: string | n
   displayName: u.displayName,
   avatarUrl: u.avatarUrl,
 });
+
+function mockMap(id: string | undefined): ChallengeMap | null {
+  const m = id ? AIM_MAPS.find((x) => x.id === id) : undefined;
+  return m ? { id: m.id, displayName: m.displayName } : null;
+}
 
 function hash(s: string): number {
   let h = 7;
@@ -50,6 +55,7 @@ export function mockCreate(body: CreateChallengeBody): CreateChallengeResponse {
     createdBy: player(MOCK_ME),
     target: target ? player(target) : null,
     rematchOfMatchId: body.rematchOfMatchId ?? null,
+    map: mockMap(body.mapId),
     matchId: null,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + CHALLENGE_TTL_SEC * 1000).toISOString(),
@@ -79,14 +85,16 @@ export function mockGet(raw: string): Challenge {
   if (known) return structuredClone(known);
   const h = hash(key);
   const now = Date.now();
+  const mode = MODES[h % MODES.length]!;
   const c: Challenge = {
     id: mockUuid(`challenge-${key}`),
     code: key,
-    mode: MODES[h % MODES.length]!,
+    mode,
     status: key.startsWith("EXPIRED") ? "expired" : "open",
     createdBy: player(mockUser(1 + (h % 20))),
     target: h % 2 === 0 ? player(MOCK_ME) : null,
     rematchOfMatchId: null,
+    map: mode.startsWith("aim") && h % 3 === 0 ? mockMap(AIM_MAPS[h % AIM_MAPS.length]!.id) : null,
     matchId: null,
     createdAt: new Date(now - 60_000).toISOString(),
     expiresAt: new Date(now + (CHALLENGE_TTL_SEC - 60) * 1000).toISOString(),

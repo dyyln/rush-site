@@ -34,6 +34,11 @@ export function registerChallengeRoutes(app: FastifyInstance, ctx: AppContext, s
     return { challenge: await service.get(codeOf(req.params)) }
   })
 
+  // Link previews. The web server renders them for crawlers, so this read carries no ids
+  app.get("/challenges/:code/preview", async (req) => {
+    return { preview: await service.preview(codeOf(req.params)) }
+  })
+
   app.post("/challenges/:code/accept", async (req) => {
     const steamId = await requireUser(ctx.auth, req)
     return { challenge: await service.accept(steamId, codeOf(req.params)) }

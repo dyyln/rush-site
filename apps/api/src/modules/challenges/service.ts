@@ -4,12 +4,14 @@ import {
   getModeConfig,
   unresolvedConfig,
   type Challenge,
+  type ChallengeMap,
+  type ChallengePreview,
   type ChallengeStatus,
   type ChallengeUpdatePayload,
   type CreateChallengeBody,
   type Mode,
 } from "@rushsite/shared"
-import { and, desc, eq, gt, lte, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm"
 import type { AppContext } from "../../context.js"
 import { disabledModes } from "../../env.js"
 import { matches } from "../../db/schema.js"
@@ -59,6 +61,17 @@ export class ChallengeService {
     }
   }
 
+  private mapOf(row: Pick<Row, "mode" | "mapId">): ChallengeMap | null {
+    if (!row.mapId) return null
+    return { id: row.mapId, displayName: this.ctx.maps.find(row.mode, row.mapId)?.displayName ?? row.mapId }
+  }
+
+  // A picked map must be in the mode's live pool, and only modes with a map veto take one
+  private assertMapPlayable(mode: Mode, mapId: string): void {
+    if (getModeConfig(mode).vetoFormat === "none") throw badRequest("map_not_allowed", `${mode} has no map choice`)
+    if (!this.ctx.maps.entries(mode).some((m) => m.id === mapId)) throw badRequest("unknown_map", `${mapId} is not in the ${mode} pool`)
+  }
+
   async views(rows: Row[]): Promise<Challenge[]> {
     const ids = [...new Set(rows.flatMap((r) => [r.createdBy, r.targetSteamId].filter((x): x is string => !!x)))]
     const cards = await this.ctx.users.cards(ids)
@@ -75,6 +88,7 @@ export class ChallengeService {
       createdBy: card(r.createdBy),
       target: r.targetSteamId ? card(r.targetSteamId) : null,
       rematchOfMatchId: r.rematchOfMatchId,
+      map: this.mapOf(r),
       matchId: r.matchId,
       createdAt: r.createdAt.toISOString(),
       expiresAt: r.expiresAt.toISOString(),
@@ -155,7 +169,9 @@ export class ChallengeService {
 
   async create(steamId: string, body: CreateChallengeBody): Promise<{ challenge: Challenge; url: string }> {
     const { mode } = body
+    const mapId = body.mapId ?? null
     this.assertModeAvailable(mode)
+    if (mapId) this.assertMapPlayable(mode, mapId)
     if ((await this.ctx.trust.activeBans([steamId])).size > 0) throw forbidden("banned")
     const nowDate = this.now()
     let target: string | null = body.targetSteamId ?? null
@@ -179,24 +195,23 @@ export class ChallengeService {
       if (target === steamId) throw badRequest("self_challenge", "you cannot challenge yourself")
       if (target && !(await this.ctx.users.card(target))) throw notFound("user_not_found")
       await this.side(steamId, mode)
-      // Asking again for the same opponent and mode returns the open challenge
-      if (target) {
-        const [dup] = await this.ctx.db
-          .select()
-          .from(challenges)
-          .where(
-            and(
-              eq(challenges.createdBy, steamId),
-              eq(challenges.targetSteamId, target),
-              eq(challenges.mode, mode),
-              eq(challenges.status, "open"),
-              gt(challenges.expiresAt, nowDate),
-              sql`${challenges.rematchOfMatchId} is null`,
-            ),
-          )
-          .limit(1)
-        if (dup) return { challenge: await this.view(dup), url: this.url(dup.code) }
-      }
+      // Asking again for the same opponent, or another open link, with the same mode and map returns the open challenge
+      const [dup] = await this.ctx.db
+        .select()
+        .from(challenges)
+        .where(
+          and(
+            eq(challenges.createdBy, steamId),
+            target ? eq(challenges.targetSteamId, target) : isNull(challenges.targetSteamId),
+            eq(challenges.mode, mode),
+            mapId ? eq(challenges.mapId, mapId) : isNull(challenges.mapId),
+            eq(challenges.status, "open"),
+            gt(challenges.expiresAt, nowDate),
+            isNull(challenges.rematchOfMatchId),
+          ),
+        )
+        .limit(1)
+      if (dup) return { challenge: await this.view(dup), url: this.url(dup.code) }
     }
 
     const [{ n } = { n: 0 }] = await this.ctx.db
@@ -214,6 +229,7 @@ export class ChallengeService {
           createdBy: steamId,
           targetSteamId: target,
           rematchOfMatchId: body.rematchOfMatchId ?? null,
+          mapId,
           code: newCode(),
           status: "open",
           expiresAt: new Date(nowDate.getTime() + CHALLENGE_TTL_SEC * 1000),
@@ -232,6 +248,22 @@ export class ChallengeService {
     return this.view(await this.load(code))
   }
 
+  // What a link preview may show to anyone
+  async preview(code: string): Promise<ChallengePreview> {
+    const row = await this.load(code)
+    const card = await this.ctx.users.card(row.createdBy)
+    return {
+      code: row.code,
+      mode: row.mode,
+      status: row.status,
+      createdBy: { displayName: card?.displayName ?? "A player", avatarUrl: card?.avatarUrl ?? null },
+      open: !row.targetSteamId,
+      rematch: !!row.rematchOfMatchId,
+      map: this.mapOf(row),
+      expiresAt: row.expiresAt.toISOString(),
+    }
+  }
+
   async accept(steamId: string, code: string): Promise<Challenge> {
     const out = await withLock(this.ctx.redis, `lock:challenge:${code.toUpperCase()}`, 30_000, () => this.acceptLocked(steamId, code))
     if (!out) throw conflict("challenge_busy", "the challenge is being answered, try again")
@@ -245,6 +277,9 @@ export class ChallengeService {
     if (row.targetSteamId && row.targetSteamId !== steamId) throw forbidden("not_target", "this challenge is for someone else")
     this.assertModeAvailable(row.mode)
     if (!(await this.ctx.flags.queueOpen(row.mode))) throw conflict("mode_closed", `${row.mode} is closed right now`)
+    if (row.mapId && !this.ctx.maps.entries(row.mode).some((m) => m.id === row.mapId)) {
+      throw conflict("map_unavailable", "the chosen map left the pool")
+    }
 
     let expectCreator: string[] | undefined
     let expectAccepter: string[] | undefined
@@ -279,6 +314,7 @@ export class ChallengeService {
           { name: "A", steamIds: home },
           { name: "B", steamIds: away },
         ],
+        ...(row.mapId ? { mapId: row.mapId } : {}),
       }))
     } catch (err) {
       if (/not configured/.test((err as Error).message)) throw new ApiError(503, "mode_unavailable")

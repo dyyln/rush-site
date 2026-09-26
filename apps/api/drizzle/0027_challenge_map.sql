@@ -1,0 +1,1 @@
+ALTER TABLE "challenges" ADD COLUMN "map_id" text;

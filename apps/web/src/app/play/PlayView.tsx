@@ -1,6 +1,7 @@
 "use client";
 
 import { SiteTotals } from "@/components/stats/SiteTotals";
+import { ChallengeLinkButton } from "@/components/challenges/ChallengeLinkButton";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { isRushMode, isTestMode, MODE_CONFIGS, MODES, roomPath, TIERS, trustAtLeast, type Mode } from "@rushsite/shared";
@@ -188,6 +189,12 @@ export function PlayView() {
             </p>
           )}
           <ModeAvailabilityHint status={service} />
+          {user && (
+            <div className={cx("glass", styles.linkLine)}>
+              <p className={styles.hint}>Call someone out. Send a link to a 1v1 on the map you pick, they sign in with Steam and land on it.</p>
+              <ChallengeLinkButton />
+            </div>
+          )}
           {user && <ProfileNudge trust={user.trust} enabled variant="line" />}
           {user && <LiveMatches />}
         </div>

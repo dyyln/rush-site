@@ -55,6 +55,8 @@ export const RATE_RULES: Record<string, Rule> = {
   "POST /friends/sync": { max: 6, timeWindow: MINUTE },
   "POST /challenges": { max: 10, timeWindow: MINUTE },
   "GET /challenges/:code": { max: 60, timeWindow: MINUTE },
+  // Link previews come from the web server and chat crawlers, which share few IPs
+  "GET /challenges/:code/preview": { max: 300, timeWindow: MINUTE, key: "ip" },
   "POST /challenges/:code/accept": { max: 20, timeWindow: MINUTE },
   "POST /challenges/:code/decline": { max: 30, timeWindow: MINUTE },
   "POST /matches/:id/report": { max: 10, timeWindow: MINUTE },

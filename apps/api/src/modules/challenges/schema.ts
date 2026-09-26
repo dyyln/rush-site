@@ -13,6 +13,8 @@ export const challenges = pgTable(
     // null is an open link. Set to the accepter once accepted
     targetSteamId: text("target_steam_id"),
     rematchOfMatchId: uuid("rematch_of_match_id"),
+    // Map picked by the creator. null runs the veto
+    mapId: text("map_id"),
     code: text("code").notNull().unique(),
     status: text("status").$type<ChallengeStatus>().notNull().default("open"),
     expiresAt: ts("expires_at").notNull(),

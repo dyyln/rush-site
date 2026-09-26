@@ -58,7 +58,7 @@ Checked and found sound: Steam OpenID verification, webhook HMAC, the admin gate
     - queue join and leave: 30;
     - party invite, join and preview: 20 to 30;
     - friend requests: 20; friend sync: 6;
-    - challenge create: 10; view: 60; accept: 20; decline: 30;
+    - challenge create: 10; view: 60; preview: 300 per IP (the web server renders link previews); accept: 20; decline: 30;
     - reports: 10;
     - cup enter and withdraw: 20;
     - leaderboard, friends board, distribution, profile and match history: 60;

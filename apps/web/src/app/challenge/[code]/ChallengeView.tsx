@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { type Challenge, type ChallengeStatus } from "@rushsite/shared";
+import { AIM_MAPS, type Challenge, type ChallengeStatus } from "@rushsite/shared";
+import { challengeClosedLine, challengeRules, shareLine } from "@/components/challenges/copy";
 import { challengeError, goToMatch, useChallengeUpdates } from "@/components/challenges/useChallenges";
 import shared from "@/components/challenges/challenges.module.css";
 import { DockButton, DockCountdown, DockLink, DockTimer } from "@/components/layout/Dock";
@@ -12,8 +13,9 @@ import { BannerChip, BannerPerson, BannerSeat, BannerVs, InviteBanner } from "@/
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Card } from "@/components/ui/Card";
+import { SignInLink } from "@/components/ui/SignInLink";
 import { ApiError, api, steamLoginUrl } from "@/lib/api";
-import { MODE_ART, MODE_COPY, teamSize } from "@/lib/modes";
+import { hasLadderVeto, MODE_ART, MODE_COPY, teamSize } from "@/lib/modes";
 import { useSession } from "@/lib/session";
 import styles from "./challenge.module.css";
 
@@ -24,6 +26,13 @@ const STATUS: Record<ChallengeStatus, { label: string; tone?: "accent" | "win" |
   expired: { label: "Expired" },
   cancelled: { label: "Withdrawn" },
 };
+
+const LOCAL_ART = new Set(AIM_MAPS.map((m) => m.id));
+
+// The chosen map's art when there is one, else the mode's
+function artFor(c: Challenge): string {
+  return c.map && LOCAL_ART.has(c.map.id) ? `/maps/${c.map.id}.webp` : MODE_ART[c.mode];
+}
 
 const toPlay = (
   <DockLink href="/play" tone="quiet">
@@ -165,18 +174,26 @@ export function ChallengeView({ code }: { code: string }) {
 
   const size = teamSize(c.mode);
   const targetIsMe = c.target?.steamId === me;
-  const title = !open ? `${kind} ${STATUS[c.status].label.toLowerCase()}` : c.target ? (targetIsMe ? "You are challenged" : `${kind} sent`) : "Open challenge";
+  const involved = isCreator || targetIsMe;
+  const title = !open
+    ? `${kind} ${STATUS[c.status].label.toLowerCase()}`
+    : isCreator
+      ? c.target
+        ? `${kind} sent`
+        : "Open challenge"
+      : `${c.createdBy.displayName} challenges you`;
 
   return (
     <div className={`container ${styles.page}`}>
       <InviteBanner
-        art={MODE_ART[c.mode]}
+        art={artFor(c)}
         kicker={kind}
         title={title}
         chips={
           <>
             <BannerChip tone={STATUS[c.status].tone}>{STATUS[c.status].label}</BannerChip>
             <BannerChip>{MODE_COPY[c.mode].label}</BannerChip>
+            {c.map ? <BannerChip>{c.map.displayName}</BannerChip> : hasLadderVeto(c.mode) && <BannerChip>Map veto</BannerChip>}
             <BannerChip>{size > 1 ? `Parties of ${size}` : "Solo"}</BannerChip>
             <BannerChip>Unrated</BannerChip>
           </>
@@ -188,6 +205,23 @@ export function ChallengeView({ code }: { code: string }) {
       </InviteBanner>
 
       <Card className={styles.body}>
+        {open && <p className="muted">{challengeRules(c.mode, c.map)} The challenge is open for 10 minutes.</p>}
+
+        {open && !loading && !user && (
+          <>
+            <p>Sign in with Steam to accept. You come straight back here.</p>
+            <div className={shared.actions}>
+              <SignInLink>Sign in with Steam to accept</SignInLink>
+            </div>
+          </>
+        )}
+
+        {c.status !== "open" && !involved && (
+          <p>
+            {challengeClosedLine(c.status)} <Link href="/play">Queue on Play</Link> for a match instead.
+          </p>
+        )}
+
         {size > 1 && open && (
           <p className="muted">
             {MODE_COPY[c.mode].format} is played by whole parties. Each side needs a party of {size}, and the party leader answers.
@@ -195,7 +229,7 @@ export function ChallengeView({ code }: { code: string }) {
           </p>
         )}
 
-        {c.status === "accepted" && c.matchId && (
+        {c.status === "accepted" && c.matchId && involved && (
           <p>
             Match starting. <Link href={`/matches/${c.matchId}`}>Open the match room</Link> for the veto and connect info.
           </p>
@@ -216,7 +250,7 @@ export function ChallengeView({ code }: { code: string }) {
         {open && isCreator && (
           <>
             <p className="muted" aria-live="polite">
-              Waiting for {c.target ? c.target.displayName : "someone to accept"}. Keep this page open, it moves on to the veto when they accept.
+              Waiting for {c.target ? c.target.displayName : "someone to accept"}. Keep this page open, it moves on to the {c.map ? "match" : "veto"} when they accept.
             </p>
             <label className="visually-hidden" htmlFor="challenge-link">
               Challenge link
@@ -225,6 +259,14 @@ export function ChallengeView({ code }: { code: string }) {
               <input id="challenge-link" className={`${shared.linkInput} mono`} value={url} readOnly onFocus={(e) => e.currentTarget.select()} />
               <CopyButton text={url}>Copy link</CopyButton>
             </div>
+            {!c.target && url && (
+              <div className={shared.linkRow}>
+                <span className={`${shared.shareLine} mono`}>{shareLine(c.mode, c.map, url)}</span>
+                <CopyButton text={shareLine(c.mode, c.map, url)} variant="ghost">
+                  Copy message
+                </CopyButton>
+              </div>
+            )}
           </>
         )}
 

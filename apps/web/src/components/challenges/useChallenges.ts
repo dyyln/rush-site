@@ -45,6 +45,10 @@ const MESSAGES: Record<string, string> = {
   match_not_finished: "The match has not finished yet.",
   mode_unavailable: "This mode is not available yet.",
   self_challenge: "You cannot challenge yourself.",
+  unknown_map: "That map is not in the pool right now.",
+  map_not_allowed: "This mode has no map choice.",
+  map_unavailable: "The chosen map has left the pool, so this challenge cannot start.",
+  mode_closed: "This mode is closed right now.",
 };
 
 export function challengeError(e: unknown): string {

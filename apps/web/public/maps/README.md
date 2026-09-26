@@ -21,3 +21,7 @@ Fetched on 2026-09-24 from Steam's public `ISteamRemoteStorage/GetPublishedFileD
 Maps added from /admin are not stored here. Their preview is hotlinked from Steam's CDN (`images.steamusercontent.com`) using the URL saved in the `map_pool` table.
 
 To refresh a preview, fetch the item details again, download `preview_url` and re-encode it the same way.
+
+## Link preview copies
+
+`public/og/<mapId>.jpg` are JPEG copies of the webp previews (and `rush_001.jpg` of `backdrops/rush_001_1.webp`) for the challenge link image, whose renderer cannot read webp. Re-encode them when a preview changes or is removed.

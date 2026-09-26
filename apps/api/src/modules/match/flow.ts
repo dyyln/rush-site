@@ -349,9 +349,11 @@ export class MatchFlow {
   }
 
   // Challenge path. Skips queue and accept, then runs the usual veto and allocation
+  // A mapId skips the veto and plays that map
   async createDirectMatch(params: {
     mode: Mode
     teams: [{ name: string; steamIds: string[] }, { name: string; steamIds: string[] }]
+    mapId?: string
   }): Promise<{ matchId: string }> {
     const matchId = randomUUID()
     const slug = await newMatchSlug(this.d.db)
@@ -377,7 +379,7 @@ export class MatchFlow {
       await tx.insert(matchPlayers).values(
         rosters.flatMap((t, idx) => t.steamIds.map((steamId) => ({ matchId, steamId, team: idx, accepted: true }))),
       )
-      return this.enterPostAccept(tx, m!)
+      return this.enterPostAccept(tx, m!, undefined, params.mapId)
     })
     this.d.events?.emit("match", { event: "match_found", matchId, mode: params.mode, teams: rosters, source: "challenge" })
     this.d.activity?.record(rosters.flatMap((r) => r.steamIds), { kind: "match_found", mode: params.mode, ref: matchId, detail: "challenge" })
@@ -490,8 +492,8 @@ export class MatchFlow {
   }
 
   // Runs inside the accept transaction. Starts the veto or goes straight to allocation.
-  // firstTeam is the higher seed when the caller knows it
-  private async enterPostAccept(tx: Db, m: MatchRow, firstTeam?: TeamIndex): Promise<PostAccept> {
+  // firstTeam is the higher seed when the caller knows it. fixedMap skips the map veto
+  private async enterPostAccept(tx: Db, m: MatchRow, firstTeam?: TeamIndex, fixedMap?: string): Promise<PostAccept> {
     // A later game or a resumed series plays the maps and rooms the first veto chose
     let earlier: { maps: string[] | null; seriesRooms: SeriesRoomsJson | null } | null = null
     if (m.source === "tournament" && (m.gameNumber ?? 1) > 1 && m.tournamentId && m.bracketMatchKey) {
@@ -549,7 +551,7 @@ export class MatchFlow {
       await tx.update(matches).set({ status: "veto" }).where(eq(matches.id, m.id))
       return { kind: "veto", state, stepDeadline, format: ROOM_VETO_FORMAT }
     }
-    const plan = this.vetoPlan(m, earlier?.maps ?? null)
+    const plan = fixedMap ? { maps: [fixedMap] } : this.vetoPlan(m, earlier?.maps ?? null)
     const nowDate = new Date(this.now())
     if ("maps" in plan) {
       const maps = isSeries(m) ? padMaps(plan.maps, m.bestOf ?? 1) : plan.maps
