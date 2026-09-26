@@ -13,6 +13,13 @@ public sealed class MatchConfig
     public string WebhookUrl { get; init; } = "";
     public string WebhookSecret { get; init; } = "";
     public DemoUploadConfig? DemoUpload { get; init; }
+
+    // Optional. False means no tv_record and no upload on any map. Absent means record, as older APIs send.
+    public bool? RecordDemo { get; init; }
+
+    [JsonIgnore]
+    public bool RecordsDemo => RecordDemo != false;
+
     public string WinCondition { get; init; } = "";
 
     // Optional. The map the server was launched on. Used to pick the aim loadout.
@@ -57,7 +64,7 @@ public sealed class MatchConfig
     {
         if (Series is null) return DemoUpload;
         var idx = mapNumber - 1;
-        if (idx >= 0 && idx < Series.DemoUploads.Count && Series.DemoUploads[idx] is { } d) return d;
+        if (Series.DemoUploads is { } ups && idx >= 0 && idx < ups.Count && ups[idx] is { } d) return d;
         return mapNumber == Series.StartMapNumber ? DemoUpload : null;
     }
 
@@ -157,8 +164,8 @@ public sealed class SeriesConfig
     public int StartMapNumber { get; init; } = 1;
     // Maps each team already won before StartMapNumber.
     public Dictionary<string, int> Wins { get; init; } = new();
-    // One per map. Index is mapNumber - 1.
-    public List<DemoUploadConfig?> DemoUploads { get; init; } = new();
+    // One per map. Index is mapNumber - 1. Left out when recordDemo is false.
+    public List<DemoUploadConfig?>? DemoUploads { get; init; } = new();
 
     public int WinsNeeded => BestOf / 2 + 1;
 }

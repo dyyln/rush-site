@@ -73,6 +73,7 @@ public sealed class MatchController
     private string? _currentArena;
     private bool _started;
     private bool _recording;
+    private bool _noDemoLogged;
     private bool _pausedForDisconnect;
     private DateTimeOffset? _endDeadline;
     private DateTimeOffset? _stopDemoAt;
@@ -909,9 +910,16 @@ public sealed class MatchController
     private void StartRecording()
     {
         if (_recording) return;
+        // tv_delay also holds back the next map in a series, so it is set with or without a demo
+        if (_settings.TvDelay is int delay) _game.ExecuteCommand($"tv_delay {Math.Max(0, delay)}");
+        if (!_cfg.RecordsDemo)
+        {
+            if (!_noDemoLogged) _game.Log("demo recording is off for this match. No demo is recorded or uploaded.");
+            _noDemoLogged = true;
+            return;
+        }
         if (_game.GetConVar("tv_enable") != "1")
             _game.Log("tv_enable is not 1. tv_record will fail. Start the server with +tv_enable 1.");
-        if (_settings.TvDelay is int delay) _game.ExecuteCommand($"tv_delay {Math.Max(0, delay)}");
         _game.ExecuteCommand($"tv_record \"{DemoName}\"");
         _recording = true;
         MarkRecording();

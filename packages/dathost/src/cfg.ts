@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto"
 import {
+  BLANK_DEMO_UPLOAD,
   MODE_CONFIGS,
   type Cs2Launch,
   type Cs2Start,
@@ -63,7 +64,8 @@ export function buildMatchJson(req: StartServerRequest): PluginMatchConfig {
     password: req.password,
     webhookUrl: req.webhookUrl,
     webhookSecret: req.webhookSecret,
-    demoUpload: req.demoUpload,
+    // Older plugins require demoUpload, so a blank one is written when recording is off
+    ...(req.recordDemo === false ? { recordDemo: false, demoUpload: { ...BLANK_DEMO_UPLOAD } } : { demoUpload: req.demoUpload! }),
     winCondition: MODE_CONFIGS[req.mode].winCondition,
     ...(req.series ? { series: req.series } : {}),
     ...(req.rushRooms ? { rushRooms: req.rushRooms } : {}),

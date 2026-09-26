@@ -189,7 +189,10 @@ func validateSeries(req *StartRequest) error {
 	if s.BestOf < 2 || s.BestOf > 7 {
 		return invalid("series.bestOf must be 2 to 7")
 	}
-	if len(s.Maps) != s.BestOf || len(s.DemoUploads) != s.BestOf {
+	if len(s.Maps) != s.BestOf {
+		return invalid("series needs bestOf maps and demoUploads")
+	}
+	if req.RecordsDemo() && len(s.DemoUploads) != s.BestOf {
 		return invalid("series needs bestOf maps and demoUploads")
 	}
 	if s.StartMapNumber < 1 || s.StartMapNumber > s.BestOf {

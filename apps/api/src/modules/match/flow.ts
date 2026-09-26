@@ -157,6 +157,9 @@ export const SERVER_UNREACHABLE = "server_unreachable"
 
 export const ALLOCATION_CONCURRENCY = 4
 
+// Server teardown delay for a match without a demo. The plugin kicks everyone 10 seconds after the end
+export const NO_DEMO_TEARDOWN_SEC = 15
+
 // Match lifecycle from match found to result. Postgres rows are the state, row locks serialise changes
 export class MatchFlow {
   private readonly listeners: ResultListener[] = []
@@ -697,7 +700,7 @@ export class MatchFlow {
           if (expired) await this.cancelMatch(matchId, "no_server", { requeue: true })
           return
         }
-        const { response, demo } = r
+        const { response } = r
         const connect = response.connect.includes("password") ? response.connect : `${response.connect}; password ${m.password}`
         // A DatHost boot is long and the plugin can report server_ready before start() returns.
         // Connect info is stored in any pre-live status and a held server_ready is released here
@@ -716,6 +719,7 @@ export class MatchFlow {
               serverIp: response.ip,
               serverPort: response.port,
               connect,
+              recordDemo: r.recordDemo,
               // The connect countdown starts when players get the address
               ...(readyNow ? { readyAt: new Date(this.now()) } : {}),
             })
@@ -728,10 +732,13 @@ export class MatchFlow {
           await this.d.allocator.release(matchId, r.driver, true)
           return
         }
-        // Series demos get a row per map still to play. Rows for maps never played go at the end
-        const uploads = series && r.demos
-          ? r.demos.map((d, i) => ({ mapNumber: i + 1, d })).filter((x) => x.mapNumber >= series.startMapNumber)
-          : [{ mapNumber: 1, d: demo }]
+        // Series demos get a row per map still to play. Rows for maps never played go at the end.
+        // With recording off there is no demo and no row
+        const uploads = !r.demo
+          ? []
+          : series && r.demos
+            ? r.demos.map((d, i) => ({ mapNumber: i + 1, d })).filter((x) => x.mapNumber >= series.startMapNumber)
+            : [{ mapNumber: 1, d: r.demo }]
         for (const { mapNumber, d } of uploads) {
           await this.d.db
             .insert(demos)
@@ -1129,7 +1136,7 @@ export class MatchFlow {
             )
           : []
       // The upload itself is confirmed later by a demo_uploaded event
-      if (!series) {
+      if (!series && m.recordDemo) {
         await tx
           .insert(demos)
           .values({ matchId, bucket: "unknown", key: demoKey(matchId, m.createdAt) })
@@ -1137,7 +1144,7 @@ export class MatchFlow {
       }
       return { m, changes, winner: winnerIdx >= 0 ? result.winnerTeam : null, score: result.score, maps: series?.maps }
     })
-    // The server stays up until the demo upload is reported. See teardown
+    // The server stays up until the demo upload is reported. Without a demo it goes on the next ticks. See allocationTick
     if (!r) return
     const payload: MatchResultPayload = {
       matchId,
@@ -1164,7 +1171,7 @@ export class MatchFlow {
     await withLock(this.d.redis, `lock:teardown:${matchId}`, 120_000, async () => {
       const [m] = await this.d.db.select().from(matches).where(eq(matches.id, matchId))
       if (!m || m.serverReleasedAt || !TERMINAL.has(m.status)) return
-      if (m.driver === "dathost" && m.status !== "cancelled") await this.collectSurgeDemo(m)
+      if (m.driver === "dathost" && m.status !== "cancelled" && m.recordDemo) await this.collectSurgeDemo(m)
       await this.d.allocator.release(matchId, m.driver, true)
       await this.d.db.update(matches).set({ serverReleasedAt: new Date(this.now()) }).where(eq(matches.id, matchId))
     })
@@ -1400,6 +1407,7 @@ export class MatchFlow {
     const db = this.d.db
     const allocating = await db.select({ id: matches.id }).from(matches).where(eq(matches.status, "allocating"))
     const demoCutoff = new Date(this.now() - this.d.options.demoWaitSec * 1000)
+    const noDemoCutoff = new Date(this.now() - NO_DEMO_TEARDOWN_SEC * 1000)
     const ended = await db
       .select({ id: matches.id })
       .from(matches)
@@ -1408,6 +1416,8 @@ export class MatchFlow {
           isNull(matches.serverReleasedAt),
           or(
             and(inArray(matches.status, ["finished", "abandoned"]), lt(matches.endedAt, demoCutoff)),
+            // No upload is coming. Only the plugin's end of match kick is waited for
+            and(inArray(matches.status, ["finished", "abandoned"]), eq(matches.recordDemo, false), lt(matches.endedAt, noDemoCutoff)),
             // Cancelled by the timers loop with a server or slot still held
             and(
               eq(matches.status, "cancelled"),

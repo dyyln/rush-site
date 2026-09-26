@@ -369,3 +369,97 @@ func TestValidateRejectsBadSeries(t *testing.T) {
 		}
 	}
 }
+
+// The API leaves demoUpload and series.demoUploads out when recording is off
+func recordOffReq(t *testing.T) StartRequest {
+	t.Helper()
+	r := sampleReq()
+	if err := json.Unmarshal([]byte(`{"recordDemo":false}`), &r); err != nil {
+		t.Fatal(err)
+	}
+	r.DemoUpload = DemoUpload{}
+	sampleSeries(&r)
+	r.Series.DemoUploads = nil
+	return r
+}
+
+func TestRecordDemoOffReachesMatchJSON(t *testing.T) {
+	r := recordOffReq(t)
+	if r.RecordsDemo() {
+		t.Fatal("recordDemo false was not read")
+	}
+	spec, err := Validate(&r, DefaultModes(), "")
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	b, err := PluginJSON(Params{Req: r, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := m["recordDemo"]; !ok || v != false {
+		t.Errorf("recordDemo=%v, want false", v)
+	}
+	// Older plugins require demoUpload, so a blank one is written
+	demo, ok := m["demoUpload"].(map[string]any)
+	if !ok || demo["presignedPutUrl"] != "" || demo["bucket"] != "" || demo["key"] != "" {
+		t.Errorf("demoUpload=%v, want blank", m["demoUpload"])
+	}
+	series := m["series"].(map[string]any)
+	if _, ok := series["demoUploads"]; ok {
+		t.Errorf("series.demoUploads written with recording off: %v", series["demoUploads"])
+	}
+}
+
+func TestRecordDemoOffDropsUploadUrls(t *testing.T) {
+	r := sampleReq()
+	off := false
+	r.RecordDemo = &off
+	sampleSeries(&r)
+	spec, err := Validate(&r, DefaultModes(), "")
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	b, err := PluginJSON(Params{Req: r, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "s3.example.test") {
+		t.Errorf("upload url written with recording off: %s", b)
+	}
+}
+
+func TestRecordDemoMissingMeansRecord(t *testing.T) {
+	var r StartRequest
+	if err := json.Unmarshal([]byte(`{"matchId":"x"}`), &r); err != nil {
+		t.Fatal(err)
+	}
+	if !r.RecordsDemo() {
+		t.Error("a request without recordDemo should record")
+	}
+	p := sampleParams(t)
+	b, err := PluginJSON(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "recordDemo") {
+		t.Errorf("recordDemo written for a recording match: %s", b)
+	}
+	on := true
+	p.Req.RecordDemo = &on
+	if b, _ = PluginJSON(p); strings.Contains(string(b), "recordDemo") || !strings.Contains(string(b), "s3.example.test/put") {
+		t.Errorf("recordDemo true should match an old request: %s", b)
+	}
+}
+
+func TestRecordingSeriesStillNeedsUploads(t *testing.T) {
+	r := sampleReq()
+	sampleSeries(&r)
+	r.Series.DemoUploads = nil
+	if _, err := Validate(&r, DefaultModes(), ""); !IsValidation(err) {
+		t.Errorf("want validation error, got %v", err)
+	}
+}

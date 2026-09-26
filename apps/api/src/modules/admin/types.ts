@@ -180,6 +180,8 @@ export interface AdminPluginOptions {
   notifyQueueStatus?(steamId: string): Promise<void>
   // Discord link routes answer 404 without it
   discord?: DiscordLike
+  // True when S3 demo storage is configured. Shown next to the demo recording setting
+  demoStorageConfigured?: boolean
   now?: () => Date
 }
 
@@ -362,6 +364,23 @@ export type AuditAction =
   | "map.update"
   | "map.reorder"
   | "map.remove"
+  | "gslt.add"
+  | "gslt.update"
+  | "gslt.remove"
+  | "demo_recording.set"
+
+export type GsltStatus = "free" | "in_use" | "invalid"
+
+// A pool token. The token itself is masked and never leaves the api in full
+export interface GsltView {
+  id: string
+  token: string
+  memo: string | null
+  status: GsltStatus
+  matchId: string | null
+  lastUsedAt: string | null
+  createdAt: string
+}
 
 export interface AdminView {
   steamId: string

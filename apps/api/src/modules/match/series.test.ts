@@ -51,7 +51,7 @@ describe("best-of series on one server", () => {
   let results: MatchResultEvent[]
   let mapResults: MapResultEvent[]
   beforeEach(async () => {
-    h = await createHarness({ rng: () => 0 })
+    h = await createHarness({ rng: () => 0, demoRecording: true })
     await withServers(h)
     results = []
     mapResults = []
@@ -115,9 +115,9 @@ describe("best-of series on one server", () => {
     const req = h.agent.started[0]!
     expect(req.series).toMatchObject({ bestOf: 3, startMapNumber: 1, wins: { A: 0, B: 0 } })
     expect(req.series!.maps).toHaveLength(3)
-    expect(req.series!.demoUploads.map((d) => d.key)).toEqual([1, 2, 3].map((n) => expect.stringContaining(`${matchId}_m${n}.dem`)))
+    expect(req.series!.demoUploads!.map((d) => d.key)).toEqual([1, 2, 3].map((n) => expect.stringContaining(`${matchId}_m${n}.dem`)))
     expect(req.map.id).toBe(req.series!.maps[0]!.id)
-    expect(req.demoUpload.key).toBe(req.series!.demoUploads[0]!.key)
+    expect(req.demoUpload!.key).toBe(req.series!.demoUploads![0]!.key)
     expect(await h.db.select().from(demos).where(eq(demos.matchId, matchId))).toHaveLength(3)
 
     await event(matchId, { type: "server_ready" })

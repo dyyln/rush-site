@@ -267,7 +267,8 @@ Relative paths resolve against `game/csgo`. If `RUSHSITE_MATCH_ID` is set and di
 - A team `side`, when set, must be `ct` or `t`, and the two teams must differ.
 - `map` is optional. It is the launch map, and each `series.maps` entry has the same shape: `{ id, displayName?, workshopId?, mapName?, loadout? }`. Each needs a `workshopId` of digits or a `mapName` of letters, digits and `_`.
 - `loadout` is optional: `{ primary?: { ct?, t? }, secondary?: { ct?, t? }, armor?: "none" | "kevlar" | "kevlar_helmet" }`. Weapons are `weapon_` engine names. A missing side leaves that slot empty, and armor defaults to kevlar and helmet.
-- `series` is optional: `{ bestOf, maps, startMapNumber, wins, demoUploads }`. `bestOf` is odd, `maps` and `demoUploads` have `bestOf` entries, `startMapNumber` is in range, and `wins` uses team names and does not already decide the series.
+- `recordDemo` is optional. `false` turns demo recording off for the match, and `demoUpload` is then not required. Missing or `true` records as before, and `demoUpload` is required.
+- `series` is optional: `{ bestOf, maps, startMapNumber, wins, demoUploads? }`. `bestOf` is odd, `maps` has `bestOf` entries, `demoUploads` has `bestOf` entries when present, `startMapNumber` is in range, and `wins` uses team names and does not already decide the series.
 - `brand` is optional: `{ name?, siteUrl? }`. `name` is the chat prefix, `[DuelRush]` when missing. `siteUrl` is the web root for the match link printed at match end. A `siteUrl` that is not an absolute http(s) URL is ignored and no link is printed. Neither field fails the load.
 - `slug` is optional. The match link is `<siteUrl>/matches/<slug>`, or `<siteUrl>/matches/<matchId>` without it.
 - A team `displayName`, when set, is used in chat. Otherwise chat says `Team <name>`.
@@ -363,6 +364,7 @@ Stats cover live rounds only:
 - `match_end` goes out at once. Recording continues for `tv_delay` + `rushsite_demo_stop_extra` seconds, 5 s with the default `rushsite_tv_delay 0`. Valve's `gamemode_rush.cfg` sets `tv_delay 105`, which the plugin overrides when recording starts.
 - When the upload finishes, the plugin sends `demo_uploaded` with `ok`, the file size in `bytes`, and `error` on failure.
 - After an abandon, the partial demo is recorded through the same delay, uploaded for review and reported by `demo_uploaded`.
+- With `recordDemo: false` in match.json the plugin never runs `tv_record` or `tv_stoprecord`, uploads nothing and sends no `demo_uploaded`, on every map of a series too. It still sets `tv_delay` so map changes stay short, and logs `demo recording is off for this match` once.
 
 ## Game events used
 

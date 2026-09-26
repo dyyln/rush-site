@@ -1,3 +1,4 @@
+import { DEMO_RECORDING_FLAG } from "@rushsite/shared"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { createAppHarness, startDuel, withServers } from "../../../test/helpers.js"
@@ -35,6 +36,8 @@ describe("POST /webhooks/match/:matchId", () => {
     await h.redis.flushall()
     h.notifier.clear()
     await withServers({ ctx: h.ctx, env: h.ctx.env })
+    // These cases check demo rows, so recording is on. The table truncate above removed the flag
+    await h.ctx.flags.set(DEMO_RECORDING_FLAG, true, null, null)
   })
 
   const secretOf = async (matchId: string) =>

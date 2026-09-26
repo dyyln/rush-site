@@ -152,6 +152,7 @@ export function buildContext(deps: ContextDeps): AppContext {
     allowUnresolvedModes,
     disabledModes: disabledModes(env),
   })
+  const flags = new FlagService(db, now)
   const storage = deps.storage ?? createDemoStorage(env)
   const agent = deps.agent ?? new HttpAgentClient(env.RUSHSITE_AGENT_TOKEN, fetchFn)
   const allocator = new Allocator(
@@ -162,6 +163,7 @@ export function buildContext(deps: ContextDeps): AppContext {
       webhookBaseUrl: env.API_PUBLIC_URL,
       surgeWaitSec: env.SURGE_WAIT_SEC,
       brand: { name: BRAND_NAME, siteUrl: env.PUBLIC_URL },
+      recordDemos: () => flags.demoRecording(),
     },
     log,
     deps.surgeDriver ?? null,
@@ -222,7 +224,6 @@ export function buildContext(deps: ContextDeps): AppContext {
   flow.onResult(async (r) => activity.onMatchResult(r))
   const banGate = new BanGate(db, redis, now)
   const disconnectUser = (steamId: string, reason: string) => disconnectUsers(notifier, [steamId], reason)
-  const flags = new FlagService(db, now)
   queue.setModeGate((mode) => flags.queueOpen(mode))
   const discordApi = deps.discordApi !== undefined ? deps.discordApi : discordApiFrom(env, fetchFn)
   const discord = new DiscordService({

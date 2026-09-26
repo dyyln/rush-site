@@ -35,6 +35,20 @@ export function queueOpenFlag(mode: Mode): string {
   return `queue.${mode}.open`
 }
 
+// Game servers record and upload demos only while this flag exists and is enabled.
+// Server side only, GET /flags leaves it out
+export const DEMO_RECORDING_FLAG = "demo.recording"
+
+// GET and PUT /admin/demo-recording. s3Configured says whether demo storage is set up, never where
+export const DemoRecordingWriteSchema = z.object({ enabled: z.boolean() })
+export type DemoRecordingWrite = z.infer<typeof DemoRecordingWriteSchema>
+export type DemoRecordingView = {
+  enabled: boolean
+  s3Configured: boolean
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
 export const AnnouncementLevelSchema = z.enum(["info", "warn"])
 export type AnnouncementLevel = z.infer<typeof AnnouncementLevelSchema>
 

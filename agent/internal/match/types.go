@@ -69,7 +69,8 @@ type Series struct {
 	Maps           []MapEntry     `json:"maps"`
 	StartMapNumber int            `json:"startMapNumber"`
 	Wins           map[string]int `json:"wins"`
-	DemoUploads    []DemoUpload   `json:"demoUploads"`
+	// DemoUploads is left out when recording is off.
+	DemoUploads []DemoUpload `json:"demoUploads,omitempty"`
 }
 
 // Brand is passed through to match.json. The plugin uses Name as the chat prefix and SiteURL for the match link.
@@ -80,16 +81,19 @@ type Brand struct {
 
 // StartRequest is the POST /servers body.
 type StartRequest struct {
-	MatchID         string     `json:"matchId"`
-	Mode            Mode       `json:"mode"`
-	Map             MapEntry   `json:"map"`
-	GSLT            string     `json:"gslt"`
-	Password        string     `json:"password"`
-	AllowedSteamIDs []string   `json:"allowedSteamIds"`
-	Teams           []Team     `json:"teams"`
-	WebhookURL      string     `json:"webhookUrl"`
-	WebhookSecret   string     `json:"webhookSecret"`
-	DemoUpload      DemoUpload `json:"demoUpload"`
+	MatchID         string   `json:"matchId"`
+	Mode            Mode     `json:"mode"`
+	Map             MapEntry `json:"map"`
+	GSLT            string   `json:"gslt"`
+	Password        string   `json:"password"`
+	AllowedSteamIDs []string `json:"allowedSteamIds"`
+	Teams           []Team   `json:"teams"`
+	WebhookURL      string   `json:"webhookUrl"`
+	WebhookSecret   string   `json:"webhookSecret"`
+	// RecordDemo false means no demo is recorded or uploaded. Absent means record, as older APIs send.
+	RecordDemo *bool `json:"recordDemo,omitempty"`
+	// DemoUpload is empty when RecordDemo is false.
+	DemoUpload DemoUpload `json:"demoUpload"`
 	// CS2 is the launch block built from shared config. It is required.
 	CS2 *CS2Settings `json:"cs2"`
 	// Series is set for best-of series. Map and CS2 then describe the first map to load.
@@ -100,6 +104,9 @@ type StartRequest struct {
 	Brand *Brand `json:"brand,omitempty"`
 	Slug  string `json:"slug,omitempty"`
 }
+
+// RecordsDemo reports whether the plugin should record and upload a demo.
+func (r *StartRequest) RecordsDemo() bool { return r.RecordDemo == nil || *r.RecordDemo }
 
 // CS2Settings is the cs2 block of StartRequest. It mirrors the shared Cs2Start type.
 type CS2Settings struct {
@@ -121,18 +128,20 @@ type StartResponse struct {
 
 // PluginConfig is match.json, read by the CounterStrikeSharp plugin.
 type PluginConfig struct {
-	MatchID         string     `json:"matchId"`
-	Mode            Mode       `json:"mode"`
-	Map             MapEntry   `json:"map"`
-	AllowedSteamIDs []string   `json:"allowedSteamIds"`
-	Teams           []Team     `json:"teams"`
-	Password        string     `json:"password"`
-	WebhookURL      string     `json:"webhookUrl"`
-	WebhookSecret   string     `json:"webhookSecret"`
-	DemoUpload      DemoUpload `json:"demoUpload"`
-	WinCondition    string     `json:"winCondition"`
-	Series          *Series    `json:"series,omitempty"`
-	RushRooms       []int      `json:"rushRooms,omitempty"`
-	Brand           *Brand     `json:"brand,omitempty"`
-	Slug            string     `json:"slug,omitempty"`
+	MatchID         string   `json:"matchId"`
+	Mode            Mode     `json:"mode"`
+	Map             MapEntry `json:"map"`
+	AllowedSteamIDs []string `json:"allowedSteamIds"`
+	Teams           []Team   `json:"teams"`
+	Password        string   `json:"password"`
+	WebhookURL      string   `json:"webhookUrl"`
+	WebhookSecret   string   `json:"webhookSecret"`
+	// RecordDemo is written only when false. Older plugins ignore it and still need a demoUpload.
+	RecordDemo   *bool      `json:"recordDemo,omitempty"`
+	DemoUpload   DemoUpload `json:"demoUpload"`
+	WinCondition string     `json:"winCondition"`
+	Series       *Series    `json:"series,omitempty"`
+	RushRooms    []int      `json:"rushRooms,omitempty"`
+	Brand        *Brand     `json:"brand,omitempty"`
+	Slug         string     `json:"slug,omitempty"`
 }

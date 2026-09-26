@@ -197,6 +197,13 @@
       "when": 1790446477315,
       "tag": "0027_challenge_map",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790448060275,
+      "tag": "0028_gslt_memo_record_demo",
+      "breakpoints": true
     }
   ]
 }

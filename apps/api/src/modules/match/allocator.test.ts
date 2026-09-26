@@ -77,7 +77,20 @@ describe("allocator drivers", () => {
     expect(m!.status).toBe("starting")
     expect(m!.driver).toBe("dathost")
     expect(m!.driverRef).toBe("clone-1")
-    expect(surge.started[0]!.gslt).toBe("GSLTTOKEN0001")
+    expect(surge.started[0]!.gslt).toBe("")
+    // Surge servers take no token, so the whole pool stays free for Hetzner
+    const pool = await h.db.select().from(gsltTokens)
+    expect(pool).toHaveLength(1)
+    expect(pool.every((t) => t.status === "free" && t.matchId === null)).toBe(true)
+  })
+
+  it("release after a surge match leaves the pool free", async () => {
+    const matchId = await vetoedMatch()
+    expect(surge.started[0]!.gslt).toBe("")
+    await h.ctx.allocator.release(matchId, "dathost", true)
+    expect(surge.stopped).toEqual([matchId])
+    const pool = await h.db.select().from(gsltTokens)
+    expect(pool.every((t) => t.status === "free" && t.matchId === null && t.lastUsedAt === null)).toBe(true)
   })
 
   it("starts on DatHost without a token when the pool is dry", async () => {

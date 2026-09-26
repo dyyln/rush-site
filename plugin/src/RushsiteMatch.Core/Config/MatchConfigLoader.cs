@@ -79,8 +79,8 @@ public static class MatchConfigLoader
         if (!Uri.TryCreate(cfg.WebhookUrl, UriKind.Absolute, out var hook) || (hook.Scheme != "http" && hook.Scheme != "https"))
             errors.Add("webhookUrl must be an absolute http(s) URL");
         if (string.IsNullOrEmpty(cfg.WebhookSecret)) errors.Add("webhookSecret is required");
-        if (cfg.DemoUpload is null) errors.Add("demoUpload is required");
-        else if (!string.IsNullOrEmpty(cfg.DemoUpload.PresignedPutUrl) && !Uri.TryCreate(cfg.DemoUpload.PresignedPutUrl, UriKind.Absolute, out _))
+        if (cfg.DemoUpload is null && cfg.RecordsDemo) errors.Add("demoUpload is required");
+        else if (cfg.DemoUpload is not null && !string.IsNullOrEmpty(cfg.DemoUpload.PresignedPutUrl) && !Uri.TryCreate(cfg.DemoUpload.PresignedPutUrl, UriKind.Absolute, out _))
             errors.Add("demoUpload.presignedPutUrl must be an absolute URL");
 
         if (!WinCondition.TryParse(cfg.WinCondition, out var wc))
@@ -124,8 +124,9 @@ public static class MatchConfigLoader
         if (s.Maps.Count != s.BestOf) errors.Add($"series.maps has {s.Maps.Count} entries but bestOf is {s.BestOf}");
         for (var i = 0; i < s.Maps.Count; i++) ValidateMap(s.Maps[i], $"series.maps[{i}]", errors);
         if (s.StartMapNumber < 1 || s.StartMapNumber > s.Maps.Count) errors.Add("series.startMapNumber is out of range");
-        if (s.DemoUploads.Count > 0 && s.DemoUploads.Count != s.BestOf) errors.Add($"series.demoUploads has {s.DemoUploads.Count} entries but bestOf is {s.BestOf}");
-        foreach (var d in s.DemoUploads)
+        var uploads = s.DemoUploads ?? new List<DemoUploadConfig?>();
+        if (uploads.Count > 0 && uploads.Count != s.BestOf) errors.Add($"series.demoUploads has {uploads.Count} entries but bestOf is {s.BestOf}");
+        foreach (var d in uploads)
             if (d is not null && !string.IsNullOrEmpty(d.PresignedPutUrl) && !Uri.TryCreate(d.PresignedPutUrl, UriKind.Absolute, out _))
                 errors.Add("series.demoUploads presignedPutUrl must be an absolute URL");
         var teams = cfg.Teams.Select(t => t.Name).ToHashSet();
